@@ -12,7 +12,7 @@
  *   - packages/app/src-tauri/tauri.conf.json
  *   - packages/app/src-tauri/Cargo.toml
  *   - packages/app-expo/package.json
- *   - packages/app-expo/app.json (expo.version)
+ *   - packages/app-expo/app.config.js (expo.version)
  */
 const fs = require("fs");
 const path = require("path");
@@ -65,12 +65,22 @@ const VERSION_FILES = [
     },
   },
   {
-    path: "packages/app-expo/app.json",
-    read: (content) => JSON.parse(content).expo.version,
+    path: "packages/app-expo/app.config.js",
+    read: (content) => {
+      const match = content.match(/^\s*version:\s*"([^"]+)"\s*,\s*$/m);
+      if (!match) {
+        throw new Error("Could not find expo.version in app.config.js");
+      }
+      return match[1];
+    },
     write: (content, version) => {
-      const json = JSON.parse(content);
-      json.expo.version = version;
-      return JSON.stringify(json, null, 2) + "\n";
+      if (!/^\s*version:\s*"([^"]+)"\s*,\s*$/m.test(content)) {
+        throw new Error("Could not find expo.version in app.config.js");
+      }
+      return content.replace(
+        /^(\s*version:\s*)"[^"]+"(\s*,\s*)$/m,
+        `$1"${version}"$2`
+      );
     },
   },
 ];
