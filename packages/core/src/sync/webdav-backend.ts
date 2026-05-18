@@ -9,7 +9,7 @@ import {
   type RemoteFile,
   type WebDavConfig,
 } from "./sync-backend";
-import { REMOTE_COVERS, REMOTE_DATA, REMOTE_FILES } from "./sync-types";
+import { REMOTE_BOOKS_ROOT, REMOTE_COVERS, REMOTE_DATA, REMOTE_FILES } from "./sync-types";
 import { sanitizeWebDavRemoteRoot, WebDavClient } from "./webdav-client";
 
 /**
@@ -63,8 +63,10 @@ export class WebDavBackend implements ISyncBackend {
   async ensureDirectories(): Promise<void> {
     // Create directories for the new simple sync (JSON-based)
     await this.client.ensureDirectory(this.resolvePath("/readany/sync"));
-    // Legacy directories for file sync (if needed)
     await this.client.ensureDirectory(this.resolvePath(REMOTE_DATA));
+    // New per-book layout root
+    await this.client.ensureDirectory(this.resolvePath(REMOTE_BOOKS_ROOT));
+    // Legacy directories kept ensured during the transition window (cheap & safe)
     await this.client.mkcol(this.resolvePath(REMOTE_FILES));
     await this.client.mkcol(this.resolvePath(REMOTE_COVERS));
   }
@@ -102,6 +104,15 @@ export class WebDavBackend implements ISyncBackend {
 
   async exists(path: string): Promise<boolean> {
     return this.client.exists(this.resolvePath(path));
+  }
+
+  async move(fromPath: string, toPath: string): Promise<void> {
+    // Ensure the parent of the destination exists so MOVE can succeed.
+    const destParent = toPath.substring(0, toPath.lastIndexOf("/"));
+    if (destParent && destParent !== "/") {
+      await this.client.ensureDirectory(this.resolvePath(destParent));
+    }
+    await this.client.move(this.resolvePath(fromPath), this.resolvePath(toPath));
   }
 
   async getDisplayName(): Promise<string> {

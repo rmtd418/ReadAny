@@ -47,6 +47,14 @@ export interface ISyncBackend {
   /** Check if a file exists */
   exists(path: string): Promise<boolean>;
 
+  /**
+   * Move/rename a file from `fromPath` to `toPath`.
+   * Implementations should create intermediate directories on the destination side.
+   * Should be atomic where the backend supports it; otherwise copy + delete.
+   * Throws if the source does not exist or if the destination already exists.
+   */
+  move(fromPath: string, toPath: string): Promise<void>;
+
   /** Get a display name for the backend (for UI) */
   getDisplayName(): Promise<string>;
 

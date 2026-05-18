@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ISyncBackend, RemoteFile } from "../sync-backend";
-import { REMOTE_FILES } from "../sync-types";
+import { REMOTE_BOOKS_ROOT, REMOTE_COVERS, REMOTE_FILES } from "../sync-types";
 
-// --- Mock sync-adapter ---
 const mockAdapter = {
   getAppDataDir: vi.fn().mockResolvedValue("/appdata"),
   joinPath: vi.fn((...segs: string[]) => segs.join("/")),
@@ -17,7 +16,6 @@ vi.mock("../sync-adapter", () => ({
   getSyncAdapter: vi.fn(() => mockAdapter),
 }));
 
-// --- Mock db/database ---
 const mockSelect = vi.fn();
 const mockSetBookSyncStatus = vi.fn();
 vi.mock("../../db/database", () => ({
@@ -25,10 +23,8 @@ vi.mock("../../db/database", () => ({
   setBookSyncStatus: mockSetBookSyncStatus,
 }));
 
-// Import module under test — will fail until sync-files.ts exists
 const { syncFiles, downloadBookFile } = await import("../sync-files");
 
-// Helper to create mock backend
 function createMockBackend(overrides: Partial<ISyncBackend> = {}): ISyncBackend {
   return {
     type: "webdav",
@@ -40,7 +36,8 @@ function createMockBackend(overrides: Partial<ISyncBackend> = {}): ISyncBackend 
     putJSON: vi.fn(),
     listDir: vi.fn().mockResolvedValue([]),
     delete: vi.fn(),
-    exists: vi.fn(),
+    exists: vi.fn().mockResolvedValue(false),
+    move: vi.fn(),
     getDisplayName: vi.fn(),
     ...overrides,
   } as ISyncBackend;
@@ -66,7 +63,7 @@ describe("sync-files", () => {
       expect(result).toEqual({ filesUploaded: 0, filesDownloaded: 0 });
     });
 
-    it("uploads local book files not on remote", async () => {
+    it("uploads local book files to the new per-book layout when remote is empty", async () => {
       mockSelect.mockResolvedValue([
         {
           id: "book-1",
@@ -77,10 +74,8 @@ describe("sync-files", () => {
         },
       ]);
 
-      // Local file exists
       mockAdapter.fileExists.mockResolvedValue(true);
 
-      // Remote has no files
       const backend = createMockBackend({
         listDir: vi.fn().mockResolvedValue([]),
       });
@@ -88,12 +83,12 @@ describe("sync-files", () => {
       const result = await syncFiles(backend);
       expect(result.filesUploaded).toBe(1);
       expect(backend.put).toHaveBeenCalledWith(
-        `${REMOTE_FILES}/book-1.epub`,
+        `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.epub`,
         expect.any(Uint8Array),
       );
     });
 
-    it("downloads remote files when forceDownloadAll is set", async () => {
+    it("migrates legacy files to the new layout via MOVE", async () => {
       mockSelect.mockResolvedValue([
         {
           id: "book-1",
@@ -104,16 +99,69 @@ describe("sync-files", () => {
         },
       ]);
 
-      // Local file doesn't exist
+      // Local file is missing → downloadRemoteBooks default off, so this just verifies migration.
       mockAdapter.fileExists.mockResolvedValue(false);
 
-      // Remote has the file
-      const remoteFiles: RemoteFile[] = [
-        { name: "book-1.epub", path: "/readany/data/file/book-1.epub", size: 100, lastModified: 1000, isDirectory: false },
+      const legacyFiles: RemoteFile[] = [
+        {
+          name: "book-1.epub",
+          path: `${REMOTE_FILES}/book-1.epub`,
+          size: 100,
+          lastModified: 1000,
+          isDirectory: false,
+        },
       ];
       const backend = createMockBackend({
         listDir: vi.fn().mockImplementation(async (path: string) => {
-          if (path === REMOTE_FILES) return remoteFiles;
+          if (path === REMOTE_FILES) return legacyFiles;
+          return [];
+        }),
+        move: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await syncFiles(backend);
+      expect(backend.move).toHaveBeenCalledWith(
+        `${REMOTE_FILES}/book-1.epub`,
+        `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.epub`,
+      );
+    });
+
+    it("downloads remote files from the new layout when forceDownloadAll is set", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.epub",
+          file_hash: "h1",
+          cover_url: null,
+          title: "Test Book",
+        },
+      ]);
+
+      mockAdapter.fileExists.mockResolvedValue(false);
+
+      const remoteBookDirs: RemoteFile[] = [
+        {
+          name: "Test Book-book-1",
+          path: `${REMOTE_BOOKS_ROOT}/Test Book-book-1`,
+          size: 0,
+          lastModified: 0,
+          isDirectory: true,
+        },
+      ];
+      const folderContents: RemoteFile[] = [
+        {
+          name: "Test Book.epub",
+          path: `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.epub`,
+          size: 100,
+          lastModified: 1000,
+          isDirectory: false,
+        },
+      ];
+
+      const backend = createMockBackend({
+        listDir: vi.fn().mockImplementation(async (path: string) => {
+          if (path === REMOTE_BOOKS_ROOT) return remoteBookDirs;
+          if (path === `${REMOTE_BOOKS_ROOT}/Test Book-book-1`) return folderContents;
           return [];
         }),
       });
@@ -124,7 +172,7 @@ describe("sync-files", () => {
       expect(result.filesDownloaded).toBe(1);
     });
 
-    it("marks books as remote when local file missing and remote exists", async () => {
+    it("marks books as remote when local file missing and remote exists in new layout", async () => {
       mockSelect.mockResolvedValue([
         {
           id: "book-1",
@@ -137,12 +185,29 @@ describe("sync-files", () => {
 
       mockAdapter.fileExists.mockResolvedValue(false);
 
-      const remoteFiles: RemoteFile[] = [
-        { name: "book-1.epub", path: "/readany/data/file/book-1.epub", size: 100, lastModified: 1000, isDirectory: false },
+      const remoteBookDirs: RemoteFile[] = [
+        {
+          name: "Remote Book-book-1",
+          path: `${REMOTE_BOOKS_ROOT}/Remote Book-book-1`,
+          size: 0,
+          lastModified: 0,
+          isDirectory: true,
+        },
       ];
+      const folderContents: RemoteFile[] = [
+        {
+          name: "Remote Book.epub",
+          path: `${REMOTE_BOOKS_ROOT}/Remote Book-book-1/Remote Book.epub`,
+          size: 100,
+          lastModified: 1000,
+          isDirectory: false,
+        },
+      ];
+
       const backend = createMockBackend({
         listDir: vi.fn().mockImplementation(async (path: string) => {
-          if (path === REMOTE_FILES) return remoteFiles;
+          if (path === REMOTE_BOOKS_ROOT) return remoteBookDirs;
+          if (path === `${REMOTE_BOOKS_ROOT}/Remote Book-book-1`) return folderContents;
           return [];
         }),
       });
@@ -177,12 +242,112 @@ describe("sync-files", () => {
         }),
       );
     });
+
+    it("renames the book folder when the title has changed", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.epub",
+          file_hash: "h1",
+          cover_url: "covers/book-1.jpg",
+          title: "New Title",
+        },
+      ]);
+
+      mockAdapter.fileExists.mockResolvedValue(true);
+
+      const oldDirName = "Old Title-book-1";
+      const oldDirPath = `${REMOTE_BOOKS_ROOT}/${oldDirName}`;
+      const oldFolderEntry: RemoteFile = {
+        name: oldDirName,
+        path: oldDirPath,
+        size: 0,
+        lastModified: 0,
+        isDirectory: true,
+      };
+      const oldFiles: RemoteFile[] = [
+        {
+          name: "Old Title.epub",
+          path: `${oldDirPath}/Old Title.epub`,
+          size: 100,
+          lastModified: 1000,
+          isDirectory: false,
+        },
+        {
+          name: "Old Title.jpg",
+          path: `${oldDirPath}/Old Title.jpg`,
+          size: 50,
+          lastModified: 1000,
+          isDirectory: false,
+        },
+      ];
+
+      const backend = createMockBackend({
+        listDir: vi.fn().mockImplementation(async (path: string) => {
+          if (path === REMOTE_BOOKS_ROOT) return [oldFolderEntry];
+          if (path === oldDirPath) return oldFiles;
+          return [];
+        }),
+        move: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await syncFiles(backend);
+
+      expect(backend.move).toHaveBeenCalledWith(
+        `${oldDirPath}/Old Title.epub`,
+        `${REMOTE_BOOKS_ROOT}/New Title-book-1/New Title.epub`,
+      );
+      expect(backend.move).toHaveBeenCalledWith(
+        `${oldDirPath}/Old Title.jpg`,
+        `${REMOTE_BOOKS_ROOT}/New Title-book-1/New Title.jpg`,
+      );
+      // Old dir is best-effort deleted at the end.
+      expect(backend.delete).toHaveBeenCalledWith(oldDirPath);
+    });
+
+    it("deletes remote orphan folders for books no longer in DB", async () => {
+      mockSelect.mockResolvedValue([]);
+      const orphanDir = "Old-550e8400-e29b-41d4-a716-446655440000";
+      const orphanPath = `${REMOTE_BOOKS_ROOT}/${orphanDir}`;
+      const orphanChild: RemoteFile = {
+        name: "Old.epub",
+        path: `${orphanPath}/Old.epub`,
+        size: 1,
+        lastModified: 0,
+        isDirectory: false,
+      };
+
+      const backend = createMockBackend({
+        listDir: vi.fn().mockImplementation(async (path: string) => {
+          if (path === REMOTE_BOOKS_ROOT) {
+            return [
+              {
+                name: orphanDir,
+                path: orphanPath,
+                size: 0,
+                lastModified: 0,
+                isDirectory: true,
+              },
+            ];
+          }
+          if (path === orphanPath) return [orphanChild];
+          return [];
+        }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await syncFiles(backend);
+      expect(backend.delete).toHaveBeenCalledWith(`${orphanPath}/Old.epub`);
+      expect(backend.delete).toHaveBeenCalledWith(orphanPath);
+    });
   });
 
   describe("downloadBookFile", () => {
-    it("downloads and saves book file when exists on remote", async () => {
+    it("downloads via the new layout when the book is in DB", async () => {
+      mockSelect.mockResolvedValue([{ id: "book-1", title: "Test Book" }]);
+
       const backend = createMockBackend({
-        exists: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4, 5])),
       });
 
@@ -193,14 +358,45 @@ describe("sync-files", () => {
       );
 
       expect(result).toBe(true);
-      expect(backend.get).toHaveBeenCalledWith(`${REMOTE_FILES}/book-1.epub`);
+      expect(backend.get).toHaveBeenCalledWith(
+        `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.epub`,
+      );
       expect(mockAdapter.writeFileBytes).toHaveBeenCalled();
       expect(mockSetBookSyncStatus).toHaveBeenCalledWith("book-1", "local");
     });
 
-    it("returns false when file not on remote", async () => {
+    it("falls back to the legacy path when the new path is missing", async () => {
+      mockSelect.mockResolvedValue([{ id: "book-1", title: "Test Book" }]);
+
+      const getMock = vi
+        .fn<(p: string) => Promise<Uint8Array>>()
+        .mockImplementation(async (path: string) => {
+          if (path === `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.epub`) {
+            throw new Error("404 Not Found");
+          }
+          if (path === `${REMOTE_FILES}/book-1.epub`) {
+            return new Uint8Array([9, 9, 9]);
+          }
+          throw new Error("unexpected path " + path);
+        });
+      const backend = createMockBackend({ get: getMock });
+
+      const result = await downloadBookFile(
+        backend,
+        "book-1",
+        "books/book-1.epub",
+      );
+
+      expect(result).toBe(true);
+      expect(getMock).toHaveBeenCalledWith(`${REMOTE_FILES}/book-1.epub`);
+      expect(mockSetBookSyncStatus).toHaveBeenCalledWith("book-1", "local");
+    });
+
+    it("returns false and marks book as remote when neither path has the file", async () => {
+      mockSelect.mockResolvedValue([{ id: "book-1", title: "Test Book" }]);
+
       const backend = createMockBackend({
-        exists: vi.fn().mockResolvedValue(false),
+        get: vi.fn().mockRejectedValue(new Error("404 Not Found")),
       });
 
       const result = await downloadBookFile(
@@ -214,8 +410,8 @@ describe("sync-files", () => {
     });
 
     it("reports progress", async () => {
+      mockSelect.mockResolvedValue([{ id: "book-1", title: "Test Book" }]);
       const backend = createMockBackend({
-        exists: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue(new Uint8Array([1])),
       });
       const onProgress = vi.fn();
@@ -226,9 +422,9 @@ describe("sync-files", () => {
       expect(onProgress).toHaveBeenCalledWith({ downloaded: 100, total: 100 });
     });
 
-    it("handles download error gracefully", async () => {
+    it("handles network error gracefully", async () => {
+      mockSelect.mockResolvedValue([{ id: "book-1", title: "Test Book" }]);
       const backend = createMockBackend({
-        exists: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockRejectedValue(new Error("network error")),
       });
 
@@ -240,6 +436,45 @@ describe("sync-files", () => {
 
       expect(result).toBe(false);
       expect(mockSetBookSyncStatus).toHaveBeenCalledWith("book-1", "remote");
+    });
+  });
+
+  describe("legacy cover migration", () => {
+    it("migrates a legacy cover via MOVE", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.epub",
+          file_hash: "h1",
+          cover_url: "covers/book-1.jpg",
+          title: "Test Book",
+        },
+      ]);
+      mockAdapter.fileExists.mockResolvedValue(false);
+
+      const backend = createMockBackend({
+        listDir: vi.fn().mockImplementation(async (path: string) => {
+          if (path === REMOTE_COVERS) {
+            return [
+              {
+                name: "book-1.jpg",
+                path: `${REMOTE_COVERS}/book-1.jpg`,
+                size: 50,
+                lastModified: 1000,
+                isDirectory: false,
+              },
+            ];
+          }
+          return [];
+        }),
+        move: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await syncFiles(backend);
+      expect(backend.move).toHaveBeenCalledWith(
+        `${REMOTE_COVERS}/book-1.jpg`,
+        `${REMOTE_BOOKS_ROOT}/Test Book-book-1/Test Book.jpg`,
+      );
     });
   });
 });

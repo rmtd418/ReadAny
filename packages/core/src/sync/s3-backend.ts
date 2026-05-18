@@ -4,6 +4,7 @@
  */
 
 import {
+  CopyObjectCommand,
   CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
@@ -213,7 +214,8 @@ export class S3Backend implements ISyncBackend {
   }
 
   async listDir(path: string): Promise<RemoteFile[]> {
-    const prefix = this.normalizePath(path);
+    let prefix = this.normalizePath(path);
+    if (!prefix.endsWith("/")) prefix = prefix + "/";
     const files: RemoteFile[] = [];
     let continuationToken: string | undefined;
 
@@ -222,22 +224,35 @@ export class S3Backend implements ISyncBackend {
         new ListObjectsV2Command({
           Bucket: this.config.bucket,
           Prefix: prefix,
+          Delimiter: "/",
           ContinuationToken: continuationToken,
         }),
       );
 
+      // Subdirectories at this level (S3 has no true folders; CommonPrefixes simulates them).
+      for (const cp of response.CommonPrefixes ?? []) {
+        if (!cp.Prefix) continue;
+        const name = cp.Prefix.replace(/\/$/, "").split("/").pop() || cp.Prefix;
+        files.push({
+          name,
+          path: cp.Prefix,
+          size: 0,
+          lastModified: 0,
+          isDirectory: true,
+        });
+      }
+
       for (const object of response.Contents ?? []) {
         if (!object.Key) continue;
-        // Skip the directory itself
-        if (object.Key === prefix || object.Key === prefix + "/") continue;
-
-        const name = object.Key.split("/").pop() || object.Key;
+        if (object.Key === prefix) continue; // placeholder marker for the dir itself
+        const name = object.Key.substring(prefix.length);
+        if (!name || name.includes("/")) continue; // safety against deeper entries
         files.push({
           name,
           path: object.Key,
           size: object.Size ?? 0,
           lastModified: object.LastModified?.getTime() ?? 0,
-          isDirectory: object.Key.endsWith("/"),
+          isDirectory: false,
         });
       }
 
@@ -270,6 +285,29 @@ export class S3Backend implements ISyncBackend {
     } catch {
       return false;
     }
+  }
+
+  async move(fromPath: string, toPath: string): Promise<void> {
+    const fromKey = this.normalizePath(fromPath);
+    const toKey = this.normalizePath(toPath);
+    // CopySource: bucket and key, URL-encoded per AWS docs (segments encoded, slashes preserved).
+    const encodedSource = `${this.config.bucket}/${fromKey}`
+      .split("/")
+      .map((seg) => encodeURIComponent(seg))
+      .join("/");
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.config.bucket,
+        CopySource: encodedSource,
+        Key: toKey,
+      }),
+    );
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.config.bucket,
+        Key: fromKey,
+      }),
+    );
   }
 
   async getDisplayName(): Promise<string> {

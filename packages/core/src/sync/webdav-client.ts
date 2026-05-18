@@ -420,6 +420,27 @@ export class WebDavClient {
     }
   }
 
+  /**
+   * Move/rename a resource (MOVE).
+   * `Overwrite: F` instructs the server to refuse if `toPath` already exists.
+   */
+  async move(fromPath: string, toPath: string): Promise<void> {
+    const destination = this.buildUrl(toPath);
+    const resp = await this.request("MOVE", fromPath, {
+      headers: {
+        Destination: destination,
+        Overwrite: "F",
+      },
+    });
+    // 201 Created (target newly created) and 204 No Content (target overwritten) are success.
+    // 207 Multi-Status can also be returned for collection moves with partial errors — treat as failure.
+    if (!resp.ok && resp.status !== 201 && resp.status !== 204) {
+      throw new Error(
+        `WebDAV MOVE failed for ${fromPath} -> ${toPath}: ${resp.status} ${resp.statusText || ""}`,
+      );
+    }
+  }
+
   /** Check if a resource exists (try HEAD first, fallback to PROPFIND Depth 0) */
   async exists(path: string): Promise<boolean> {
     try {
