@@ -1,5 +1,6 @@
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { useAppStore } from "@/stores/app-store";
+import { useDownloadProgressStore } from "@/stores/download-progress-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
 import { setBookSyncStatus } from "@readany/core/db/database";
