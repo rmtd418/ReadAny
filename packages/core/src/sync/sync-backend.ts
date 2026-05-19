@@ -32,6 +32,9 @@ export interface ISyncBackend {
   /** Download data from a path */
   get(path: string): Promise<Uint8Array>;
 
+  /** Download data with progress reporting (optional — falls back to get() if not implemented) */
+  getWithProgress?(path: string, onProgress?: (loaded: number, total: number) => void): Promise<Uint8Array>;
+
   /** Get JSON data from a path, returns null if not found */
   getJSON<T>(path: string): Promise<T | null>;
 

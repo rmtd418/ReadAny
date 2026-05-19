@@ -388,6 +388,36 @@ export class WebDavClient {
     return new Uint8Array(buffer);
   }
 
+  /** Download data with progress reporting */
+  async getWithProgress(
+    path: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<Uint8Array> {
+    const platform = getPlatformService();
+    const url = this.buildUrl(path);
+    const logPath = path.startsWith("/") ? path : `/${path}`;
+    console.log(`[WebDAV] GET ${logPath} (with progress)`);
+    const startTime = Date.now();
+
+    const resp = await platform.fetch(url, {
+      method: "GET",
+      headers: { Authorization: this.authHeader },
+      allowInsecure: this.allowInsecure,
+      timeoutMs: TRANSFER_TIMEOUT_MS,
+      responseType: "arraybuffer",
+      onDownloadProgress: onProgress,
+    });
+
+    const elapsed = Date.now() - startTime;
+    if (!resp.ok) {
+      console.error(`[WebDAV] GET ${logPath} failed after ${elapsed}ms: ${resp.status}`);
+      throw new Error(`WebDAV GET failed for ${path}: ${resp.status} ${resp.statusText || ""}`);
+    }
+    console.log(`[WebDAV] GET ${logPath} completed in ${elapsed}ms (status: ${resp.status})`);
+    const buffer = await resp.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+
   /** Download text content from a path (GET) */
   async getText(path: string): Promise<string> {
     const resp = await this.request("GET", path, {

@@ -79,6 +79,10 @@ export class WebDavBackend implements ISyncBackend {
     return this.client.get(this.resolvePath(path));
   }
 
+  async getWithProgress(path: string, onProgress?: (loaded: number, total: number) => void): Promise<Uint8Array> {
+    return this.client.getWithProgress(this.resolvePath(path), onProgress);
+  }
+
   async getJSON<T>(path: string): Promise<T | null> {
     return this.client.getJSON<T>(this.resolvePath(path));
   }

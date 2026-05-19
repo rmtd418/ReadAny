@@ -726,22 +726,31 @@ export async function downloadBookFile(
 
     onProgress?.({ downloaded: 0, total: 100 });
 
+    // Use progress-aware download if backend supports it
+    const getWithProgress = (p: string) => {
+      if (backend.getWithProgress) {
+        return backend.getWithProgress(p, (loaded, total) => {
+          if (total > 0) onProgress?.({ downloaded: loaded, total });
+        });
+      }
+      return backend.get(p);
+    };
+
     let data: Uint8Array | null = null;
     if (newPath) {
       try {
-        data = await backend.get(newPath);
+        data = await getWithProgress(newPath);
         console.log(`[Sync] Downloaded ${newPath} (new layout)`);
       } catch (e) {
         const msg = (e as { message?: string })?.message ?? "";
         if (!/404|not found/i.test(msg)) {
-          // Real error other than not-found — retry via legacy as a last resort, but log loudly.
           console.warn(`[Sync] New-layout fetch failed (${msg}); trying legacy path`);
         }
       }
     }
     if (!data) {
       try {
-        data = await backend.get(legacyPath);
+        data = await getWithProgress(legacyPath);
         console.log(`[Sync] Downloaded ${legacyPath} (legacy layout)`);
       } catch (e) {
         console.log(`[Sync] Book file not found on remote (new=${newPath}, legacy=${legacyPath})`);

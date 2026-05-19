@@ -212,7 +212,7 @@ export function LibraryScreen() {
     renameTag,
   } = useLibraryStore();
 
-  const { downloadingBookId, downloadingBookTitle, downloadBook } = useBookDownload({
+  const { downloadingBookId, downloadingBookTitle, downloadProgress, downloadBook } = useBookDownload({
     loadBooks,
     onSuccess: (bookId) => {
       void openMobileBook({ bookId, navigation: nav, t });
@@ -981,7 +981,11 @@ export function LibraryScreen() {
             <View style={s.downloadBanner}>
               <ActivityIndicator size="small" color={colors.primary} />
               <View style={s.downloadBannerInfo}>
-                <Text style={s.downloadBannerStatus}>{t("library.downloading", "下载中")}</Text>
+                <Text style={s.downloadBannerStatus}>
+                  {downloadProgress && downloadProgress.total > 0
+                    ? `${t("library.downloading", "下载中")} ${Math.round((downloadProgress.downloaded / downloadProgress.total) * 100)}%`
+                    : t("library.downloading", "下载中")}
+                </Text>
                 <Text style={s.downloadBannerTitle} numberOfLines={1}>
                   {downloadingBookTitle}
                 </Text>
@@ -1023,6 +1027,7 @@ export function LibraryScreen() {
             <FlatList
               data={gridItems}
               renderItem={renderGridItem}
+              extraData={{ vectorProgress, vectorizingBookId }}
               keyExtractor={(item) =>
                 item.type === "group" ? `group-${item.group.id}` : item.book.id
               }
