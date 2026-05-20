@@ -1008,6 +1008,20 @@
       "desc": "Choose WebDAV, S3, or LAN sync to keep your library in sync across devices. Supports QR code pairing for quick setup."
     }
   },
+  "readerTour": {
+    "prevPage": {
+      "title": "Previous Page",
+      "desc": "Click or tap the left area to go to the previous page."
+    },
+    "toolbar": {
+      "title": "Toggle Toolbar",
+      "desc": "Click or tap the center area to show/hide the toolbar. You can also hover at the top or bottom edge."
+    },
+    "nextPage": {
+      "title": "Next Page",
+      "desc": "Click or tap the right area to go to the next page."
+    }
+  },
   "commandPalette": {
     "placeholder": "Type to search commands...",
     "noResults": "No results found for \"{{query}}\"",

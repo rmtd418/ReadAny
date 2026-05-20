@@ -36,6 +36,7 @@ import { splitNarrationText } from "@readany/core/tts";
 import type { CitationPart, HighlightColor } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 import { throttle } from "@readany/core/utils/throttle";
+import { hasSeenReaderTour, startReaderTour } from "@/lib/reader-tour";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -236,8 +237,6 @@ function useAutoHideControls(
         // Single-page: left/right 40% = nav, middle 20% = toggle
         const leftNavEnd = isDoublePage ? 0.33 : 0.4;
         const rightNavStart = isDoublePage ? 0.67 : 0.6;
-
-        console.log(`[ClickZone] type=${data.type} fraction=${fraction.toFixed(3)} xFraction=${data.xFraction} clientX=${data.clientX} viewWidth=${viewWidth} isDoublePage=${isDoublePage}`);
 
         if (fraction > leftNavEnd && fraction < rightNavStart) {
           // Middle zone: toggle toolbar
@@ -1159,6 +1158,16 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     // Mark foliate as ready to receive annotations
     setFoliateReady(true);
   }, []);
+
+  // Show reader tour on first visit (after book loads)
+  const tourTriggered = useRef(false);
+  useEffect(() => {
+    if (!isLoading && !tourTriggered.current && !hasSeenReaderTour()) {
+      tourTriggered.current = true;
+      // Delay slightly so the reader UI is fully rendered
+      setTimeout(() => startReaderTour(), 600);
+    }
+  }, [isLoading]);
 
   // Handle section load (chapter change) - re-render all highlights
   // This is critical: when foliate-js loads a new section (chapter),
@@ -2601,27 +2610,10 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
           {/* Reading area — FoliateViewer */}
           <div className="relative flex-1 overflow-hidden" ref={containerRef}>
-            {/* DEBUG: Click zone visualization overlay */}
-            <div className="pointer-events-none absolute inset-0 z-[9999] flex">
-              <div
-                className="h-full border-r-2 border-dashed border-blue-500/40 bg-blue-500/10"
-                style={{ width: isDoublePage ? "33%" : "40%" }}
-              >
-                <span className="absolute left-1 top-1 text-[10px] text-blue-500">← PREV</span>
-              </div>
-              <div
-                className="h-full border-r-2 border-dashed border-green-500/40 bg-green-500/10"
-                style={{ width: isDoublePage ? "34%" : "20%" }}
-              >
-                <span className="absolute left-1/2 top-1 -translate-x-1/2 text-[10px] text-green-500">TOOLBAR</span>
-              </div>
-              <div
-                className="h-full bg-red-500/10"
-                style={{ width: isDoublePage ? "33%" : "40%" }}
-              >
-                <span className="absolute right-1 top-1 text-[10px] text-red-500">NEXT →</span>
-              </div>
-            </div>
+            {/* Click zone indicators — visible only during reader tour (driver.js highlights them) */}
+            <div id="reader-zone-prev" className="pointer-events-none absolute left-0 top-0 bottom-0 z-[100]" style={{ width: isDoublePage ? "33%" : "40%" }} />
+            <div id="reader-zone-toolbar" className="pointer-events-none absolute top-0 bottom-0 z-[100]" style={{ left: isDoublePage ? "33%" : "40%", width: isDoublePage ? "34%" : "20%" }} />
+            <div id="reader-zone-next" className="pointer-events-none absolute right-0 top-0 bottom-0 z-[100]" style={{ width: isDoublePage ? "33%" : "40%" }} />
             {bookDoc ? (
               <FoliateViewer
                 ref={foliateRef}

@@ -1682,7 +1682,6 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           // Position within visible page: clientX - (scrollStart - pageWidth)
           const visibleX = pageWidth > 0 ? clientX - (scrollStart - pageWidth) : clientX;
           const xFraction = pageWidth > 0 ? visibleX / pageWidth : 0;
-          console.log(`[ClickZone:iframe] clientX=${clientX} pageWidth=${pageWidth} scrollStart=${scrollStart} visibleX=${visibleX} xFraction=${xFraction.toFixed(3)}`);
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip

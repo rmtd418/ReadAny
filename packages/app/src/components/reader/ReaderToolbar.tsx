@@ -120,7 +120,7 @@ export function ReaderToolbar({
 
   return (
     <div
-      className={`absolute top-2 left-0 right-0 z-50 flex h-10 items-center justify-between bg-background/95 backdrop-blur-sm px-2 shadow-sm transition-all duration-300 ${
+      className={`absolute left-0 right-0 top-2 z-40 flex h-10 items-center justify-between bg-background/95 backdrop-blur-sm px-2 shadow-sm transition-all duration-300 ${
         isVisible
           ? "translate-y-0 opacity-100 pointer-events-auto"
           : "-translate-y-[calc(100%+0.5rem)] opacity-0 pointer-events-none"
