@@ -1,5 +1,6 @@
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { useAppStore } from "@/stores/app-store";
+import { useDownloadProgressStore } from "@/stores/download-progress-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
 import { setBookSyncStatus } from "@readany/core/db/database";
@@ -105,16 +106,29 @@ export async function openDesktopBook({
       books.map((item) => (item.id === book.id ? { ...item, syncStatus: "downloading" } : item)),
     );
     await setBookSyncStatus(book.id, "downloading");
+    const { setProgress, clearProgress } = useDownloadProgressStore.getState();
 
     try {
       const backend = createSyncBackend(syncStore.config, password);
-      const success = await downloadBookFile(backend, book.id, book.filePath);
+      const outcome = await downloadBookFile(backend, book.id, book.filePath, (progress) => {
+        setProgress(book.id, progress.downloaded, progress.total);
+      });
       await loadBooks();
 
-      if (!success) {
+      if (outcome === "not-found") {
+        toast.error(
+          t(
+            "library.downloadNotFound",
+            "远端没有这本书的文件，可能源设备还未上传成功。请回到那台设备重新打开/同步一次，或在此处重新导入。",
+          ),
+        );
+        return false;
+      }
+      if (outcome === "error") {
         toast.error(t("library.downloadFailed", "下载失败，请重试"));
         return false;
       }
+      return true;
     } catch (error) {
       console.error("[openDesktopBook] Failed to download remote book:", error);
       await setBookSyncStatus(book.id, "remote");
@@ -123,6 +137,7 @@ export async function openDesktopBook({
       return false;
     } finally {
       pendingDownloads.delete(book.id);
+      clearProgress(book.id);
     }
   }
 

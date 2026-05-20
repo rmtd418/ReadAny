@@ -118,10 +118,14 @@ describe("useSyncStore", () => {
       success: true,
       filesUploaded: 2,
       filesDownloaded: 1,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
     syncMocks.syncFiles.mockResolvedValue({
       filesUploaded: 0,
       filesDownloaded: 0,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
   });
 
@@ -145,6 +149,8 @@ describe("useSyncStore", () => {
             direction: "upload",
             filesUploaded: 1,
             filesDownloaded: 0,
+            filesUploadFailed: 0,
+            filesDownloadFailed: 0,
             durationMs: 5,
           },
         });
@@ -164,6 +170,8 @@ describe("useSyncStore", () => {
         direction: "upload",
         filesUploaded: 1,
         filesDownloaded: 0,
+        filesUploadFailed: 0,
+        filesDownloadFailed: 0,
         durationMs: 5,
       },
     });
@@ -283,6 +291,8 @@ describe("useSyncStore", () => {
       direction: "upload",
       filesUploaded: 2,
       filesDownloaded: 1,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
     expect(useSyncStore.getState().status).toBe("idle");
     expect(useSyncStore.getState().lastSyncAt).toEqual(expect.any(Number));
@@ -291,6 +301,8 @@ describe("useSyncStore", () => {
       direction: "upload",
       filesUploaded: 2,
       filesDownloaded: 1,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
     expect(libraryEventMocks.emitLibraryChanged).toHaveBeenCalled();
     expect(emitSpy).toHaveBeenCalledWith(
@@ -310,6 +322,8 @@ describe("useSyncStore", () => {
       changes: 5,
       filesUploaded: 0,
       filesDownloaded: 4,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
 
     const result = await useSyncStore
@@ -323,12 +337,16 @@ describe("useSyncStore", () => {
       success: true,
       direction: "download",
       filesDownloaded: 4,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
     expect(useSyncStore.getState().status).toBe("idle");
     expect(useSyncStore.getState().lastResult).toMatchObject({
       success: true,
       direction: "download",
       filesDownloaded: 4,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
     expect(libraryEventMocks.emitLibraryChanged).toHaveBeenCalled();
     expect(emitSpy).toHaveBeenCalledWith(
@@ -351,6 +369,8 @@ describe("useSyncStore", () => {
       changes: 2,
       filesUploaded: 0,
       filesDownloaded: 3,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
 
     const result = await useSyncStore.getState().forceFullSync("download");
@@ -371,6 +391,8 @@ describe("useSyncStore", () => {
       direction: "download",
       filesUploaded: 0,
       filesDownloaded: 3,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
     });
   });
 
@@ -392,6 +414,8 @@ describe("useSyncStore", () => {
       direction: "none",
       filesUploaded: 0,
       filesDownloaded: 0,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
       durationMs: 0,
       error: "无法连接到同步服务器，请检查网络和凭据",
     });
@@ -419,6 +443,8 @@ describe("useSyncStore", () => {
       direction: "none",
       filesUploaded: 0,
       filesDownloaded: 0,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
       durationMs: 0,
       error: "WebDAV 认证失败，请检查用户名和应用密码是否正确。",
     });
@@ -457,6 +483,8 @@ describe("useSyncStore", () => {
       direction: "upload",
       filesUploaded: 2,
       filesDownloaded: 1,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
       durationMs: 0,
     });
     const [firstResult, secondResult] = await Promise.all([first, second]);
@@ -478,6 +506,8 @@ describe("useSyncStore", () => {
         direction: "upload",
         filesUploaded: 1,
         filesDownloaded: 0,
+        filesUploadFailed: 0,
+        filesDownloadFailed: 0,
         durationMs: 1,
       },
       error: "oops",

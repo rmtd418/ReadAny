@@ -32,6 +32,9 @@ export interface ISyncBackend {
   /** Download data from a path */
   get(path: string): Promise<Uint8Array>;
 
+  /** Download data with progress reporting (optional — falls back to get() if not implemented) */
+  getWithProgress?(path: string, onProgress?: (loaded: number, total: number) => void): Promise<Uint8Array>;
+
   /** Get JSON data from a path, returns null if not found */
   getJSON<T>(path: string): Promise<T | null>;
 
@@ -46,6 +49,14 @@ export interface ISyncBackend {
 
   /** Check if a file exists */
   exists(path: string): Promise<boolean>;
+
+  /**
+   * Move/rename a file from `fromPath` to `toPath`.
+   * Implementations should create intermediate directories on the destination side.
+   * Should be atomic where the backend supports it; otherwise copy + delete.
+   * Throws if the source does not exist or if the destination already exists.
+   */
+  move(fromPath: string, toPath: string): Promise<void>;
 
   /** Get a display name for the backend (for UI) */
   getDisplayName(): Promise<string>;

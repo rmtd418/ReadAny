@@ -325,6 +325,14 @@ class MemoryBackend implements ISyncBackend {
     return this.jsonFiles.has(path);
   }
 
+  async move(fromPath: string, toPath: string): Promise<void> {
+    const data = this.jsonFiles.get(fromPath);
+    if (data === undefined) throw new Error(`MemoryBackend MOVE: source not found ${fromPath}`);
+    if (this.jsonFiles.has(toPath)) throw new Error(`MemoryBackend MOVE: destination exists ${toPath}`);
+    this.jsonFiles.set(toPath, data);
+    this.jsonFiles.delete(fromPath);
+  }
+
   async getDisplayName(): Promise<string> {
     return "Memory";
   }

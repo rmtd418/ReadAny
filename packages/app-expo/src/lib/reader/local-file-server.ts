@@ -63,20 +63,36 @@ export async function startFileServer(docRoot: string): Promise<string> {
 
 // --- Native Lighttpd server ---
 async function _startNativeServer(cleanRoot: string): Promise<string> {
-  const StaticServerModule = await import("@dr.pogodin/react-native-static-server");
-  const StaticServer = StaticServerModule.default;
+  let server: any = null;
+  try {
+    const StaticServerModule = await import("@dr.pogodin/react-native-static-server");
+    const StaticServer = StaticServerModule.default;
 
-  _nativeServer = new StaticServer({
-    fileDir: cleanRoot,
-    port: 0,
-    stopInBackground: false,
-  });
-
-  _serverDocRoot = cleanRoot;
-  const origin = await _nativeServer.start();
-  _serverUrl = origin;
-  console.log(`[FileServer] Native Lighttpd started: ${origin} (root: ${cleanRoot})`);
-  return origin;
+    server = new StaticServer({
+      fileDir: cleanRoot,
+      port: 0,
+      stopInBackground: false,
+    });
+    const origin = await server.start();
+    _nativeServer = server;
+    _serverDocRoot = cleanRoot;
+    _serverUrl = origin;
+    console.log(`[FileServer] Native Lighttpd started: ${origin} (root: ${cleanRoot})`);
+    return origin;
+  } catch (e) {
+    // Native module unavailable at runtime (e.g. peer dep @dr.pogodin/react-native-fs
+    // not linked into the native binary). Drop down to the JS TCP fallback so reading
+    // still works without rebuilding the dev client.
+    console.warn(
+      `[FileServer] Native Lighttpd unavailable (${e instanceof Error ? e.message : e}), falling back to TCP`,
+    );
+    if (server) {
+      try { await server.stop?.(); } catch {}
+    }
+    _nativeServer = null;
+    _useNative = false;
+    return _startTcpFallback(cleanRoot);
+  }
 }
 
 // --- Fallback: JS TCP server (original implementation) ---

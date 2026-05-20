@@ -273,7 +273,7 @@ export class ExpoPlatformService implements IPlatformService {
   // ---- Network ----
 
   async fetch(url: string, options?: FetchOptions): Promise<Response> {
-    const { allowInsecure, timeoutMs, responseType, ...fetchOptions } = options ?? {};
+    const { allowInsecure, timeoutMs, responseType, onDownloadProgress, ...fetchOptions } = options ?? {};
     const effectiveUrl = allowInsecure ? url.replace(/^https:\/\//i, "http://") : url;
     const method = fetchOptions?.method?.toUpperCase() || "GET";
 
@@ -281,7 +281,7 @@ export class ExpoPlatformService implements IPlatformService {
     // React Native's fetch has issues with large arrayBuffer responses
     const resolvedResponseType = responseType ?? (method === "GET" ? "arraybuffer" : "text");
     const effectiveTimeoutMs = timeoutMs ?? (method === "GET" ? 120000 : 15000);
-    return this._fetchWithXHR(effectiveUrl, fetchOptions, resolvedResponseType, effectiveTimeoutMs);
+    return this._fetchWithXHR(effectiveUrl, fetchOptions, resolvedResponseType, effectiveTimeoutMs, onDownloadProgress);
   }
 
   private _fetchWithXHR(
@@ -289,6 +289,7 @@ export class ExpoPlatformService implements IPlatformService {
     options?: RequestInit,
     responseType: XMLHttpRequestResponseType = "arraybuffer",
     timeoutMs = 120000,
+    onDownloadProgress?: (loaded: number, total: number) => void,
   ): Promise<Response> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -300,6 +301,13 @@ export class ExpoPlatformService implements IPlatformService {
       xhr.open(method, url, true);
       xhr.responseType = responseType;
       xhr.timeout = timeoutMs;
+
+      // Download progress tracking
+      if (onDownloadProgress) {
+        xhr.onprogress = (event) => {
+          onDownloadProgress(event.loaded, event.lengthComputable ? event.total : 0);
+        };
+      }
 
       // Set headers
       if (options?.headers) {

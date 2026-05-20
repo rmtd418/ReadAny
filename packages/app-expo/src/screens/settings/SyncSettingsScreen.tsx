@@ -206,8 +206,17 @@ export default function SyncSettingsScreen() {
   ]);
 
   const handleSync = useCallback(async () => {
-    await syncNow();
-  }, [syncNow]);
+    const result = await syncNow();
+    if (result?.success && (result.filesUploadFailed > 0 || result.filesDownloadFailed > 0)) {
+      Alert.alert(
+        t("common.warning", "提示"),
+        t("settings.syncFilesPartialFailed", {
+          uploadFailed: result.filesUploadFailed,
+          downloadFailed: result.filesDownloadFailed,
+        }),
+      );
+    }
+  }, [syncNow, t]);
 
   const handleConflict = useCallback(
     (direction: "upload" | "download") => { syncNow(direction); },
@@ -335,6 +344,8 @@ export default function SyncSettingsScreen() {
           keyboardDismissMode="on-drag"
         >
           <View style={[styles.contentColumn, { width: "100%", maxWidth: layout.centeredContentWidth }]}>
+            <Text style={styles.layoutNotice}>{t("settings.syncLayoutMigrationNotice")}</Text>
+
             {/* Backend Type Selector */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{t("settings.syncBackendType")}</Text>
@@ -506,6 +517,14 @@ export default function SyncSettingsScreen() {
                             {isLanContext
                               ? t("settings.syncLANImportedFiles", { count: lastResult.filesDownloaded })
                               : t("settings.syncFilesDown", { count: lastResult.filesDownloaded })}
+                          </Text>
+                        )}
+                        {(lastResult.filesUploadFailed > 0 || lastResult.filesDownloadFailed > 0) && (
+                          <Text style={styles.errorText}>
+                            {t("settings.syncFilesPartialFailed", {
+                              uploadFailed: lastResult.filesUploadFailed,
+                              downloadFailed: lastResult.filesDownloadFailed,
+                            })}
                           </Text>
                         )}
                       </>

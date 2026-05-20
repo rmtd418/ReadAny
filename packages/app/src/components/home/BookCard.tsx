@@ -15,6 +15,7 @@ import { openDesktopBook } from "@/lib/library/open-book";
  */
 import { triggerVectorizeBook } from "@/lib/rag/vectorize-trigger";
 import { useAppStore } from "@/stores/app-store";
+import { useDownloadProgressStore } from "@/stores/download-progress-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { useReaderStore } from "@/stores/reader-store";
 import { useVectorModelStore } from "@/stores/vector-model-store";
@@ -80,6 +81,7 @@ export const BookCard = memo(function BookCard({
   const coverSrc = useResolvedSrc(book.meta.coverUrl);
   const syncVersion = useSyncVersion();
   const coverImageKey = coverSrc ? `${coverSrc}-${syncVersion}` : "";
+  const downloadProgress = useDownloadProgressStore((s) => s.progress[book.id]);
 
   useEffect(() => {
     setImageError(false);
@@ -282,6 +284,11 @@ export const BookCard = memo(function BookCard({
             <span className="mt-1.5 text-sm font-medium text-white">
               {t("home.downloading", "下载中")}
             </span>
+            {downloadProgress && downloadProgress.total > 0 && (
+              <span className="mt-0.5 text-xs text-white/80 tabular-nums">
+                {Math.round((downloadProgress.downloaded / downloadProgress.total) * 100)}%
+              </span>
+            )}
           </div>
         )}
 

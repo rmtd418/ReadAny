@@ -71,29 +71,25 @@ function StatCard({
   title,
   value,
   unit,
-  metaLabel,
-  metaValue,
+  onPress,
   style,
 }: {
   icon: React.ReactNode;
   title: string;
   value: string;
   unit?: string;
-  metaLabel: string;
-  metaValue: string;
+  onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const colors = useColors();
   const s = makeStyles(colors);
   return (
-    <View style={[s.statCard, style]}>
-      <View style={s.statCardHeader}>
-        <View style={s.statCardTitleRow}>
-          <View style={s.statCardIconWrap}>{icon}</View>
-          <Text style={s.statCardTitle} numberOfLines={1} maxFontSizeMultiplier={1.6}>
-            {title}
-          </Text>
-        </View>
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={[s.statCard, style]}>
+      <View style={s.statCardTitleRow}>
+        <View style={s.statCardIconWrap}>{icon}</View>
+        <Text style={s.statCardTitle} numberOfLines={1} maxFontSizeMultiplier={1.6}>
+          {title}
+        </Text>
       </View>
       <View style={s.statCardBody}>
         <Text style={s.statCardValue} numberOfLines={1} maxFontSizeMultiplier={1.8}>
@@ -105,14 +101,7 @@ function StatCard({
           </Text>
         )}
       </View>
-      <View style={s.statCardMetaRow}>
-        <Text style={s.statCardMetaText} numberOfLines={1} maxFontSizeMultiplier={1.5}>
-          <Text style={s.statCardMetaLabel}>{metaLabel}</Text>
-          <Text style={s.statCardMetaDivider}> · </Text>
-          <Text style={s.statCardMetaValue}>{metaValue}</Text>
-        </Text>
-      </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -423,16 +412,12 @@ export function ProfileScreen() {
       icon: <ClockIcon size={16} color={colors.primary} />,
       title: t("profile.totalTime", "总时长"),
       value: totalTime,
-      metaLabel: t("profile.activeDays", "活跃天数"),
-      metaValue: `${activeDays} ${t("profile.daysUnit", "天")}`,
     },
     {
       key: "volume",
       icon: <TypeIcon size={16} color={colors.primary} />,
       title: t("profile.readingVolume", "阅读字数"),
       value: totalCharacters,
-      metaLabel: t("profile.readingSpeed", "阅读速度"),
-      metaValue: avgSpeed,
     },
     {
       key: "books",
@@ -440,8 +425,6 @@ export function ProfileScreen() {
       title: t("profile.booksRead", "已读"),
       value: String(booksRead),
       unit: t("profile.booksUnit", "本"),
-      metaLabel: t("profile.sessions", "阅读会话"),
-      metaValue: `${totalSessions}`,
     },
     {
       key: "streak",
@@ -449,8 +432,6 @@ export function ProfileScreen() {
       title: t("profile.streak", "连续阅读"),
       value: String(streak),
       unit: t("profile.daysUnit", "天"),
-      metaLabel: t("profile.longestStreak", "最长连续"),
-      metaValue: `${longestStreak} ${t("profile.daysUnit", "天")}`,
     },
   ];
 
@@ -467,7 +448,7 @@ export function ProfileScreen() {
 
       <ScrollView
         style={s.scrollView}
-        contentContainerStyle={{ paddingTop: 20, paddingBottom: tabBarHeight + 24 }}
+        contentContainerStyle={{ paddingTop: 20, paddingBottom: 16 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Stats cards */}
@@ -494,6 +475,7 @@ export function ProfileScreen() {
                     unit={card.unit}
                     metaLabel={card.metaLabel}
                     metaValue={card.metaValue}
+                    onPress={() => nav.navigate("Stats")}
                     style={{ width: "100%" }}
                   />
                 </View>
@@ -742,7 +724,7 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: fontSize.xs,
       lineHeight: fontSize.xs * 1.6,
       color: colors.mutedForeground,
-      marginTop: 32,
-      marginBottom: 8,
+      marginTop: 16,
+      marginBottom: 4,
     },
   });

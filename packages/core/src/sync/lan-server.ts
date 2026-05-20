@@ -3,10 +3,18 @@
  * Provides a local HTTP server for peer-to-peer sync.
  */
 
+import { getDB } from "../db/database";
 import { getPlatformService } from "../services/platform";
 import { getSyncAdapter } from "./sync-adapter";
 import { type LANQRData, createLANQRData, generatePairCode } from "./lan-backend";
 import type { ISyncBackend, RemoteFile } from "./sync-backend";
+import {
+  buildBookFolderName,
+  isCoverFileName,
+  parseBookFolderName,
+  sanitizeBookTitleForFs,
+} from "./sync-naming";
+import { REMOTE_BOOKS_ROOT } from "./sync-types";
 import { collectChanges, type DeviceSyncPayload } from "./simple-sync";
 
 const LAN_SYNC_DIR = "/readany/sync";
@@ -34,17 +42,33 @@ class LocalFsBackend implements ISyncBackend {
   private async mapVirtualPath(path: string): Promise<string> {
     const adapter = getSyncAdapter();
     const dataDir = await this.getDataDir();
-    
-    // Remote structure mapping to local Desktop storage:
-    // /readany/data/readany.db -> local readany.db
-    // /readany/data/manifest.json -> local manifest.json
-    // /readany/data/file/* -> local books/*  (Note: Desktop uses 'books', sync uses 'file')
-    // /readany/data/cover/* -> local covers/* (Note: Desktop uses 'covers', sync uses 'cover')
+
+    // Remote structure mapping to local storage:
+    // /readany/data/readany.db                    -> local DB file
+    // /readany/data/books/{title-id}/{title}.ext  -> local books/{id}.ext or covers/{id}.ext
+    // /readany/data/file/*                        -> local books/*    (legacy layout)
+    // /readany/data/cover/*                       -> local covers/*   (legacy layout)
 
     if (path === "/readany/data/readany.db") {
       return await adapter.getDatabasePath();
     }
-    
+
+    if (path.startsWith(`${REMOTE_BOOKS_ROOT}/`)) {
+      // /readany/data/books/{title-id}/{filename}
+      const rest = path.substring(REMOTE_BOOKS_ROOT.length + 1);
+      const slashIdx = rest.indexOf("/");
+      if (slashIdx === -1) {
+        // Caller asked to map the dir itself — return books root local equivalent (best-effort).
+        return adapter.joinPath(dataDir, "books");
+      }
+      const folderName = rest.substring(0, slashIdx);
+      const fileName = rest.substring(slashIdx + 1);
+      const bookId = parseBookFolderName(folderName) ?? folderName.split("-").pop() ?? folderName;
+      const ext = fileName.includes(".") ? fileName.split(".").pop()! : "";
+      const targetSubdir = isCoverFileName(fileName) ? "covers" : "books";
+      return adapter.joinPath(dataDir, targetSubdir, ext ? `${bookId}.${ext}` : bookId);
+    }
+
     if (path.startsWith("/readany/data/file")) {
       const subPath = path.substring("/readany/data/file".length);
       return adapter.joinPath(dataDir, "books", subPath);
@@ -152,6 +176,76 @@ class LocalFsBackend implements ISyncBackend {
       ];
     }
 
+    // The per-book folders under REMOTE_BOOKS_ROOT don't exist on local disk (local stays
+    // UUID-flat). Project them from the DB instead so remote clients see the canonical layout.
+    if (path === REMOTE_BOOKS_ROOT || path === `${REMOTE_BOOKS_ROOT}/`) {
+      try {
+        const db = await getDB();
+        const books = await db.select<{ id: string; title: string }>(
+          "SELECT id, title FROM books WHERE deleted_at IS NULL",
+          [],
+        );
+        return books.map((b) => {
+          const folderName = buildBookFolderName(b);
+          return {
+            name: folderName,
+            path: `${REMOTE_BOOKS_ROOT}/${folderName}`,
+            size: 0,
+            lastModified: 0,
+            isDirectory: true,
+          };
+        });
+      } catch (e) {
+        console.warn("[LAN Server] Failed to project books root from DB:", e);
+        return [];
+      }
+    }
+
+    if (path.startsWith(`${REMOTE_BOOKS_ROOT}/`)) {
+      const folderName = path.substring(REMOTE_BOOKS_ROOT.length + 1).replace(/\/$/, "");
+      const bookId = parseBookFolderName(folderName) ?? folderName.split("-").pop() ?? "";
+      if (!bookId) return [];
+      try {
+        const db = await getDB();
+        const rows = await db.select<{
+          id: string;
+          title: string;
+          file_path: string | null;
+          cover_url: string | null;
+        }>("SELECT id, title, file_path, cover_url FROM books WHERE id = ? AND deleted_at IS NULL", [bookId]);
+        if (rows.length === 0) return [];
+        const book = rows[0];
+        const stem = sanitizeBookTitleForFs(book.title);
+        const entries: RemoteFile[] = [];
+        if (book.file_path) {
+          const ext = book.file_path.split(".").pop() || "epub";
+          const name = `${stem}.${ext}`;
+          entries.push({
+            name,
+            path: `${REMOTE_BOOKS_ROOT}/${folderName}/${name}`,
+            size: 0,
+            lastModified: 0,
+            isDirectory: false,
+          });
+        }
+        if (book.cover_url) {
+          const ext = book.cover_url.split(".").pop() || "jpg";
+          const name = `${stem}.${ext}`;
+          entries.push({
+            name,
+            path: `${REMOTE_BOOKS_ROOT}/${folderName}/${name}`,
+            size: 0,
+            lastModified: 0,
+            isDirectory: false,
+          });
+        }
+        return entries;
+      } catch (e) {
+        console.warn(`[LAN Server] Failed to project book folder ${folderName} from DB:`, e);
+        return [];
+      }
+    }
+
     const adapter = getSyncAdapter();
     const resolvedPath = await this.mapVirtualPath(path);
     try {
@@ -177,6 +271,21 @@ class LocalFsBackend implements ISyncBackend {
     const platform = getPlatformService();
     const resolvedPath = await this.mapVirtualPath(path);
     await platform.deleteFile(resolvedPath);
+  }
+
+  async move(fromPath: string, toPath: string): Promise<void> {
+    // TODO: platform.renameFile would be more efficient; degrade to read+write+delete
+    // for now since LAN sync is currently one-way and this rarely runs in practice.
+    const platform = getPlatformService();
+    const adapter = getSyncAdapter();
+    const fromResolved = await this.mapVirtualPath(fromPath);
+    const toResolved = await this.mapVirtualPath(toPath);
+    if (fromResolved === toResolved) return;
+    const destDir = toResolved.substring(0, toResolved.lastIndexOf("/"));
+    if (destDir) await adapter.ensureDir(destDir);
+    const data = await platform.readFile(fromResolved);
+    await platform.writeFile(toResolved, data);
+    await platform.deleteFile(fromResolved);
   }
 
   async exists(path: string): Promise<boolean> {

@@ -30,6 +30,12 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.foreground,
       marginBottom: 10,
     },
+    layoutNotice: {
+      fontSize: fontSize.xs,
+      color: colors.mutedForeground,
+      lineHeight: 18,
+      marginBottom: 4,
+    },
     card: {
       borderRadius: radius.xl,
       backgroundColor: colors.card,

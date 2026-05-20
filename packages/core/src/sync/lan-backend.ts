@@ -128,6 +128,10 @@ export class LANBackend implements ISyncBackend {
     throw new Error("LAN backend does not support delete (receive-only)");
   }
 
+  async move(_from: string, _to: string): Promise<void> {
+    throw new Error("LAN backend does not support move (receive-only)");
+  }
+
   async exists(path: string): Promise<boolean> {
     try {
       const fetchFn = this.getFetchFn();

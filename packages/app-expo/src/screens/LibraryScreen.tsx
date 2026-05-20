@@ -212,11 +212,10 @@ export function LibraryScreen() {
     renameTag,
   } = useLibraryStore();
 
-  const { downloadingBookId, downloadingBookTitle, downloadBook } = useBookDownload({
+  const { downloadingBookId, downloadProgress, downloadBook } = useBookDownload({
     loadBooks,
-    onSuccess: (bookId) => {
-      void openMobileBook({ bookId, navigation: nav, t });
-    },
+    // Download finishes silently — user can re-tap the book to open it.
+    onSuccess: () => {},
   });
 
   const { vectorQueue, vectorizingBookId, vectorProgress, handleVectorize } = useVectorizationQueue(
@@ -691,6 +690,7 @@ export function LibraryScreen() {
             isVectorizing={vectorizingBookId === item.book.id}
             isQueued={vectorQueue.some((b) => b.id === item.book.id)}
             vectorProgress={vectorizingBookId === item.book.id ? vectorProgress : null}
+            downloadProgress={downloadingBookId === item.book.id ? downloadProgress : null}
             isSelectionMode={selectionMode}
             isSelected={selectedBookIds.has(item.book.id)}
             onSelect={toggleBookSelection}
@@ -715,6 +715,8 @@ export function LibraryScreen() {
       vectorProgress,
       vectorQueue,
       vectorizingBookId,
+      downloadingBookId,
+      downloadProgress,
     ],
   );
 
@@ -977,17 +979,6 @@ export function LibraryScreen() {
               <Text style={s.importBannerText}>{t("library.importing", "正在导入...")}</Text>
             </View>
           )}
-          {downloadingBookId && (
-            <View style={s.downloadBanner}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <View style={s.downloadBannerInfo}>
-                <Text style={s.downloadBannerStatus}>{t("library.downloading", "下载中")}</Text>
-                <Text style={s.downloadBannerTitle} numberOfLines={1}>
-                  {downloadingBookTitle}
-                </Text>
-              </View>
-            </View>
-          )}
           {isLoaded && books.length === 0 && (
             <View style={s.emptyWrap}>
               <Image
@@ -1023,6 +1014,7 @@ export function LibraryScreen() {
             <FlatList
               data={gridItems}
               renderItem={renderGridItem}
+              extraData={{ vectorProgress, vectorizingBookId }}
               keyExtractor={(item) =>
                 item.type === "group" ? `group-${item.group.id}` : item.book.id
               }
@@ -1254,23 +1246,6 @@ const makeStyles = (
       marginBottom: 12,
     },
     importBannerText: { fontSize: fontSize.xs, color: colors.primary },
-    downloadBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: `${colors.muted}0D`,
-      borderRadius: radius.lg,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      marginBottom: 12,
-    },
-    downloadBannerInfo: { flex: 1, minWidth: 0 },
-    downloadBannerStatus: {
-      fontSize: fontSize.xs,
-      fontWeight: fontWeight.medium,
-      color: colors.primary,
-    },
-    downloadBannerTitle: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
     vecBanner: {
       backgroundColor: `${colors.muted}0D`,
       borderRadius: radius.lg,

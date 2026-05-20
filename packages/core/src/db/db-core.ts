@@ -699,6 +699,17 @@ export async function initDatabase(): Promise<void> {
         await cleanupOrphanedSyncRows(database);
       }
 
+      // Any book left in "downloading" state must have been interrupted
+      // (app killed / OS suspended mid-download). Reset to "remote" so the
+      // user can retry instead of seeing a permanent spinner.
+      try {
+        await database.execute(
+          "UPDATE books SET sync_status = 'remote' WHERE sync_status = 'downloading'",
+        );
+      } catch {
+        // sync_status column missing on very old schemas — safe to ignore.
+      }
+
       dbInitialized = true;
     });
 

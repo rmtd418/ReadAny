@@ -55,6 +55,7 @@ interface BookCardProps {
   isVectorizing?: boolean;
   isQueued?: boolean;
   vectorProgress?: { status: string; processedChunks: number; totalChunks: number } | null;
+  downloadProgress?: { downloaded: number; total: number } | null;
   cardWidth?: number;
   isSelectionMode?: boolean;
   isSelected?: boolean;
@@ -71,6 +72,7 @@ export const BookCard = memo(function BookCard({
   isVectorizing,
   isQueued,
   vectorProgress,
+  downloadProgress,
   cardWidth = 96,
   isSelectionMode = false,
   isSelected = false,
@@ -316,6 +318,11 @@ export const BookCard = memo(function BookCard({
             <View style={s.downloadingOverlay}>
               <AnimatedLoader />
               <Text style={s.downloadingOverlayText}>{t("home.downloading", "下载中")}</Text>
+              {downloadProgress && downloadProgress.total > 0 && (
+                <Text style={s.downloadingOverlayPct}>
+                  {Math.round((downloadProgress.downloaded / downloadProgress.total) * 100)}%
+                </Text>
+              )}
             </View>
           )}
 

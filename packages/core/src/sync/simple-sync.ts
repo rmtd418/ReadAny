@@ -518,6 +518,8 @@ export async function runSimpleSync(
   changes: number;
   filesUploaded: number;
   filesDownloaded: number;
+  filesUploadFailed: number;
+  filesDownloadFailed: number;
   error?: string;
 }> {
   try {
@@ -593,6 +595,8 @@ export async function runSimpleSync(
         changes: totalApplied,
         filesUploaded: 0,
         filesDownloaded: 0,
+        filesUploadFailed: 0,
+        filesDownloadFailed: 0,
         error: remoteSyncError,
       };
     }
@@ -646,6 +650,8 @@ export async function runSimpleSync(
     // 4. Sync book files and covers
     let filesUploaded = 0;
     let filesDownloaded = 0;
+    let filesUploadFailed = 0;
+    let filesDownloadFailed = 0;
     onProgress?.({
       phase: "files",
       operation: receiveOnly ? "download" : "upload",
@@ -673,12 +679,17 @@ export async function runSimpleSync(
       );
       filesUploaded = fileResult.filesUploaded;
       filesDownloaded = fileResult.filesDownloaded;
+      filesUploadFailed = fileResult.filesUploadFailed;
+      filesDownloadFailed = fileResult.filesDownloadFailed;
       console.log(
-        `[SimpleSync] File sync: ${filesUploaded} uploaded, ${filesDownloaded} downloaded`,
+        `[SimpleSync] File sync: ${filesUploaded} uploaded, ${filesDownloaded} downloaded, ` +
+          `${filesUploadFailed} upload-failed, ${filesDownloadFailed} download-failed`,
       );
     } catch (e) {
       console.warn("[SimpleSync] File sync failed (non-fatal):", e);
-      // Don't fail the whole sync if file sync fails
+      // Don't fail the whole sync if file sync fails — but flag it so the UI
+      // can surface that the file-sync phase didn't complete cleanly.
+      filesUploadFailed = Math.max(filesUploadFailed, 1);
     }
 
     // 5. Update last sync timestamp
@@ -689,10 +700,25 @@ export async function runSimpleSync(
       operation: receiveOnly ? "download" : "upload",
       message: "同步完成",
     });
-    return { success: true, changes: changeCount + totalApplied, filesUploaded, filesDownloaded };
+    return {
+      success: true,
+      changes: changeCount + totalApplied,
+      filesUploaded,
+      filesDownloaded,
+      filesUploadFailed,
+      filesDownloadFailed,
+    };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     console.error("[SimpleSync] Sync failed:", error);
-    return { success: false, changes: 0, filesUploaded: 0, filesDownloaded: 0, error };
+    return {
+      success: false,
+      changes: 0,
+      filesUploaded: 0,
+      filesDownloaded: 0,
+      filesUploadFailed: 0,
+      filesDownloadFailed: 0,
+      error,
+    };
   }
 }

@@ -2,13 +2,14 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Switch } from "@/components/ui/switch";
 import { useSyncStore } from "@/stores/sync-store";
 import { getPlatformService } from "@readany/core/services";
-import { Cloud, Database, Download, Upload, Wifi } from "lucide-react";
+import { Cloud, Database, Download, Info, Upload, Wifi } from "lucide-react";
 /**
  * SyncSettings — Multi-backend sync configuration and status panel.
  * Supports WebDAV, S3, and LAN sync.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { ConfigTransfer } from "./ConfigTransfer";
 import { LANSyncDialog } from "./LANSyncDialog";
 
@@ -214,8 +215,16 @@ export function SyncSettings() {
   }, [s3Endpoint, s3Region, s3Bucket, s3AccessKeyId, s3SecretAccessKey, s3PathStyle, saveS3Config]);
 
   const handleSync = useCallback(async () => {
-    await syncNow();
-  }, [syncNow]);
+    const result = await syncNow();
+    if (result?.success && (result.filesUploadFailed > 0 || result.filesDownloadFailed > 0)) {
+      toast.error(
+        t("settings.syncFilesPartialFailed", {
+          uploadFailed: result.filesUploadFailed,
+          downloadFailed: result.filesDownloadFailed,
+        }),
+      );
+    }
+  }, [syncNow, t]);
 
   const handleConflict = useCallback(
     async (direction: "upload" | "download") => {
@@ -658,6 +667,14 @@ export function SyncSettings() {
                       : t("settings.syncFilesDown", { count: lastResult.filesDownloaded })}
                   </p>
                 )}
+                {(lastResult.filesUploadFailed > 0 || lastResult.filesDownloadFailed > 0) && (
+                  <p className="text-red-500">
+                    {t("settings.syncFilesPartialFailed", {
+                      uploadFailed: lastResult.filesUploadFailed,
+                      downloadFailed: lastResult.filesDownloadFailed,
+                    })}
+                  </p>
+                )}
                 <p className="text-muted-foreground/60">
                   {t("settings.syncDuration", { ms: lastResult.durationMs })}
                 </p>
@@ -720,6 +737,11 @@ export function SyncSettings() {
 
   return (
     <div className="space-y-6 p-4 pt-3">
+      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span>{t("settings.syncLayoutMigrationNotice")}</span>
+      </p>
+
       {renderBackendSelector()}
 
       {selectedBackend === "webdav" && renderWebDavConfig()}
