@@ -16,7 +16,8 @@
       "Bash(git pull *)",
       "Bash(gh pr *)",
       "Bash(git fetch *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(node scripts/bump-version.js 1.3.1)"
     ]
   }
 }

@@ -473,8 +473,6 @@ export function ProfileScreen() {
                     title={card.title}
                     value={card.value}
                     unit={card.unit}
-                    metaLabel={card.metaLabel}
-                    metaValue={card.metaValue}
                     onPress={() => nav.navigate("Stats")}
                     style={{ width: "100%" }}
                   />
