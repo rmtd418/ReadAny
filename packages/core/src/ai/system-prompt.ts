@@ -251,7 +251,7 @@ function buildConstraintsSection(
 ): string {
   const lines = [
     "## Response Guidelines",
-    `- Respond in ${language || "the same language as the user"}`,
+    `- **IMPORTANT: You MUST respond in ${language || "English"}. This is non-negotiable regardless of the book's language.**`,
     "- When citing book content, use [1], [2] format with registered citations via addCitation tool",
     "- Keep responses concise unless the user asks for detailed analysis",
     "- Use markdown formatting for readability",

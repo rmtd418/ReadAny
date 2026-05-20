@@ -7,6 +7,7 @@ import type { AIConfig, Book, SemanticContext, Skill, Thread } from "../types";
 import { streamReadingAgent } from "./agents/reading-agent";
 import { processMessages } from "./message-pipeline";
 import type { ToolDefinition } from "./tools/tool-types";
+import i18n from "i18next";
 
 export interface StreamingOptions {
   thread: Thread;
@@ -64,7 +65,7 @@ export class StreamingChat {
         semanticContext: options.semanticContext,
         enabledSkills: options.enabledSkills,
         isVectorized: options.isVectorized,
-        userLanguage: options.book?.meta.language || "",
+        userLanguage: i18n.language || options.book?.meta.language || "en",
       },
       { slidingWindowSize: options.aiConfig.slidingWindowSize },
     );

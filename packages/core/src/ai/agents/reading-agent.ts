@@ -17,6 +17,7 @@ import { createChatModel } from "../llm-provider";
 import { buildSystemPrompt } from "../system-prompt";
 import { ThinkTagStreamParser } from "../think-tag-parser";
 import type { ToolDefinition, ToolParameter } from "../tools/tool-types";
+import i18n from "i18next";
 
 // --- Stream Event Types ---
 
@@ -155,7 +156,7 @@ export async function* streamReadingAgent(
       semanticContext,
       enabledSkills,
       isVectorized,
-      userLanguage: "zh-CN",
+      userLanguage: i18n.language || "en",
       spoilerFree,
     });
 
