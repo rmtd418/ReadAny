@@ -1670,6 +1670,10 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const clientY = ev.clientY;
           const screenX = ev.screenX;
           const screenY = ev.screenY;
+          // Compute horizontal fraction (0-1) within the iframe viewport
+          // This is more reliable than screen coordinates for zone detection
+          const iframeWidth = (ev.target as Element)?.ownerDocument?.defaultView?.innerWidth || window.innerWidth;
+          const xFraction = clientX / iframeWidth;
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip
@@ -1714,6 +1718,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     clientY,
                     screenX,
                     screenY,
+                    xFraction,
                   },
                   "*",
                 );

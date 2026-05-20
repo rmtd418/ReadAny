@@ -221,32 +221,25 @@ function useAutoHideControls(
         if (data?.type !== "iframe-single-click" && data?.type !== "viewer-single-click") return;
         if (data.bookKey !== bookKey) return;
 
-        const viewRect = containerRef.current.getBoundingClientRect();
-        const viewWidth = viewRect.width;
+        const viewWidth = containerRef.current.getBoundingClientRect().width;
 
-        let windowStartX = window.screenX;
-        if ("__TAURI_INTERNALS__" in window) {
-          try {
-            const { getCurrentWindow } = await import("@tauri-apps/api/window");
-            const position = await getCurrentWindow().outerPosition();
-            windowStartX = position.x;
-          } catch {
-            windowStartX = window.screenX;
-          }
+        // Use xFraction (0-1) from iframe if available — most reliable method.
+        // For viewer-single-click (outside iframe), compute from clientX relative to container.
+        let fraction: number;
+        if (typeof data.xFraction === "number") {
+          fraction = data.xFraction;
+        } else {
+          const viewRect = containerRef.current.getBoundingClientRect();
+          const relativeX = Number(data.clientX ?? 0) - viewRect.left;
+          fraction = relativeX / viewWidth;
         }
-
-        const clickScreenX =
-          typeof data.screenX === "number"
-            ? data.screenX
-            : windowStartX + Number(data.clientX ?? 0);
-        const viewStartX = windowStartX + viewRect.left;
 
         // Double-page: left 25% = prev, right 25% = next, middle 50% = toggle
         // Single-page: left/right 37.5% = nav, middle 25% = toggle
-        const leftNavEnd = viewStartX + viewWidth * (isDoublePage ? 0.25 : 0.375);
-        const rightNavStart = viewStartX + viewWidth * (isDoublePage ? 0.75 : 0.625);
+        const leftNavEnd = isDoublePage ? 0.25 : 0.375;
+        const rightNavStart = isDoublePage ? 0.75 : 0.625;
 
-        if (clickScreenX > leftNavEnd && clickScreenX < rightNavStart) {
+        if (fraction > leftNavEnd && fraction < rightNavStart) {
           // Middle zone: toggle toolbar
           setIsVisible((prev) => {
             if (prev) {
@@ -262,7 +255,7 @@ function useAutoHideControls(
         clearTimer();
         setIsVisible(false);
 
-        if (clickScreenX <= leftNavEnd) {
+        if (fraction <= leftNavEnd) {
           onPrev?.();
         } else {
           onNext?.();
