@@ -1670,15 +1670,19 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const clientY = ev.clientY;
           const screenX = ev.screenX;
           const screenY = ev.screenY;
-          // Compute horizontal fraction (0-1) within the visible viewport.
-          // In paginated mode the iframe body is expanded via CSS columns but
-          // clientX is always relative to the visible viewport (the scroll
-          // container clip). Use documentElement.clientWidth which reflects
-          // the actual visible width, not the expanded scrollWidth.
-          const doc = (ev.target as Element)?.ownerDocument;
-          const visibleWidth = doc?.documentElement?.clientWidth || window.innerWidth;
-          const xFraction = clientX / visibleWidth;
-          console.log(`[ClickZone:iframe] clientX=${clientX} visibleWidth=${visibleWidth} xFraction=${xFraction.toFixed(3)} innerWidth=${window.innerWidth} scrollWidth=${doc?.documentElement?.scrollWidth}`);
+
+          // In paginated (CSS columns) mode, clientX is relative to the full
+          // expanded document width, not the visible page. We need to subtract
+          // the scroll offset to get the position within the visible viewport.
+          const view = viewRef.current;
+          const renderer = view?.renderer;
+          const pageWidth = renderer?.size || 0;
+          const scrollStart = renderer?.start || 0;
+          // Visible range in document coords: [scrollStart - pageWidth, scrollStart]
+          // Position within visible page: clientX - (scrollStart - pageWidth)
+          const visibleX = pageWidth > 0 ? clientX - (scrollStart - pageWidth) : clientX;
+          const xFraction = pageWidth > 0 ? visibleX / pageWidth : 0;
+          console.log(`[ClickZone:iframe] clientX=${clientX} pageWidth=${pageWidth} scrollStart=${scrollStart} visibleX=${visibleX} xFraction=${xFraction.toFixed(3)}`);
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip

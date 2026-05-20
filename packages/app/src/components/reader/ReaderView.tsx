@@ -223,23 +223,21 @@ function useAutoHideControls(
 
         const viewWidth = containerRef.current.getBoundingClientRect().width;
 
-        // Use xFraction (0-1) from iframe if available — most reliable method.
-        // For viewer-single-click (outside iframe), compute from clientX relative to container.
+        // Use xFraction from iframe (accounts for CSS columns scroll offset).
+        // For viewer-single-click (outside iframe), compute from clientX / viewWidth.
         let fraction: number;
-        if (typeof data.xFraction === "number") {
+        if (typeof data.xFraction === "number" && data.xFraction >= 0 && data.xFraction <= 1) {
           fraction = data.xFraction;
         } else {
-          const viewRect = containerRef.current.getBoundingClientRect();
-          const relativeX = Number(data.clientX ?? 0) - viewRect.left;
-          fraction = relativeX / viewWidth;
+          fraction = Number(data.clientX ?? 0) / viewWidth;
         }
 
-        // Double-page: left 25% = prev, right 25% = next, middle 50% = toggle
-        // Single-page: left/right 37.5% = nav, middle 25% = toggle
-        const leftNavEnd = isDoublePage ? 0.25 : 0.375;
-        const rightNavStart = isDoublePage ? 0.75 : 0.625;
+        // Double-page: left 33% = prev, right 33% = next, middle 34% = toggle
+        // Single-page: left/right 40% = nav, middle 20% = toggle
+        const leftNavEnd = isDoublePage ? 0.33 : 0.4;
+        const rightNavStart = isDoublePage ? 0.67 : 0.6;
 
-        console.log(`[ClickZone] type=${data.type} fraction=${fraction.toFixed(3)} xFraction=${data.xFraction} clientX=${data.clientX} viewWidth=${viewWidth} isDoublePage=${isDoublePage} zones=[0, ${leftNavEnd}, ${rightNavStart}, 1]`);
+        console.log(`[ClickZone] type=${data.type} fraction=${fraction.toFixed(3)} xFraction=${data.xFraction} clientX=${data.clientX} viewWidth=${viewWidth} isDoublePage=${isDoublePage}`);
 
         if (fraction > leftNavEnd && fraction < rightNavStart) {
           // Middle zone: toggle toolbar
@@ -2607,19 +2605,19 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             <div className="pointer-events-none absolute inset-0 z-[9999] flex">
               <div
                 className="h-full border-r-2 border-dashed border-blue-500/40 bg-blue-500/10"
-                style={{ width: isDoublePage ? "25%" : "37.5%" }}
+                style={{ width: isDoublePage ? "33%" : "40%" }}
               >
                 <span className="absolute left-1 top-1 text-[10px] text-blue-500">← PREV</span>
               </div>
               <div
                 className="h-full border-r-2 border-dashed border-green-500/40 bg-green-500/10"
-                style={{ width: isDoublePage ? "50%" : "25%" }}
+                style={{ width: isDoublePage ? "34%" : "20%" }}
               >
                 <span className="absolute left-1/2 top-1 -translate-x-1/2 text-[10px] text-green-500">TOOLBAR</span>
               </div>
               <div
                 className="h-full bg-red-500/10"
-                style={{ width: isDoublePage ? "25%" : "37.5%" }}
+                style={{ width: isDoublePage ? "33%" : "40%" }}
               >
                 <span className="absolute right-1 top-1 text-[10px] text-red-500">NEXT →</span>
               </div>

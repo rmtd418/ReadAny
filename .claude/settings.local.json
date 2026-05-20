@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git tag *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "Bash(xargs ls *)",
+      "Bash(gh release *)",
+      "Bash(gh issue *)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(git checkout *)",
+      "Bash(gh api *)",
+      "Bash(git pull *)",
+      "Bash(gh pr *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)"
+    ]
+  }
+}
