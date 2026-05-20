@@ -1678,6 +1678,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const doc = (ev.target as Element)?.ownerDocument;
           const visibleWidth = doc?.documentElement?.clientWidth || window.innerWidth;
           const xFraction = clientX / visibleWidth;
+          console.log(`[ClickZone:iframe] clientX=${clientX} visibleWidth=${visibleWidth} xFraction=${xFraction.toFixed(3)} innerWidth=${window.innerWidth} scrollWidth=${doc?.documentElement?.scrollWidth}`);
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip

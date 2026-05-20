@@ -239,6 +239,8 @@ function useAutoHideControls(
         const leftNavEnd = isDoublePage ? 0.25 : 0.375;
         const rightNavStart = isDoublePage ? 0.75 : 0.625;
 
+        console.log(`[ClickZone] type=${data.type} fraction=${fraction.toFixed(3)} xFraction=${data.xFraction} clientX=${data.clientX} viewWidth=${viewWidth} isDoublePage=${isDoublePage} zones=[0, ${leftNavEnd}, ${rightNavStart}, 1]`);
+
         if (fraction > leftNavEnd && fraction < rightNavStart) {
           // Middle zone: toggle toolbar
           setIsVisible((prev) => {
@@ -801,6 +803,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     keepControlsVisible,
     (viewSettings.paginatedLayout ?? "double") === "double",
   );
+  const isDoublePage = (viewSettings.paginatedLayout ?? "double") === "double";
   const toolbarVisible = controlsVisible || isToolbarPinned;
   const readingHeaderTitle = (readerTab?.chapterTitle || book?.meta.title || "").trim();
   const contentTopPadding = isToolbarPinned ? 78 : 56;
@@ -2600,6 +2603,27 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
           {/* Reading area — FoliateViewer */}
           <div className="relative flex-1 overflow-hidden" ref={containerRef}>
+            {/* DEBUG: Click zone visualization overlay */}
+            <div className="pointer-events-none absolute inset-0 z-[9999] flex">
+              <div
+                className="h-full border-r-2 border-dashed border-blue-500/40 bg-blue-500/10"
+                style={{ width: isDoublePage ? "25%" : "37.5%" }}
+              >
+                <span className="absolute left-1 top-1 text-[10px] text-blue-500">← PREV</span>
+              </div>
+              <div
+                className="h-full border-r-2 border-dashed border-green-500/40 bg-green-500/10"
+                style={{ width: isDoublePage ? "50%" : "25%" }}
+              >
+                <span className="absolute left-1/2 top-1 -translate-x-1/2 text-[10px] text-green-500">TOOLBAR</span>
+              </div>
+              <div
+                className="h-full bg-red-500/10"
+                style={{ width: isDoublePage ? "25%" : "37.5%" }}
+              >
+                <span className="absolute right-1 top-1 text-[10px] text-red-500">NEXT →</span>
+              </div>
+            </div>
             {bookDoc ? (
               <FoliateViewer
                 ref={foliateRef}
