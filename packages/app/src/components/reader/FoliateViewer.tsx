@@ -1670,10 +1670,14 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const clientY = ev.clientY;
           const screenX = ev.screenX;
           const screenY = ev.screenY;
-          // Compute horizontal fraction (0-1) within the iframe viewport
-          // This is more reliable than screen coordinates for zone detection
-          const iframeWidth = (ev.target as Element)?.ownerDocument?.defaultView?.innerWidth || window.innerWidth;
-          const xFraction = clientX / iframeWidth;
+          // Compute horizontal fraction (0-1) within the visible viewport.
+          // In paginated mode the iframe body is expanded via CSS columns but
+          // clientX is always relative to the visible viewport (the scroll
+          // container clip). Use documentElement.clientWidth which reflects
+          // the actual visible width, not the expanded scrollWidth.
+          const doc = (ev.target as Element)?.ownerDocument;
+          const visibleWidth = doc?.documentElement?.clientWidth || window.innerWidth;
+          const xFraction = clientX / visibleWidth;
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip
