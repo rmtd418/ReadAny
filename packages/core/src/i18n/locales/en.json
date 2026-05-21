@@ -1023,6 +1023,13 @@
       "desc": "Click or tap the right area to go to the next page."
     }
   },
+  "updater": {
+    "newVersion": "New version available",
+    "isReady": "is ready to install",
+    "install": "Download & Install",
+    "downloading": "Downloading...",
+    "relaunch": "Restart to update"
+  },
   "commandPalette": {
     "placeholder": "Type to search commands...",
     "noResults": "No results found for \"{{query}}\"",

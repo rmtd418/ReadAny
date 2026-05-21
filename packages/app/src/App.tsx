@@ -3,6 +3,7 @@
  * All opened tabs stay mounted; visibility controlled by CSS display.
  */
 import { AppLayout } from "@/components/layout/AppLayout";
+import { UpdateNotification } from "@/components/layout/UpdateNotification";
 import { useAutoSync } from "@/hooks/use-sync";
 import { DesktopSyncAdapter } from "@/lib/sync/sync-adapter-desktop";
 import { setSyncAdapter } from "@readany/core/sync";
@@ -18,6 +19,7 @@ export default function App() {
     <>
       <AppLayout />
       <Toaster position="top-center" richColors duration={2000} />
+      <UpdateNotification />
     </>
   );
 }
