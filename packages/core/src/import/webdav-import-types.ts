@@ -37,6 +37,7 @@ export const WEBDAV_IMPORT_SUPPORTED_EXTENSIONS = [
   "fb2",
   "fbz",
   "txt",
+  "umd",
 ] as const;
 
 export const DEFAULT_WEBDAV_IMPORT_REMOTE_ROOT = "";

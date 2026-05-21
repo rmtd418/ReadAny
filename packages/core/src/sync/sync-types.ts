@@ -66,5 +66,5 @@ export const COVER_EXTENSIONS = new Set<string>([
 ]);
 
 export const BOOK_EXTENSIONS = new Set<string>([
-  "epub", "pdf", "mobi", "azw", "azw3", "cbz", "cbr", "fb2", "txt",
+  "epub", "pdf", "mobi", "azw", "azw3", "cbz", "cbr", "fb2", "txt", "umd",
 ]);

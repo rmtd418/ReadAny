@@ -23,7 +23,7 @@ function getPathLeaf(path: string): string {
 }
 
 export function stripBookExtension(name: string): string {
-  return name.trim().replace(/\.(epub|pdf|mobi|azw|azw3|cbz|cbr|fb2|fbz|txt)$/i, "");
+  return name.trim().replace(/\.(epub|pdf|mobi|azw|azw3|cbz|cbr|fb2|fbz|txt|umd)$/i, "");
 }
 
 export function normalizeImportIdentity(value: string): string {

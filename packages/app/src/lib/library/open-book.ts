@@ -56,7 +56,7 @@ const pendingDownloads = new Set<string>();
 const BOOK_IMPORT_FILTERS = [
   {
     name: "Books",
-    extensions: ["epub", "pdf", "mobi", "azw", "azw3", "cbz", "fb2", "fbz", "txt"],
+    extensions: ["epub", "pdf", "mobi", "azw", "azw3", "cbz", "fb2", "fbz", "txt", "umd"],
   },
 ];
 

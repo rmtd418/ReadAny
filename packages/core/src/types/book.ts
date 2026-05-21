@@ -14,7 +14,7 @@ export interface BookMeta {
   totalChapters?: number;
 }
 
-export type BookFormat = "epub" | "pdf" | "mobi" | "azw" | "azw3" | "cbz" | "fb2" | "fbz" | "txt";
+export type BookFormat = "epub" | "pdf" | "mobi" | "azw" | "azw3" | "cbz" | "fb2" | "fbz" | "txt" | "umd";
 
 export interface Book {
   id: string;

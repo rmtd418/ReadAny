@@ -397,6 +397,7 @@ async function restoreDeletedDesktopBook(bookId: string, filePath: string): Prom
     fb2: "fb2",
     fbz: "fbz",
     txt: "txt",
+    umd: "umd",
   };
   const format: Book["format"] = formatMap[ext] || "epub";
   let title = originalBook.meta.title || fileName.replace(/\.\w+$/i, "") || "Untitled";
@@ -435,11 +436,37 @@ async function restoreDeletedDesktopBook(bookId: string, filePath: string): Prom
           await writeFile(dest, epubBytes);
           return { relativePath: relPath, destPath: dest };
         })()
-      : await copyBookToAppData(bookId, ext, filePath);
+      : ext === "umd"
+        ? await (async () => {
+            const [{ UmdToEpubConverter }, fflate, { readFile, writeFile, mkdir }, { join }] =
+              await Promise.all([
+                import("@readany/core/utils/umd-to-epub"),
+                import("foliate-js/vendor/fflate.js"),
+                import("@tauri-apps/plugin-fs"),
+                import("@tauri-apps/api/path"),
+              ]);
+            const rawBytes = await readFile(filePath);
+            const umdFile = new File(
+              [rawBytes],
+              filePath.replace(/\\/g, "/").split("/").pop() || "book.umd",
+              { type: "application/octet-stream" },
+            );
+            const conversion = await new UmdToEpubConverter((b) =>
+              fflate.unzlibSync(b),
+            ).convertToBytes({ file: umdFile });
+            if (conversion.bookTitle) title = conversion.bookTitle;
+            if (conversion.author) author = conversion.author;
+            await mkdir(await join(await getDesktopLibraryRoot(), "books"), { recursive: true });
+            const relPath = `books/${bookId}.epub`;
+            const dest = await resolveAppPath(relPath);
+            await writeFile(dest, conversion.epubBytes);
+            return { relativePath: relPath, destPath: dest };
+          })()
+        : await copyBookToAppData(bookId, ext, filePath);
 
   // Extract metadata using lightweight approach (avoids full file load for EPUB/PDF)
   try {
-    if (format === "epub" || ext === "txt") {
+    if (format === "epub" || ext === "txt" || ext === "umd") {
       const { readFile } = await import("@tauri-apps/plugin-fs");
       const epubBytes = await readFile(destPath);
       const blob = new Blob([epubBytes]);
@@ -460,7 +487,8 @@ async function restoreDeletedDesktopBook(bookId: string, filePath: string): Prom
       const { readFile } = await import("@tauri-apps/plugin-fs");
       const fileBytes = await readFile(destPath);
       const blob = new Blob([fileBytes]);
-      const effectiveFileName = ext === "txt" ? fileName.replace(/\.txt$/i, ".epub") : fileName;
+      const effectiveFileName =
+        ext === "txt" || ext === "umd" ? fileName.replace(/\.\w+$/i, ".epub") : fileName;
       const file = new File([blob], effectiveFileName, {
         type: blob.type || "application/octet-stream",
       });
@@ -549,6 +577,7 @@ async function inspectDeletedDesktopBookCandidate(
     fb2: "fb2",
     fbz: "fbz",
     txt: "txt",
+    umd: "umd",
   };
   const format: Book["format"] = formatMap[ext] || "epub";
   let title = fileName.replace(/\.\w+$/i, "") || originalBook.meta.title || "Untitled";
@@ -578,6 +607,30 @@ async function inspectDeletedDesktopBookCandidate(
       console.warn("[Library] TXT title extraction failed:", err);
     }
     return { title, author, format: "epub", fileHash };
+  }
+
+  if (ext === "umd") {
+    try {
+      const [{ UmdToEpubConverter }, fflate, { readFile }] = await Promise.all([
+        import("@readany/core/utils/umd-to-epub"),
+        import("foliate-js/vendor/fflate.js"),
+        import("@tauri-apps/plugin-fs"),
+      ]);
+      const rawBytes = await readFile(filePath);
+      const umdFile = new File(
+        [rawBytes],
+        filePath.replace(/\\/g, "/").split("/").pop() || "book.umd",
+        { type: "application/octet-stream" },
+      );
+      const conversion = await new UmdToEpubConverter((b) => fflate.unzlibSync(b)).convertToBytes({
+        file: umdFile,
+      });
+      if (conversion.bookTitle) title = conversion.bookTitle;
+      if (conversion.author) author = conversion.author;
+    } catch (err) {
+      console.warn("[Library] UMD inspection failed:", err);
+    }
+    return { title, author, format: "umd", fileHash };
   }
 
   try {
@@ -814,6 +867,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             fb2: "fb2",
             fbz: "fbz",
             txt: "txt",
+            umd: "umd",
           };
           const format: Book["format"] = formatMap[ext] || "epub";
           let title = fileName.replace(/\.\w+$/i, "") || "Untitled";
@@ -871,11 +925,35 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             await writeFile(tmpPath, epubBytes);
           }
 
+          // For UMD files, parse and convert to EPUB before storing
+          if (ext === "umd") {
+            const [{ UmdToEpubConverter }, fflate, { readFile }] = await Promise.all([
+              import("@readany/core/utils/umd-to-epub"),
+              import("foliate-js/vendor/fflate.js"),
+              import("@tauri-apps/plugin-fs"),
+            ]);
+            const rawBytes = await readFile(filePath);
+            const umdFile = new File(
+              [rawBytes],
+              filePath.replace(/\\/g, "/").split("/").pop() || "book.umd",
+              { type: "application/octet-stream" },
+            );
+            const converter = new UmdToEpubConverter((b) => fflate.unzlibSync(b));
+            const result = await converter.convertToBytes({ file: umdFile });
+            if (result.bookTitle) title = result.bookTitle;
+            if (result.author) author = result.author;
+            const { writeFile, mkdir } = await import("@tauri-apps/plugin-fs");
+            const { join } = await import("@tauri-apps/api/path");
+            await mkdir(await join(await getDesktopLibraryRoot(), "books"), { recursive: true });
+            const destEpub = await resolveAppPath(`books/${bookId}.epub`);
+            await writeFile(destEpub, result.epubBytes);
+          }
+
           // Copy book file into the managed library root (books/{id}.{ext})
-          // For TXT: already written above; for others: OS-level copy (no JS memory)
+          // For TXT/UMD: already written above; for others: OS-level copy (no JS memory)
           let relativePath: string;
           let destPath: string;
-          if (ext === "txt") {
+          if (ext === "txt" || ext === "umd") {
             relativePath = `books/${bookId}.epub`;
             destPath = await resolveAppPath(relativePath);
           } else {
@@ -889,7 +967,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           // For PDF: use pdfjs with file URL (streams from disk).
           // For other formats (MOBI/AZW/FB2/CBZ): fall back to DocumentLoader (requires File).
           try {
-            if (format === "epub" || ext === "txt") {
+            if (format === "epub" || ext === "txt" || ext === "umd") {
               // Lightweight EPUB metadata: only decompress container.xml + OPF + cover
               const { readFile } = await import("@tauri-apps/plugin-fs");
               const epubBytes = await readFile(destPath);

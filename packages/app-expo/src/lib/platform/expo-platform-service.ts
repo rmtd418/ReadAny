@@ -783,6 +783,7 @@ function extensionToMime(ext: string): string {
     fb2: "application/x-fictionbook+xml",
     fbz: "application/x-zip-compressed-fb2",
     txt: "text/plain",
+    umd: "application/octet-stream",
     zip: "application/zip",
   };
   return map[ext.toLowerCase()] || "application/octet-stream";
