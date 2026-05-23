@@ -53,6 +53,7 @@ export function HomeSidebar() {
     activeTag,
     activeGroupId,
     groups,
+    isLoaded: libraryLoaded,
     setActiveTag,
     setActiveGroupId,
     addTag,
@@ -73,9 +74,12 @@ export function HomeSidebar() {
   const newTagInputRef = useRef<HTMLInputElement>(null);
 
   // Refresh unread feedback count on mount and whenever the settings dialog
-  // closes (the user may have marked replies as seen inside it).
+  // closes (the user may have marked replies as seen inside it). Depends on
+  // `libraryLoaded` so the first run waits for DB init — otherwise the call
+  // throws on cold start and the dot never appears until the user opens and
+  // closes settings once.
   useEffect(() => {
-    if (showSettings) return;
+    if (showSettings || !libraryLoaded) return;
     let cancelled = false;
     refreshAndCountUnreadFeedback()
       .then((count) => {
@@ -85,7 +89,7 @@ export function HomeSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [showSettings]);
+  }, [showSettings, libraryLoaded]);
 
   // Determine which home sub-view is active
   const activeTab = useAppStore((s) => s.tabs.find((t) => t.id === activeTabId));
