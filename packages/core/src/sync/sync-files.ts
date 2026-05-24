@@ -29,6 +29,17 @@ import {
   type SyncProgress,
 } from "./sync-types";
 
+/**
+ * Per-phase parallelism for remote file ops. Tuned conservatively to avoid
+ * triggering 401-throttle responses on consumer WebDAV providers (Jianguoyun,
+ * some NAS) that reject under burst load. See issue #195. Pair with the
+ * WebDavClient retry-on-transient-401 in webdav-client.ts.
+ */
+const UPLOAD_CONCURRENCY = 3;
+const DOWNLOAD_CONCURRENCY = 5;
+const MIGRATION_CONCURRENCY = 3;
+const REMOTE_CLEANUP_CONCURRENCY = 3;
+
 export interface SyncFilesOptions {
   forceUploadAll?: boolean;
   forceDownloadAll?: boolean;
@@ -189,7 +200,7 @@ export async function syncFiles(
     migrationResults.set(info.book.id, result);
   });
   if (migrationTasks.length > 0) {
-    await parallelLimit(migrationTasks, 5);
+    await parallelLimit(migrationTasks, MIGRATION_CONCURRENCY);
   }
 
   // --- Phase 2: build upload/download task lists based on post-migration state ---
@@ -250,7 +261,9 @@ export async function syncFiles(
   );
 
   if (uploadTasks.length > 0) {
-    console.log(`[Sync] 📤 Starting upload of ${uploadTasks.length} files (5 concurrent)...`);
+    console.log(
+      `[Sync] 📤 Starting upload of ${uploadTasks.length} files (${UPLOAD_CONCURRENCY} concurrent)...`,
+    );
     const uploadStart = Date.now();
     let completed = 0;
     const total = uploadTasks.length;
@@ -267,7 +280,7 @@ export async function syncFiles(
       completed++;
       return result;
     });
-    const uploadResults = await parallelLimit(tasksWithProgress, 5);
+    const uploadResults = await parallelLimit(tasksWithProgress, UPLOAD_CONCURRENCY);
     filesUploaded = uploadResults.filter((r) => r).length;
     filesUploadFailed = uploadResults.length - filesUploaded;
     console.log(
@@ -276,7 +289,9 @@ export async function syncFiles(
   }
 
   if (downloadTasks.length > 0) {
-    console.log(`[Sync] 📥 Starting download of ${downloadTasks.length} files (8 concurrent)...`);
+    console.log(
+      `[Sync] 📥 Starting download of ${downloadTasks.length} files (${DOWNLOAD_CONCURRENCY} concurrent)...`,
+    );
     const downloadStart = Date.now();
     let completed = 0;
     const total = downloadTasks.length;
@@ -293,7 +308,7 @@ export async function syncFiles(
       completed++;
       return result;
     });
-    const downloadResults = await parallelLimit(tasksWithProgress, 8);
+    const downloadResults = await parallelLimit(tasksWithProgress, DOWNLOAD_CONCURRENCY);
     filesDownloaded = downloadResults.filter((r) => r).length;
     filesDownloadFailed = downloadResults.length - filesDownloaded;
     console.log(
@@ -642,7 +657,7 @@ async function cleanupRemoteOrphans(
 
   if (tasks.length > 0) {
     console.log(`[Sync] 🧹 Cleaning up ${tasks.length} remote orphans...`);
-    await parallelLimit(tasks, 5);
+    await parallelLimit(tasks, REMOTE_CLEANUP_CONCURRENCY);
   }
 }
 

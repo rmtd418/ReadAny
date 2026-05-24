@@ -28,6 +28,16 @@ export function sanitizeWebDavRemoteRoot(remoteRoot: string): string {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const TRANSFER_TIMEOUT_MS = 300_000;
 
+/**
+ * Retry policy for transient HTTP failures (401-after-auth, 429, 5xx).
+ * Backoff: 500ms → 1s → 2s. Network/timeout errors are NOT retried — they may
+ * have consumed the full timeout already, so retrying would amplify latency.
+ * Issue #195 motivated this: Chinese WebDAV providers (Jianguoyun, NAS) reject
+ * with 401 under burst load even though credentials are valid.
+ */
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 500;
+
 type WebDavErrorKind =
   | "auth"
   | "forbidden"
@@ -217,6 +227,12 @@ export class WebDavClient {
   private baseUrl: string;
   private authHeader: string;
   private allowInsecure: boolean;
+  /**
+   * Flips to true after the first 2xx/207 response. Once true, a 401 is
+   * treated as a server-side throttle (retry-worthy) rather than a credential
+   * failure. Reset per WebDavClient instance.
+   */
+  private hadAuthSuccess = false;
 
   constructor(url: string, username: string, password: string, allowInsecure?: boolean) {
     // Normalize: remove control chars/whitespace and trailing slash
@@ -249,6 +265,48 @@ export class WebDavClient {
     return `${this.baseUrl}${encoded}`;
   }
 
+  /** True if the status code indicates a transient, retry-worthy failure. */
+  private isTransientStatus(status: number): boolean {
+    // 401 BEFORE any successful auth = real credential failure, do not retry.
+    // 401 AFTER a successful response = server is throttling / temporarily
+    // rejecting valid credentials under burst load (Jianguoyun, some NAS).
+    if (status === 401 && this.hadAuthSuccess) return true;
+    if (status === 429) return true;
+    if (status >= 500 && status < 600) return true;
+    return false;
+  }
+
+  private async doFetch(
+    method: string,
+    path: string,
+    options: {
+      body?: string | Uint8Array | ArrayBuffer;
+      headers?: Record<string, string>;
+      contentType?: string;
+      timeoutMs?: number;
+      responseType?: "text" | "arraybuffer";
+    },
+  ): Promise<Response> {
+    const platform = getPlatformService();
+    const url = this.buildUrl(path);
+    const headers: Record<string, string> = {
+      Authorization: this.authHeader,
+      ...options.headers,
+    };
+    if (options.contentType) {
+      headers["Content-Type"] = options.contentType;
+    }
+    const effectiveTimeoutMs = this.getTimeout(method, options.timeoutMs);
+    return await platform.fetch(url, {
+      method,
+      headers,
+      body: options.body as BodyInit | undefined,
+      allowInsecure: this.allowInsecure,
+      timeoutMs: effectiveTimeoutMs,
+      responseType: options.responseType,
+    });
+  }
+
   private async request(
     method: string,
     path: string,
@@ -260,48 +318,47 @@ export class WebDavClient {
       responseType?: "text" | "arraybuffer";
     } = {},
   ): Promise<Response> {
-    const platform = getPlatformService();
-    const url = this.buildUrl(path);
-    const headers: Record<string, string> = {
-      Authorization: this.authHeader,
-      ...options.headers,
-    };
-    if (options.contentType) {
-      headers["Content-Type"] = options.contentType;
-    }
-
     const logPath = path.startsWith("/") ? path : `/${path}`;
     console.log(`[WebDAV] ${method} ${logPath}`);
-    const startTime = Date.now();
 
-    try {
-      const effectiveTimeoutMs = this.getTimeout(method, options.timeoutMs);
-      const response = await platform.fetch(url, {
-        method,
-        headers,
-        body: options.body as BodyInit | undefined,
-        allowInsecure: this.allowInsecure,
-        timeoutMs: effectiveTimeoutMs,
-        responseType: options.responseType,
-      });
-      const elapsed = Date.now() - startTime;
-      console.log(
-        `[WebDAV] ${method} ${logPath} completed in ${elapsed}ms (status: ${response.status})`,
-      );
-      return response;
-    } catch (error: unknown) {
-      const elapsed = Date.now() - startTime;
-      const webDavError = createRequestWebDavError(
-        error,
-        method,
-        url,
-        this.getTimeout(method, options.timeoutMs),
-      );
-      console.error(
-        `[WebDAV] ${method} ${logPath} failed (${webDavError.kind}) after ${elapsed}ms:`,
-        error,
-      );
-      throw webDavError;
+    for (let attempt = 0; ; attempt++) {
+      const startTime = Date.now();
+      try {
+        const response = await this.doFetch(method, path, options);
+        const elapsed = Date.now() - startTime;
+        console.log(
+          `[WebDAV] ${method} ${logPath} completed in ${elapsed}ms (status: ${response.status})`,
+        );
+
+        if (response.ok || response.status === 207) {
+          this.hadAuthSuccess = true;
+          return response;
+        }
+
+        if (attempt < RETRY_MAX_ATTEMPTS && this.isTransientStatus(response.status)) {
+          const delay = RETRY_BASE_DELAY_MS * 2 ** attempt;
+          console.warn(
+            `[WebDAV] ${method} ${logPath} got ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${RETRY_MAX_ATTEMPTS})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        return response;
+      } catch (error: unknown) {
+        const elapsed = Date.now() - startTime;
+        const webDavError = createRequestWebDavError(
+          error,
+          method,
+          this.buildUrl(path),
+          this.getTimeout(method, options.timeoutMs),
+        );
+        console.error(
+          `[WebDAV] ${method} ${logPath} failed (${webDavError.kind}) after ${elapsed}ms:`,
+          error,
+        );
+        throw webDavError;
+      }
     }
   }
 
