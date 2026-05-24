@@ -13,6 +13,14 @@ function splitPathSegments(path: string): string[] {
   return path.split("/").filter(Boolean);
 }
 
+function webDavOriginFromUrl(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return sanitizeWebDavUrl(url);
+  }
+}
+
 function safeDecodeWebDavPath(path: string): string {
   try {
     return decodeURIComponent(path);
@@ -127,8 +135,10 @@ export class WebDavImportService {
       username: source.username.trim(),
       remoteRoot: normalizeWebDavImportRoot(source.remoteRoot),
     };
+    // Construct from origin only: the path helpers already include the URL's
+    // pathname, so a full-URL baseUrl would make buildUrl duplicate the path.
     this.client = new WebDavClient(
-      this.source.url,
+      webDavOriginFromUrl(this.source.url),
       this.source.username,
       this.source.password,
       this.source.allowInsecure,
@@ -136,8 +146,10 @@ export class WebDavImportService {
   }
 
   async testConnection(): Promise<boolean> {
-    await this.client.ping();
-    await this.client.propfind(resolveWebDavImportServerPath(this.source, "/"));
+    // Probe the resolved prefix, not the bare origin root (see WebDavClient.ping).
+    const rootPath = resolveWebDavImportServerPath(this.source, "/");
+    await this.client.ping(rootPath);
+    await this.client.propfind(rootPath);
     return true;
   }
 
