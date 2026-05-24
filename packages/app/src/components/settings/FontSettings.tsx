@@ -3,7 +3,6 @@
  */
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { Download, FileText, Globe, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +20,6 @@ import {
 } from "@readany/core/stores";
 import type { CustomFont } from "@readany/core/types/font";
 import { PRESET_FONTS } from "@readany/core/types/font";
-
-const FONT_SIZE_LIMIT = 20 * 1024 * 1024;
 
 export function FontSettings() {
   const { t, i18n } = useTranslation();
@@ -110,19 +107,6 @@ export function FontSettings() {
         pendingFontFile.path,
         fontNameInput.trim(),
       );
-
-      if (size > FONT_SIZE_LIMIT) {
-        const { remove } = await import("@tauri-apps/plugin-fs");
-        await remove(filePath);
-        // Previously failed silently, leaving the user wondering why nothing
-        // happened. Surface the same message mobile shows.
-        toast.error(
-          t("fonts.tooLarge", "字体文件过大（最大 20MB），建议使用 woff2 格式可显著缩小体积"),
-        );
-        setImporting(false);
-        setPendingFontFile(null);
-        return;
-      }
 
       const fontFamily = `Custom-${fontNameInput.trim().replace(/\s+/g, "-")}`;
       const font: CustomFont = {

@@ -31,8 +31,6 @@ import { SettingsHeader } from "./SettingsHeader";
 import { useColors, fontSize, fontWeight, radius, spacing } from "@/styles/theme";
 import { PlusIcon, Trash2Icon, TypeIcon, LinkIcon, GlobeIcon } from "@/components/ui/Icon";
 
-const FONT_SIZE_LIMIT = 20 * 1024 * 1024;
-
 export default function FontSettingsScreen() {
   const { t, i18n } = useTranslation();
   const colors = useColors();
@@ -124,18 +122,6 @@ export default function FontSettingsScreen() {
         pendingFontFile.uri,
         fontNameInput.trim(),
       );
-
-      if (size > FONT_SIZE_LIMIT) {
-        const platform = getPlatformService();
-        await platform.deleteFile(filePath);
-        Alert.alert(
-          t("fonts.error", "错误"),
-          t("fonts.tooLarge", "字体文件过大（最大 20MB），建议使用 woff2 格式可显著缩小体积"),
-        );
-        setImporting(false);
-        setPendingFontFile(null);
-        return;
-      }
 
       const fontFamily = `Custom-${fontNameInput.trim().replace(/\s+/g, "-")}`;
       const font: CustomFont = {

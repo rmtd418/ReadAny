@@ -1554,7 +1554,6 @@
     "imported": "Imported",
     "importedDesc": "Font \"{{name}}\" has been imported",
     "fileNotFound": "Font file not found",
-    "tooLarge": "Font file is too large (max 20MB). Tip: woff2 format is significantly smaller.",
     "importHint": "Supports TTF / OTF / WOFF / WOFF2. WOFF2 recommended — about 1/3 the size of TTF.",
     "deleteTitle": "Delete Font",
     "deleteConfirm": "Delete font \"{{name}}\"?",
