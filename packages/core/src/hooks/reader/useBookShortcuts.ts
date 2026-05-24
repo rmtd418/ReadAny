@@ -42,6 +42,9 @@ export function useBookShortcuts({
         case "ArrowUp":
           view.prev();
           return true;
+        case "PageUp":
+          view.prev();
+          return true;
         case "ArrowDown":
         case " ":
           if (modifiers.shiftKey) {
@@ -49,6 +52,9 @@ export function useBookShortcuts({
           } else {
             view.next();
           }
+          return true;
+        case "PageDown":
+          view.next();
           return true;
         case "[":
           view.prev();
