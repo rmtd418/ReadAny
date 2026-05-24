@@ -1014,15 +1014,6 @@ export class Paginator extends HTMLElement {
     this.#index = index;
     const hasFocus = this.#view?.document?.hasFocus();
     if (src) {
-      // Fade-out old content when crossing sections (if animated)
-      const container = this.#container;
-      const shouldAnimate = this.hasAttribute("animated") && container;
-      if (shouldAnimate) {
-        container.style.transition = "opacity 120ms ease-out";
-        container.style.opacity = "0";
-        await wait(120);
-      }
-
       const view = this.#createView();
       const afterLoad = (doc) => {
         if (doc.head) {
@@ -1046,12 +1037,6 @@ export class Paginator extends HTMLElement {
         }),
       );
       this.#view = view;
-
-      // Fade-in new content
-      if (shouldAnimate) {
-        container.style.transition = "opacity 200ms ease-in";
-        container.style.opacity = "1";
-      }
     }
     if (this.#view) {
       await this.scrollToAnchor((typeof anchor === "function" ? anchor(this.#view.document) : anchor) ?? 0, select);
