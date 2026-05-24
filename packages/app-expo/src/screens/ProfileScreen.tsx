@@ -41,6 +41,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { readingStatsService } from "@readany/core/stats";
+import { refreshAndCountUnreadFeedback } from "@readany/core/feedback";
 import { eventBus } from "@readany/core/utils/event-bus";
 import Constants from "expo-constants";
 import type { DailyStats, OverallStats } from "@readany/core/stats";
@@ -286,6 +287,7 @@ export function ProfileScreen() {
   const [overall, setOverall] = useState<OverallStats | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [unreadFeedback, setUnreadFeedback] = useState(0);
   const saveCurrentSession = useReadingSessionStore((s) => s.saveCurrentSession);
   const currentSession = useReadingSessionStore((s) => s.currentSession);
 
@@ -314,6 +316,9 @@ export function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadStats();
+      refreshAndCountUnreadFeedback()
+        .then(setUnreadFeedback)
+        .catch((err) => console.warn("[ProfileScreen] feedback unread refresh:", err));
     }, [loadStats]),
   );
 
@@ -381,6 +386,7 @@ export function ProfileScreen() {
             icon: MessageSquareIcon,
             label: t("feedback.title", "反馈建议"),
             route: "Feedback" as const,
+            showDot: unreadFeedback > 0,
           },
           {
             icon: HelpCircleIcon,
@@ -391,7 +397,7 @@ export function ProfileScreen() {
         ],
       },
     ],
-    [t],
+    [t, i18n.language, unreadFeedback],
   );
 
   const booksRead = liveOverall?.totalBooks ?? 0;
@@ -526,6 +532,7 @@ export function ProfileScreen() {
                     <Text style={s.menuItemLabel} maxFontSizeMultiplier={1.7}>
                       {item.label}
                     </Text>
+                    {"showDot" in item && item.showDot ? <View style={s.menuItemDot} /> : null}
                     <ChevronRightIcon size={16} color={colors.mutedForeground} />
                   </TouchableOpacity>
                 );
@@ -716,6 +723,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: fontSize.md,
       lineHeight: fontSize.md * 1.5,
       color: colors.foreground,
+    },
+    menuItemDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.destructive,
     },
     version: {
       textAlign: "center",

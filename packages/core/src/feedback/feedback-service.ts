@@ -503,6 +503,43 @@ export async function markFeedbackReplySeen(issueNumber: number): Promise<void> 
   ]);
 }
 
+/**
+ * Count feedback records with an unseen reply (has_new_reply = 1).
+ * Used to drive the red-dot badge on Profile / Settings menus.
+ */
+export async function getUnreadFeedbackCount(): Promise<number> {
+  const db = await getDB();
+  const rows = await db.select<{ count: number }>(
+    "SELECT COUNT(*) as count FROM feedback WHERE has_new_reply = 1",
+  );
+  return rows[0]?.count ?? 0;
+}
+
+/**
+ * Refresh feedback status from the worker for all locally-known issues, then
+ * return the resulting unread count. Safe to call on screen mount / app
+ * foreground — silently no-ops if there's no feedback yet or no worker URL.
+ */
+export async function refreshAndCountUnreadFeedback(): Promise<number> {
+  try {
+    const db = await getDB();
+    const rows = await db.select<{ issue_number: number }>(
+      "SELECT issue_number FROM feedback ORDER BY created_at DESC LIMIT 50",
+    );
+    const issueNumbers = rows.map((r) => r.issue_number).filter((n) => Number.isFinite(n));
+    if (issueNumbers.length > 0) {
+      await refreshFeedbackStatus(issueNumbers);
+    }
+  } catch (error) {
+    appendStructuredLog(
+      "feedback.unread_refresh.failed",
+      { error: formatLogArg(error) },
+      "warn",
+    );
+  }
+  return getUnreadFeedbackCount();
+}
+
 // ─── Status Refresh ────────────────────────────────────────────────────────
 
 export async function refreshFeedbackStatus(issueNumbers: number[]): Promise<FeedbackStatusItem[]> {

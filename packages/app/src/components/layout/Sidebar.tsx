@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAppStore } from "@/stores/app-store";
 import { useLibraryStore } from "@/stores/library-store";
+import { refreshAndCountUnreadFeedback } from "@readany/core/feedback";
 import {
   BarChart3,
   BookOpen,
@@ -25,7 +26,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 interface NavItem {
@@ -52,6 +53,7 @@ export function HomeSidebar() {
     activeTag,
     activeGroupId,
     groups,
+    isLoaded: libraryLoaded,
     setActiveTag,
     setActiveGroupId,
     addTag,
@@ -60,6 +62,8 @@ export function HomeSidebar() {
     removeGroup,
   } = useLibraryStore();
   const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const showSettings = useAppStore((s) => s.showSettings);
+  const [unreadFeedback, setUnreadFeedback] = useState(0);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [isLibraryExpanded, setIsLibraryExpanded] = useState(true);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -68,6 +72,24 @@ export function HomeSidebar() {
   const [editingName, setEditingName] = useState("");
   const [isTagsExpanded, setIsTagsExpanded] = useState(false);
   const newTagInputRef = useRef<HTMLInputElement>(null);
+
+  // Refresh unread feedback count on mount and whenever the settings dialog
+  // closes (the user may have marked replies as seen inside it). Depends on
+  // `libraryLoaded` so the first run waits for DB init — otherwise the call
+  // throws on cold start and the dot never appears until the user opens and
+  // closes settings once.
+  useEffect(() => {
+    if (showSettings || !libraryLoaded) return;
+    let cancelled = false;
+    refreshAndCountUnreadFeedback()
+      .then((count) => {
+        if (!cancelled) setUnreadFeedback(count);
+      })
+      .catch((err) => console.warn("[Sidebar] feedback unread refresh:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [showSettings, libraryLoaded]);
 
   // Determine which home sub-view is active
   const activeTab = useAppStore((s) => s.tabs.find((t) => t.id === activeTabId));
@@ -434,10 +456,18 @@ export function HomeSidebar() {
         <button
           id="tour-settings"
           type="button"
-          className="flex w-full items-center gap-2 rounded-md p-1 py-1 text-left text-muted-foreground text-sm hover:bg-muted hover:text-foreground"
+          className="relative flex w-full items-center gap-2 rounded-md p-1 py-1 text-left text-muted-foreground text-sm hover:bg-muted hover:text-foreground"
           onClick={() => setShowSettings(true)}
         >
-          <Settings size={16} className="shrink-0" />
+          <span className="relative shrink-0">
+            <Settings size={16} className="shrink-0" />
+            {unreadFeedback > 0 ? (
+              <span
+                className="-right-1 -top-1 absolute h-2 w-2 rounded-full bg-destructive"
+                aria-label={t("feedback.hasNewReply", "有新回复")}
+              />
+            ) : null}
+          </span>
           <span className="text-sm">{t("common.settings")}</span>
         </button>
       </div>

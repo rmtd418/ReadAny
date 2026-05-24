@@ -12,6 +12,7 @@ import {
   collectLogs,
   getFeedbackHistory,
   getRemainingSubmissions,
+  getUnreadFeedbackCount,
   markFeedbackReplySeen,
   refreshFeedbackStatus,
   submitFeedback,
@@ -20,7 +21,7 @@ import type { DeviceInfo, FeedbackRecord, FeedbackType } from "@readany/core/fee
 import type { TFunction } from "i18next";
 import { Bug, Check, Lightbulb, MessageSquare } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Constants from "expo-constants";
 import {
@@ -54,6 +55,29 @@ export default function FeedbackScreen() {
   const { t, i18n } = useTranslation();
   const colors = useColors();
   const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
+  const [hasUnread, setHasUnread] = useState(false);
+  const autoSwitchedRef = useRef(false);
+
+  const recomputeUnread = useCallback(async () => {
+    try {
+      const count = await getUnreadFeedbackCount();
+      setHasUnread(count > 0);
+    } catch {
+      // ignore — non-fatal
+    }
+  }, []);
+
+  useEffect(() => {
+    recomputeUnread();
+  }, [recomputeUnread]);
+
+  // Auto-switch to history tab once when unread replies exist
+  useEffect(() => {
+    if (hasUnread && !autoSwitchedRef.current) {
+      setActiveTab("history");
+      autoSwitchedRef.current = true;
+    }
+  }, [hasUnread]);
 
   return (
     <SafeAreaView
@@ -81,21 +105,26 @@ export default function FeedbackScreen() {
           style={[styles.tab, activeTab === "history" && { borderBottomColor: colors.primary }]}
           onPress={() => setActiveTab("history")}
         >
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === "history" ? colors.primary : colors.mutedForeground },
-            ]}
-          >
-            {t("feedback.historyTab", "我的反馈")}
-          </Text>
+          <View style={styles.tabLabelRow}>
+            <Text
+              style={[
+                styles.tabText,
+                { color: activeTab === "history" ? colors.primary : colors.mutedForeground },
+              ]}
+            >
+              {t("feedback.historyTab", "我的反馈")}
+            </Text>
+            {hasUnread && (
+              <View style={[styles.tabDot, { backgroundColor: colors.destructive }]} />
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
       {activeTab === "submit" ? (
         <SubmitTab colors={colors} t={t} locale={i18n.language} />
       ) : (
-        <HistoryTab colors={colors} t={t} />
+        <HistoryTab colors={colors} t={t} onUnreadChange={recomputeUnread} />
       )}
     </SafeAreaView>
   );
@@ -307,7 +336,11 @@ function SubmitTab({ colors, t, locale }: FeedbackTabProps & { locale: string })
 
 // ─── History Tab ────────────────────────────────────────────────────────────
 
-function HistoryTab({ colors, t }: FeedbackTabProps) {
+function HistoryTab({
+  colors,
+  t,
+  onUnreadChange,
+}: FeedbackTabProps & { onUnreadChange?: () => void }) {
   const [records, setRecords] = useState<FeedbackRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -321,10 +354,11 @@ function HistoryTab({ colors, t }: FeedbackTabProps) {
           ),
         );
         await markFeedbackReplySeen(item.issueNumber).catch(() => {});
+        onUnreadChange?.();
       }
       navigation.navigate("FeedbackDetail", { issueNumber: item.issueNumber, title: item.title });
     },
-    [navigation],
+    [navigation, onUnreadChange],
   );
 
   useEffect(() => {
@@ -335,12 +369,13 @@ function HistoryTab({ colors, t }: FeedbackTabProps) {
 
       await refreshFeedbackStatus(history.map((record) => record.issueNumber));
       setRecords(await getFeedbackHistory());
+      onUnreadChange?.();
     }
 
     loadRecords()
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [onUnreadChange]);
 
   if (loading) {
     return (
@@ -372,9 +407,17 @@ function HistoryTab({ colors, t }: FeedbackTabProps) {
           activeOpacity={0.7}
         >
           <View style={styles.historyLeft}>
-            <Text style={[styles.historyTitle, { color: colors.foreground }]} numberOfLines={1}>
-              {item.title}
-            </Text>
+            <View style={styles.historyTitleRow}>
+              {item.hasNewReply && (
+                <View style={[styles.unreadDot, { backgroundColor: colors.destructive }]} />
+              )}
+              <Text
+                style={[styles.historyTitle, { color: colors.foreground, flex: 1 }]}
+                numberOfLines={1}
+              >
+                {item.title}
+              </Text>
+            </View>
             <Text style={[styles.historyMeta, { color: colors.mutedForeground }]}>
               #{item.issueNumber} · {new Date(item.createdAt).toLocaleDateString()}
             </Text>
@@ -426,6 +469,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabText: { fontSize: 14, fontWeight: "500" },
+  tabLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tabDot: { width: 6, height: 6, borderRadius: 3 },
   scrollView: { flex: 1 },
   formContent: { padding: 16, gap: 4 },
   introBlock: {
@@ -510,6 +555,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
   },
   historyLeft: { flex: 1, marginRight: 12 },
+  historyTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  unreadDot: { width: 6, height: 6, borderRadius: 3 },
   historyTitle: { fontSize: 14, fontWeight: "500" },
   historyMeta: { fontSize: 11, marginTop: 3 },
   newReplyText: { fontSize: 11, marginTop: 3, fontWeight: "500" },

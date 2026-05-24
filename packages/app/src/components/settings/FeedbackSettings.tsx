@@ -34,7 +34,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
 import { getVersion } from "@tauri-apps/api/app";
@@ -62,6 +62,17 @@ export function FeedbackSettings() {
   const [submitResult, setSubmitResult] = useState<SubmitResult>(null);
   const [records, setRecords] = useState<FeedbackRecord[]>([]);
   const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
+  const hasUnread = useMemo(() => records.some((r) => r.hasNewReply), [records]);
+  const autoSwitchedRef = useRef(false);
+
+  // Auto-switch to "我的反馈" tab once on mount when there are unread replies,
+  // so the user lands on the relevant list instead of the submit form.
+  useEffect(() => {
+    if (hasUnread && !autoSwitchedRef.current) {
+      setActiveTab("history");
+      autoSwitchedRef.current = true;
+    }
+  }, [hasUnread]);
   const [selectedIssue, setSelectedIssue] = useState<{ issueNumber: number; title: string } | null>(
     null,
   );
@@ -167,21 +178,27 @@ export function FeedbackSettings() {
 
       <div className="mb-5 inline-flex rounded-md border border-border/70 bg-muted/30 p-0.5">
         {[
-          { key: "submit", label: t("feedback.submitTab", "提交反馈") },
-          { key: "history", label: t("feedback.historyTab", "我的反馈") },
+          { key: "submit", label: t("feedback.submitTab", "提交反馈"), showDot: false },
+          { key: "history", label: t("feedback.historyTab", "我的反馈"), showDot: hasUnread },
         ].map((tab) => (
           <button
             type="button"
             key={tab.key}
             onClick={() => setActiveTab(tab.key as "submit" | "history")}
             className={cn(
-              "min-w-24 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+              "inline-flex min-w-24 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
               activeTab === tab.key
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {tab.label}
+            <span>{tab.label}</span>
+            {tab.showDot && (
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full bg-destructive"
+                aria-label={t("feedback.hasNewReply", "有新回复")}
+              />
+            )}
           </button>
         ))}
       </div>
@@ -279,15 +296,20 @@ export function FeedbackSettings() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">
               {t("feedback.remaining", "今日还可提交 {{count}} 次", { count: remaining })}
             </span>
-            <Button onClick={handleSubmit} disabled={!canSubmit || submitting} size="sm">
-              {submitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-              {submitting
-                ? t("feedback.submitting", "提交中...")
-                : t("feedback.submit", "提交反馈")}
+            <Button
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="min-w-28"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                t("feedback.submit", "提交反馈")
+              )}
             </Button>
           </div>
 
@@ -322,7 +344,15 @@ export function FeedbackSettings() {
                 }
               >
                 <div className="mr-3 min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-foreground">{record.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    {record.hasNewReply && (
+                      <span
+                        className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-destructive"
+                        aria-label={t("feedback.hasNewReply", "有新回复")}
+                      />
+                    )}
+                    <p className="truncate text-xs font-medium text-foreground">{record.title}</p>
+                  </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
                     <p className="text-[10px] text-muted-foreground">
                       #{record.issueNumber} · {new Date(record.createdAt).toLocaleDateString()}
