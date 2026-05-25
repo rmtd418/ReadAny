@@ -32,6 +32,13 @@ const CONSOLE_LEVELS = ["debug", "info", "log", "warn", "error"] as const;
 const LOG_DIR = "logs";
 const LOG_FLUSH_INTERVAL_MS = 3000; // Flush to file every 3 seconds
 const LOG_MAX_DAYS = 7; // Keep 7 days of logs
+/**
+ * Tail-truncate the collected logs to this UTF-8 byte budget before
+ * submission. Sits below the worker's MAX_BODY_BYTES with room for the
+ * description (≤12_000 chars) + device info + JSON envelope, so a payload
+ * with maxed-out description never trips the worker's 413.
+ */
+const MAX_LOG_BYTES = 60_000;
 
 /** In-memory write buffer — flushed to file periodically */
 let _pendingLines: string[] = [];
@@ -217,6 +224,20 @@ function sanitizeLogLine(line: string): string {
   return line;
 }
 
+/**
+ * Tail-truncate a string to at most `maxBytes` UTF-8 bytes. Diagnostic logs
+ * are most useful at the END — we drop the older lines when oversize. Skips
+ * leading UTF-8 continuation bytes so the cut lands on a code-point boundary.
+ */
+export function truncateUtf8Tail(text: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength <= maxBytes) return text;
+  let offset = bytes.byteLength - maxBytes;
+  while (offset < bytes.byteLength && (bytes[offset] & 0xc0) === 0x80) offset++;
+  const dropped = offset;
+  return `[truncated: dropped ${dropped} bytes of older logs]\n${new TextDecoder().decode(bytes.slice(offset))}`;
+}
+
 /** Collect logs for feedback submission. Reads today's + yesterday's log files. */
 export async function collectLogs(options?: { sinceMs?: number }): Promise<string> {
   // First flush any pending lines
@@ -260,8 +281,10 @@ export async function collectLogs(options?: { sinceMs?: number }): Promise<strin
     return match[1] >= sinceTime;
   });
 
-  // Sanitize sensitive data before exposing logs externally
-  return lines.map(sanitizeLogLine).join("\n");
+  // Sanitize sensitive data before exposing logs externally, then tail-truncate
+  // to stay under the worker's MAX_BODY_BYTES (most recent lines are most relevant).
+  const sanitized = lines.map(sanitizeLogLine).join("\n");
+  return truncateUtf8Tail(sanitized, MAX_LOG_BYTES);
 }
 
 /** Clear all log files */

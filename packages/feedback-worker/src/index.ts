@@ -50,8 +50,13 @@ interface GitHubCommentResponse {
 
 const MAX_TITLE_LENGTH = 120;
 const MAX_DESCRIPTION_LENGTH = 12_000;
-const MAX_LOG_LENGTH = 50_000;
-const MAX_BODY_BYTES = 80_000;
+/**
+ * Server-side safety net for logs: byte-based and tail-keep (newest lines
+ * matter most for diagnostics). Sized above the client's MAX_LOG_BYTES so
+ * an updated client never gets re-truncated here; old clients still cap.
+ */
+const MAX_LOG_BYTES = 80_000;
+const MAX_BODY_BYTES = 128_000;
 const DEFAULT_SUBMISSIONS_PER_DAY = 20;
 const DEFAULT_STATUS_REQUESTS_PER_HOUR = 120;
 
@@ -104,7 +109,7 @@ async function handleCreateFeedback(request: Request, env: Env): Promise<Respons
   const type = payload.type ?? "other";
   const title = requireText(payload.title, "title", MAX_TITLE_LENGTH);
   const description = requireText(payload.description, "description", MAX_DESCRIPTION_LENGTH);
-  const logs = truncateText(payload.logs?.trim() ?? "", MAX_LOG_LENGTH);
+  const logs = truncateLogTail(payload.logs?.trim() ?? "", MAX_LOG_BYTES);
 
   // Upload logs to Gist if present
   let gistUrl: string | undefined;
@@ -341,6 +346,19 @@ function requireText(value: unknown, name: string, maxLength: number): string {
 function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength)}\n\n[truncated]`;
+}
+
+/**
+ * Tail-truncate logs to at most `maxBytes` UTF-8 bytes. Diagnostic logs
+ * are most useful at the END, so we drop the older lines when oversize.
+ * Skips leading UTF-8 continuation bytes to land on a code-point boundary.
+ */
+function truncateLogTail(value: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.byteLength <= maxBytes) return value;
+  let offset = bytes.byteLength - maxBytes;
+  while (offset < bytes.byteLength && (bytes[offset] & 0xc0) === 0x80) offset++;
+  return `[truncated: dropped ${offset} bytes of older logs]\n${new TextDecoder().decode(bytes.slice(offset))}`;
 }
 
 function parseLabels(raw: string | undefined): string[] | undefined {
