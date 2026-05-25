@@ -384,6 +384,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
 
     // Track app theme for reader styling
     const [appTheme, setAppTheme] = useState<AppTheme>(() => getAppTheme());
+    const pendingStyleUpdateRef = useRef(false);
     const ttsHighlightStateRef = useRef<{ cfi: string | null; color: string }>({
       cfi: null,
       color: "rgba(96, 165, 250, 0.35)",
@@ -2070,6 +2071,12 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       if (!view?.renderer) return;
       // Fixed layout (PDF/CBZ): don't override font/size/lineHeight
       if (isFixedLayout) return;
+      // Skip if container is hidden (inactive tab) to avoid blocking main thread
+      // with expensive iframe re-layout. Styles will be applied when tab becomes visible.
+      if (containerRef.current && containerRef.current.offsetParent === null) {
+        pendingStyleUpdateRef.current = true;
+        return;
+      }
       applyRendererStyles(view, viewSettings, false, appTheme);
     }, [
       viewSettings.fontSize,
@@ -2082,6 +2089,25 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       isFixedLayout,
       appTheme,
     ]);
+
+    // --- Apply pending style updates when tab becomes visible ---
+    useEffect(() => {
+      if (!containerRef.current) return;
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && pendingStyleUpdateRef.current) {
+            pendingStyleUpdateRef.current = false;
+            const view = viewRef.current;
+            if (view?.renderer && !isFixedLayout) {
+              applyRendererStyles(view, viewSettings, false, appTheme);
+            }
+          }
+        },
+        { threshold: 0.1 },
+      );
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+    }, [viewSettings, isFixedLayout, appTheme]);
 
     // --- Apply reflow layout changes ---
     useEffect(() => {
