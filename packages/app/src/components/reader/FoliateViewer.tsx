@@ -2020,6 +2020,24 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             }
           } else {
             await view.goToFraction(0);
+
+            // If the first section is empty (e.g., blank title page with linear="no"),
+            // auto-advance to the first section with actual content
+            try {
+              const sections = bookDoc.sections ?? [];
+              if (sections.length > 1) {
+                const firstDoc = await sections[0].createDocument?.();
+                const textContent = firstDoc?.body?.textContent?.trim() ?? "";
+                if (textContent.length < 10) {
+                  // First section is effectively empty, go to next
+                  console.log("[FoliateViewer] First section is empty, advancing to next section");
+                  await view.next();
+                }
+              }
+            } catch (skipErr) {
+              // Ignore — not critical, user can still navigate manually
+              console.warn("[FoliateViewer] Failed to skip empty first section:", skipErr);
+            }
           }
         } catch (err) {
           console.error("[FoliateViewer] Failed to open book:", err);
