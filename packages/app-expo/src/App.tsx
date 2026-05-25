@@ -26,7 +26,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { LogBox, Platform, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -56,6 +56,17 @@ import { ThemeProvider, useTheme } from "@/styles/ThemeContext";
 import { useAutoSync } from "@readany/core/hooks/use-auto-sync";
 
 installFeedbackLogCapture();
+
+// iOS New-Arch + expo-dev-client cold-start: when dev-client swaps its boot
+// RCTInstance for the app's instance, RCTTurboModuleManager waits up to 10s for
+// every TurboModule's invalidate to return. If any module's method queue is slow
+// (e.g. react-native-track-player v4, whose v4 branch is frozen and does not
+// fully support RN 0.81 New Arch), the wait times out and prints RCTLogError —
+// triggering a red-box. State clears correctly afterwards (see
+// RCTTurboModuleManager.mm:1105), so the warning is purely cosmetic dev noise.
+if (Platform.OS === "ios") {
+  LogBox.ignoreLogs([/TurboModuleManager: Timed out waiting for modules to be invalidated/]);
+}
 
 const FEEDBACK_WORKER_FALLBACK = "https://feedback.readany.top";
 const feedbackWorkerUrl = process.env.EXPO_PUBLIC_FEEDBACK_WORKER_URL?.trim() || FEEDBACK_WORKER_FALLBACK;
