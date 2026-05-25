@@ -939,7 +939,7 @@ export class Paginator extends HTMLElement {
     // FIXME: vertical-rl only, not -lr
     if (this.scrolled && this.#vertical) offset = -offset;
     if ((reason === "snap" || smooth) && this.hasAttribute("animated"))
-      return animate(element[scrollProp], offset, 400, easeOutCubic, (x) => (element[scrollProp] = x)).then(() => {
+      return animate(element[scrollProp], offset, 250, easeOutCubic, (x) => (element[scrollProp] = x)).then(() => {
         this.#scrollBounds = [offset, this.atStart ? 0 : size, this.atEnd ? 0 : size];
         this.#afterScroll(reason);
       });
@@ -1113,7 +1113,7 @@ export class Paginator extends HTMLElement {
         index: this.#adjacentIndex(dir),
         anchor: prev ? () => 1 : () => 0,
       });
-    if (shouldGo || !this.hasAttribute("animated")) await wait(100);
+    if (shouldGo || !this.hasAttribute("animated")) await wait(16);
     this.#locked = false;
   }
   prev(distance) {

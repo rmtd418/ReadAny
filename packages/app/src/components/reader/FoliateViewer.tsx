@@ -2257,8 +2257,8 @@ function applyRendererSettings(
     applyReflowLayoutSettings(view, settings);
   }
 
-  // Enable page turn animation
-  renderer.setAttribute("animated", "");
+  // Disable page turn animation for instant response
+  // renderer.setAttribute("animated", "");
 
   // Apply CSS styles (skip font overrides for fixed layout)
   applyRendererStyles(view, settings, isFixedLayout, theme);
