@@ -115,7 +115,19 @@ export default function App() {
         });
 
         console.log("[App] bootstrap: init react-native-track-player");
-        await TrackPlayer.setupPlayer();
+        // setupPlayer can only be called once per native process. On Android,
+        // a Configuration Change (e.g. Huawei tablet small-screen → fullscreen)
+        // restarts the Activity and re-runs this bootstrap, but the native
+        // singleton is still alive — so setupPlayer() throws
+        // "The player has already been initialized via setupPlayer".
+        // Treat that specific error as success so bootstrap can continue.
+        try {
+          await TrackPlayer.setupPlayer();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!/already been initialized/i.test(msg)) throw e;
+          console.log("[App] TrackPlayer already initialized — reusing existing native instance");
+        }
         await TrackPlayer.updateOptions({
           capabilities: [
             Capability.Play,
