@@ -78,7 +78,7 @@ async function _startNativeServer(cleanRoot: string): Promise<string> {
     const origin = await Promise.race([
       server.start(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Lighttpd startup timeout (8s)")), 8000),
+        setTimeout(() => reject(new Error("Lighttpd startup timeout (3s)")), 3000),
       ),
     ]);
     _nativeServer = server;
@@ -113,11 +113,17 @@ async function _startTcpFallback(cleanRoot: string): Promise<string> {
   let TcpSocket: any;
   try {
     TcpSocket = (await import("react-native-tcp-socket")).default;
+    console.log("[FileServer] TCP socket module loaded, starting server...");
   } catch (e) {
     throw new Error(`No file server available: ${e instanceof Error ? e.message : e}`);
   }
 
   return new Promise<string>((resolve, reject) => {
+    // Safety timeout: if the TCP server can't bind within 5s, bail out
+    const tcpTimeout = setTimeout(() => {
+      reject(new Error("TCP server startup timeout (5s)"));
+    }, 5000);
+
     const server = TcpSocket.createServer((socket: any) => {
       let headerBuf = "";
 
@@ -199,9 +205,13 @@ async function _startTcpFallback(cleanRoot: string): Promise<string> {
       socket.on("error", () => socket.destroy());
     });
 
-    server.on("error", (err: Error) => reject(err));
+    server.on("error", (err: Error) => {
+      clearTimeout(tcpTimeout);
+      reject(err);
+    });
 
     server.listen({ port: 0, host: "127.0.0.1" }, () => {
+      clearTimeout(tcpTimeout);
       const addr = server.address();
       const port = addr && typeof addr === "object" && "port" in addr ? addr.port : null;
       if (!port) {
