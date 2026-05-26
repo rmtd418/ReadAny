@@ -291,15 +291,23 @@ async function generateRemoteEmbeddings(
     headers.Authorization = `Bearer ${selectedModel.apiKey}`;
   }
 
-  const batchSize = 20;
-  for (let i = 0; i < chunks.length; i += batchSize) {
-    const batch = chunks.slice(i, i + batchSize);
-    const texts = batch.map((c) => c.content);
+  // Conservative defaults: many Chinese embedding APIs (Baidu/MiniMax/etc.)
+  // cap single-input tokens at 384–1024 and batch size at 16. Send 8 per
+  // request and keep single chunks ≤ 1800 chars (~ ≤ 1800 tokens for CJK)
+  // so classical-Chinese books with dense unbroken paragraphs don't 400.
+  const batchSize = 8;
+  const MAX_CHARS_PER_CHUNK = 1800;
 
+  const callEmbeddingApi = async (
+    inputTexts: string[],
+  ): Promise<{ ok: true; embeddings: number[][] } | { ok: false; status: number; errorText: string }> => {
+    const safeTexts = inputTexts.map((t) =>
+      t.length > MAX_CHARS_PER_CHUNK ? t.slice(0, MAX_CHARS_PER_CHUNK) : t,
+    );
     const requestBody = isOllama
-      ? { model: selectedModel.modelId, input: texts }
+      ? { model: selectedModel.modelId, input: safeTexts }
       : {
-          input: texts,
+          input: safeTexts,
           model: selectedModel.modelId,
           encoding_format: "float",
         };
@@ -311,8 +319,8 @@ async function generateRemoteEmbeddings(
     });
 
     if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Embedding API error (${res.status}): ${errorText}`);
+      const errorText = await res.text().catch(() => "");
+      return { ok: false, status: res.status, errorText };
     }
 
     const json = await res.json();
@@ -326,9 +334,44 @@ async function generateRemoteEmbeddings(
         )
           .sort((a: any, b: any) => a.index - b.index)
           .map((d: any) => d.embedding);
+    return { ok: true, embeddings };
+  };
 
-    for (let j = 0; j < batch.length; j++) {
-      batch[j].embedding = embeddings[j] ?? [];
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    const texts = batch.map((c) => c.content);
+
+    const batchResult = await callEmbeddingApi(texts);
+
+    if (batchResult.ok) {
+      for (let j = 0; j < batch.length; j++) {
+        batch[j].embedding = batchResult.embeddings[j] ?? [];
+      }
+    } else {
+      // 4xx commonly means one chunk in the batch exceeded the API's input
+      // limits (token / encoding constraints). Fall back to per-chunk retry
+      // so one bad chunk doesn't poison the whole batch and the rest of
+      // the book can still be vectorized. Failed chunks get an empty
+      // embedding and a warn-level log; vector search just won't return
+      // them, but the book is otherwise usable.
+      if (batchResult.status >= 400 && batchResult.status < 500) {
+        console.warn(
+          `[Embedding] Batch failed (${batchResult.status}): ${batchResult.errorText.slice(0, 200)}. Retrying per-chunk.`,
+        );
+        for (let j = 0; j < batch.length; j++) {
+          const single = await callEmbeddingApi([batch[j].content]);
+          if (single.ok) {
+            batch[j].embedding = single.embeddings[0] ?? [];
+          } else {
+            console.warn(
+              `[Embedding] Chunk ${i + j} skipped (${single.status}): ${single.errorText.slice(0, 200)}`,
+            );
+            batch[j].embedding = [];
+          }
+        }
+      } else {
+        throw new Error(`Embedding API error (${batchResult.status}): ${batchResult.errorText}`);
+      }
     }
 
     progress.processedChunks = Math.min(i + batchSize, chunks.length);
