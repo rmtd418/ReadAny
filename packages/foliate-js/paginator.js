@@ -875,6 +875,18 @@ export class Paginator extends HTMLElement {
     const touch = e.changedTouches[0];
     const totalDx = Math.abs(touch.screenX - (state.startX ?? touch.screenX));
     const totalDy = Math.abs(touch.screenY - (state.startY ?? touch.screenY));
+    // Axis-lock: once one axis dominates, abort the other so vertical gestures
+    // (e.g. pull-to-bookmark) don't accidentally drift the page horizontally,
+    // and clearly-horizontal swipes don't trigger downward bookmark UI.
+    if (!state.axisLocked && (totalDx > 10 || totalDy > 10)) {
+      if (totalDy > totalDx * 1.3) {
+        state.axisLocked = "y";
+        state.aborted = true;
+      } else {
+        state.axisLocked = "x";
+      }
+    }
+    if (state.aborted) return;
     if (totalDx > 10 || totalDy > 10 || state.didPreventDefault) {
       e.preventDefault();
       state.didPreventDefault = true;

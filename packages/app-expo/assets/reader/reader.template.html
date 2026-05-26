@@ -46,6 +46,13 @@
       transition: opacity 140ms ease, transform 180ms ease;
     }
 
+    /* While the finger is actively dragging the indicator, kill the transition
+       so the pill follows touch instantly. Re-enable on release for the
+       spring-back animation. */
+    #pull-bookmark-indicator[data-following="true"] {
+      transition: none;
+    }
+
     #pull-bookmark-indicator .pill {
       min-width: 164px;
       padding: 10px 14px;
@@ -251,6 +258,7 @@
       bookmarkPullGestureActive = pullOffset > 0;
       if (text) text.textContent = getPullBookmarkLabel(armed);
       if (indicator) {
+        indicator.dataset.following = 'true';
         indicator.dataset.armed = armed ? 'true' : 'false';
         indicator.style.opacity = String(Math.min(1, pullOffset / 18));
         indicator.style.transform =
@@ -265,6 +273,7 @@
       bookmarkPullGestureActive = false;
       if (text) text.textContent = getPullBookmarkLabel(false);
       if (indicator) {
+        indicator.dataset.following = 'false';
         indicator.dataset.armed = 'false';
         indicator.style.opacity = '0';
         indicator.style.transform = 'translate(-50%, -12px) scale(0.96)';
@@ -1639,6 +1648,13 @@ a { color: ${primary} !important; }
           if (absY < Math.max(INTENT_THRESHOLD, absX * VERTICAL_INTENT_RATIO)) return;
 
           pullState.active = true;
+          // Lock paginator's touch-driven page turns while we own the gesture,
+          // so a slightly diagonal pull-down can't drift the page horizontally.
+          try {
+            if (typeof window.setNavigationLocked === 'function') {
+              window.setNavigationLocked(true);
+            }
+          } catch (err) { /* renderer not ready yet — no-op */ }
         }
 
         if (deltaY <= 0) {
@@ -1656,6 +1672,11 @@ a { color: ${primary} !important; }
       doc.addEventListener('touchend', (e) => {
         const state = pullState;
         pullState = null;
+        try {
+          if (typeof window.setNavigationLocked === 'function') {
+            window.setNavigationLocked(false);
+          }
+        } catch (err) { /* no-op */ }
         if (!state) return;
 
         if (state.active) {
@@ -1680,6 +1701,11 @@ a { color: ${primary} !important; }
 
       doc.addEventListener('touchcancel', () => {
         pullState = null;
+        try {
+          if (typeof window.setNavigationLocked === 'function') {
+            window.setNavigationLocked(false);
+          }
+        } catch (err) { /* no-op */ }
         resetPullBookmarkUI(true);
       }, { passive: true, capture: true });
     }
