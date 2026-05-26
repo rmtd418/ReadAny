@@ -96,6 +96,27 @@ class PlatformFetchHttpHandler {
  * S3 backend implementation.
  * Works with any S3-compatible storage service.
  */
+
+/**
+ * Decide whether path-style addressing should be the default for a given
+ * endpoint. Self-hosted S3 servers (rclone serve s3, MinIO, IP/localhost
+ * endpoints) need path-style because the bucket can't ride as a subdomain
+ * on a raw IP or a non-DNS host. AWS S3 supports both, so we leave it on
+ * the SDK default (virtual-hosted) for amazonaws.com.
+ */
+export function shouldDefaultToPathStyle(endpoint?: string): boolean {
+  if (!endpoint) return false; // SDK default endpoints (real AWS S3)
+  try {
+    const url = new URL(endpoint);
+    const host = url.hostname.toLowerCase();
+    if (host.endsWith("amazonaws.com")) return false;
+    return true;
+  } catch {
+    // Endpoint string that doesn't parse as a URL → assume self-hosted.
+    return true;
+  }
+}
+
 export class S3Backend implements ISyncBackend {
   readonly type = "s3" as const;
   private client: S3Client;
@@ -113,6 +134,13 @@ export class S3Backend implements ISyncBackend {
       // Platform service may not be initialized in tests that never touch S3.
     }
 
+    // Auto-detect path-style for non-AWS endpoints. Self-hosted S3-compatible
+    // servers (rclone serve s3, MinIO, IP/localhost endpoints) overwhelmingly
+    // require path-style addressing because their hostname can't carry the
+    // bucket as a subdomain. AWS S3 supports both styles, so leave that alone.
+    // Users can still override via the UI toggle.
+    const pathStyle = config.pathStyle ?? shouldDefaultToPathStyle(config.endpoint);
+
     const clientConfig = {
       endpoint: config.endpoint,
       region: config.region,
@@ -120,7 +148,7 @@ export class S3Backend implements ISyncBackend {
         accessKeyId: config.accessKeyId,
         secretAccessKey,
       },
-      forcePathStyle: config.pathStyle ?? false,
+      forcePathStyle: pathStyle,
       ...(requestHandler ? { requestHandler } : {}),
     };
 
@@ -137,7 +165,24 @@ export class S3Backend implements ISyncBackend {
       );
       return true;
     } catch (error) {
-      console.error("[S3Backend] testConnection failed:", error);
+      // The SDK's Error subclasses don't serialize their useful fields via
+      // default console.error formatting, so the feedback log capture ends
+      // up with just "Error: ..." and the user can't tell what went wrong.
+      // Pull out the fields users actually need to debug.
+      const e = error as {
+        name?: string;
+        message?: string;
+        Code?: string;
+        code?: string;
+        $metadata?: { httpStatusCode?: number; requestId?: string };
+      };
+      console.error("[S3Backend] testConnection failed:", {
+        name: e?.name,
+        message: e?.message,
+        code: e?.Code ?? e?.code,
+        httpStatus: e?.$metadata?.httpStatusCode,
+        requestId: e?.$metadata?.requestId,
+      });
       return false;
     }
   }
