@@ -43,12 +43,15 @@ export {
 export {
   DEFAULT_WEBDAV_IMPORT_REMOTE_ROOT,
   WEBDAV_IMPORT_SUPPORTED_EXTENSIONS,
+  WEBDAV_IMPORT_TEMPORARY_CONFIG_KEY,
+  WEBDAV_IMPORT_TEMPORARY_SECRET_KEY,
   getWebDavImportExtension,
   isImportableWebDavBookName,
   normalizeWebDavImportPath,
   normalizeWebDavImportRoot,
 } from "./import/webdav-import-types";
 export type {
+  PersistedWebDavImportInput,
   WebDavImportEntry,
   WebDavImportListing,
   WebDavImportSource,

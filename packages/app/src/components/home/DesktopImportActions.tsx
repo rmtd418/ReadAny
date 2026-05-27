@@ -27,6 +27,9 @@ import {
   getPlatformService,
   type ImportBooksResult,
   normalizeImportIdentity,
+  type PersistedWebDavImportInput,
+  WEBDAV_IMPORT_TEMPORARY_CONFIG_KEY,
+  WEBDAV_IMPORT_TEMPORARY_SECRET_KEY,
   type WebDavImportEntry,
   WebDavImportService,
   type WebDavImportSource,
@@ -161,15 +164,35 @@ function DesktopWebDavConnectDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      setUrl("");
-      setUsername("");
-      setPassword("");
-      setRemoteRoot(DEFAULT_WEBDAV_IMPORT_REMOTE_ROOT);
-      setAllowInsecure(false);
-      setError(null);
-      setSubmitting(false);
-    }
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const platform = getPlatformService();
+      try {
+        const [rawConfig, savedPassword] = await Promise.all([
+          platform.kvGetItem(WEBDAV_IMPORT_TEMPORARY_CONFIG_KEY),
+          platform.kvGetItem(WEBDAV_IMPORT_TEMPORARY_SECRET_KEY),
+        ]);
+        if (cancelled) return;
+        if (rawConfig) {
+          const parsed = JSON.parse(rawConfig) as PersistedWebDavImportInput;
+          setUrl(parsed.url ?? "");
+          setUsername(parsed.username ?? "");
+          setRemoteRoot(parsed.remoteRoot ?? DEFAULT_WEBDAV_IMPORT_REMOTE_ROOT);
+          setAllowInsecure(parsed.allowInsecure ?? false);
+        }
+        if (savedPassword) {
+          setPassword(savedPassword);
+        }
+      } catch (err) {
+        console.warn("[import] failed to load saved WebDAV input", err);
+      }
+    })();
+    setError(null);
+    setSubmitting(false);
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const canSubmit =
@@ -188,6 +211,21 @@ function DesktopWebDavConnectDialog({
         remoteRoot: remoteRoot.trim(),
         allowInsecure,
       });
+      try {
+        const platform = getPlatformService();
+        const persisted: PersistedWebDavImportInput = {
+          url: url.trim(),
+          username: username.trim(),
+          remoteRoot: remoteRoot.trim(),
+          allowInsecure,
+        };
+        await Promise.all([
+          platform.kvSetItem(WEBDAV_IMPORT_TEMPORARY_CONFIG_KEY, JSON.stringify(persisted)),
+          platform.kvSetItem(WEBDAV_IMPORT_TEMPORARY_SECRET_KEY, password),
+        ]);
+      } catch (err) {
+        console.warn("[import] failed to persist WebDAV input", err);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
