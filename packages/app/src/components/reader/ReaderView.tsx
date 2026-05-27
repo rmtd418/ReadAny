@@ -52,6 +52,7 @@ import { SelectionPopover } from "./SelectionPopover";
 import { TOCPanel } from "./TOCPanel";
 import { TTSPage } from "./TTSPage";
 import { TranslationPopover } from "./TranslationPopover";
+import { toast } from "sonner";
 
 const REFLOWABLE_CHARACTERS_PER_LOCATION = 1500;
 const MAX_TRACKED_LOCATION_DELTA = 20;
@@ -1914,7 +1915,10 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
         .map((segment) => segment.text)
         .join(" ")
         .trim();
-      if (!normalized) return;
+      if (!normalized) {
+        toast.error(t("tts.noTextFound", "No readable text found on this page"));
+        return;
+      }
       ttsStartChapterRef.current = readerTab?.chapterTitle ?? "";
       setTtsSourceKind("page");
       setTtsContinuousEnabled(continuous);
