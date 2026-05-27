@@ -2,6 +2,10 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import en from "./locales/en.json";
 import zh from "./locales/zh.json";
+import ja from "./locales/ja.json";
+import ko from "./locales/ko.json";
+import fr from "./locales/fr.json";
+import es from "./locales/es.json";
 
 // Initialize with default "en". Each platform should call
 // `initI18nLanguage()` after setPlatformService() to restore the saved lang.
@@ -12,6 +16,10 @@ export const i18nReady = i18n
     resources: {
       en: { translation: en },
       zh: { translation: zh },
+      ja: { translation: ja },
+      ko: { translation: ko },
+      fr: { translation: fr },
+      es: { translation: es },
     },
     lng: "en",
     fallbackLng: "en",
@@ -66,7 +74,13 @@ export async function initI18nLanguage(): Promise<void> {
         const systemLocale = await platform.getLocale();
         console.log(`[i18n] System locale: ${systemLocale}`);
         if (systemLocale) {
-          const lang = systemLocale.toLowerCase().startsWith("zh") ? "zh" : "en";
+          const lc = systemLocale.toLowerCase();
+          const lang = lc.startsWith("zh") ? "zh"
+            : lc.startsWith("ja") ? "ja"
+            : lc.startsWith("ko") ? "ko"
+            : lc.startsWith("fr") ? "fr"
+            : lc.startsWith("es") ? "es"
+            : "en";
           console.log(`[i18n] Detected language from system: ${lang}`);
           if (lang !== i18n.language) {
             await i18n.changeLanguage(lang);

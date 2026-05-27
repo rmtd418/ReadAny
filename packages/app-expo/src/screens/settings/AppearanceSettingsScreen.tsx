@@ -16,20 +16,23 @@ const THEMES: { id: ThemeMode; labelKey: string; fallback: string; Icon: typeof 
 ];
 
 const LANGUAGES = [
-  { code: "zh", labelKey: "settings.simplifiedChinese", fallback: "简体中文" },
-  { code: "en", labelKey: "settings.english", fallback: "English" },
+  { code: "zh", label: "简体中文" },
+  { code: "en", label: "English" },
+  { code: "ja", label: "日本語" },
+  { code: "ko", label: "한국어" },
+  { code: "fr", label: "Français" },
+  { code: "es", label: "Español" },
 ] as const;
 
 export default function AppearanceSettingsScreen() {
   const { t, i18n } = useTranslation();
   const { mode, setMode, colors } = useTheme();
   const layout = useResponsiveLayout();
-  const [lang, setLang] = useState(() => (i18n.language?.startsWith("zh") ? "zh" : "en"));
+  const [lang, setLang] = useState(() => i18n.language || "en");
 
   // Update lang state when i18n.language changes
   useEffect(() => {
-    const newLang = i18n.language?.startsWith("zh") ? "zh" : "en";
-    setLang(newLang);
+    setLang(i18n.language || "en");
   }, [i18n.language]);
 
   const handleLangChange = useCallback(async (code: string) => {
@@ -116,7 +119,7 @@ export default function AppearanceSettingsScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[s.listItemText, { color: colors.foreground }]}>
-                    {t(l.labelKey, l.fallback)}
+                    {l.label}
                   </Text>
                   {lang === l.code && (
                     <Text style={[s.checkPrimary, { color: colors.primary }]}>✓</Text>
