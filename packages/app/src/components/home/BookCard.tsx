@@ -174,7 +174,7 @@ export const BookCard = memo(function BookCard({
 
   return (
     <div
-      className="group relative flex h-full cursor-pointer flex-col justify-end"
+      className="group relative flex h-full cursor-pointer flex-col"
       onClick={handleOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
