@@ -1,14 +1,12 @@
-import { BookOpenIcon, ChevronDownIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
+import { BookOpenIcon, CheckIcon, ChevronDownIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { useTheme } from "@/styles/ThemeContext";
 import type { ThemeMode } from "@/styles/ThemeContext";
 import { fontSize, fontWeight, radius, spacing } from "@/styles/theme";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ActionSheetIOS,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -42,7 +40,6 @@ export default function AppearanceSettingsScreen() {
   const [lang, setLang] = useState(() => i18n.language || "en");
   const [showLangPicker, setShowLangPicker] = useState(false);
 
-  // Update lang state when i18n.language changes
   useEffect(() => {
     setLang(i18n.language || "en");
   }, [i18n.language]);
@@ -59,22 +56,6 @@ export default function AppearanceSettingsScreen() {
   }, []);
 
   const currentLangLabel = LANGUAGES.find((l) => l.code === lang)?.label || lang;
-
-  const openLangPicker = useCallback(() => {
-    if (Platform.OS === "ios") {
-      const options = [...LANGUAGES.map((l) => l.label), t("common.cancel")];
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: options.length - 1, title: t("settings.language") },
-        (idx) => {
-          if (idx < LANGUAGES.length) {
-            handleLangChange(LANGUAGES[idx].code);
-          }
-        },
-      );
-    } else {
-      setShowLangPicker(true);
-    }
-  }, [handleLangChange, t]);
 
   const s = makeStyles(colors);
 
@@ -130,14 +111,14 @@ export default function AppearanceSettingsScreen() {
             </View>
           </View>
 
-          {/* Language — single row with current value, tap to pick */}
+          {/* Language — single row, tap to open bottom sheet */}
           <View style={s.section}>
             <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>
               {t("settings.language", "语言")}
             </Text>
             <TouchableOpacity
               style={[s.langRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={openLangPicker}
+              onPress={() => setShowLangPicker(true)}
               activeOpacity={0.7}
             >
               <Text style={[s.langRowLabel, { color: colors.foreground }]}>
@@ -149,51 +130,63 @@ export default function AppearanceSettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Android bottom sheet picker */}
-      {Platform.OS !== "ios" && (
-        <Modal
-          visible={showLangPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowLangPicker(false)}
-        >
-          <Pressable style={s.modalOverlay} onPress={() => setShowLangPicker(false)}>
-            <View style={[s.modalSheet, { backgroundColor: colors.card }]}>
-              <Text style={[s.modalTitle, { color: colors.foreground }]}>
-                {t("settings.language")}
-              </Text>
-              {LANGUAGES.map((l) => (
-                <TouchableOpacity
-                  key={l.code}
-                  style={s.modalItem}
-                  onPress={() => handleLangChange(l.code)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.modalItemText, { color: colors.foreground }]}>
-                    {l.label}
-                  </Text>
-                  {lang === l.code && (
-                    <Text style={[s.checkPrimary, { color: colors.primary }]}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[s.modalCancel, { borderTopColor: colors.border }]}
-                onPress={() => setShowLangPicker(false)}
-              >
-                <Text style={[s.modalCancelText, { color: colors.mutedForeground }]}>
-                  {t("common.cancel")}
-                </Text>
-              </TouchableOpacity>
+      {/* Custom bottom sheet language picker */}
+      <Modal
+        visible={showLangPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLangPicker(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setShowLangPicker(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
+            {/* Handle bar */}
+            <View style={s.handleBar}>
+              <View style={[s.handle, { backgroundColor: colors.border }]} />
+            </View>
+
+            <Text style={[s.modalTitle, { color: colors.foreground }]}>
+              {t("settings.language")}
+            </Text>
+
+            <View style={s.langList}>
+              {LANGUAGES.map((l, idx) => {
+                const isActive = lang === l.code;
+                return (
+                  <TouchableOpacity
+                    key={l.code}
+                    style={[
+                      s.langItem,
+                      { backgroundColor: isActive ? colors.primary + "10" : "transparent" },
+                      idx < LANGUAGES.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => handleLangChange(l.code)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        s.langItemText,
+                        { color: isActive ? colors.primary : colors.foreground },
+                        isActive && { fontWeight: fontWeight.medium },
+                      ]}
+                    >
+                      {l.label}
+                    </Text>
+                    {isActive && <CheckIcon size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </Pressable>
-        </Modal>
-      )}
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function makeStyles(_colors: ReturnType<typeof useTheme>["colors"]) {
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
   return StyleSheet.create({
     container: { flex: 1 },
     scroll: { flex: 1 },
@@ -231,40 +224,47 @@ function makeStyles(_colors: ReturnType<typeof useTheme>["colors"]) {
       borderWidth: 1,
     },
     langRowLabel: { fontSize: fontSize.md },
-    checkPrimary: { fontSize: 14 },
-    // Modal styles for Android
+    // Bottom sheet
     modalOverlay: {
       flex: 1,
       justifyContent: "flex-end",
-      backgroundColor: "rgba(0,0,0,0.4)",
+      backgroundColor: "rgba(0,0,0,0.35)",
     },
     modalSheet: {
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingTop: 20,
-      paddingBottom: 34,
-      paddingHorizontal: 8,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingBottom: 40,
+    },
+    handleBar: {
+      alignItems: "center",
+      paddingVertical: 12,
+    },
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
     },
     modalTitle: {
-      fontSize: fontSize.base,
+      fontSize: fontSize.lg,
       fontWeight: fontWeight.semibold,
       textAlign: "center",
-      marginBottom: 12,
+      marginBottom: 8,
     },
-    modalItem: {
+    langList: {
+      marginHorizontal: 16,
+      borderRadius: radius.xl,
+      overflow: "hidden",
+      backgroundColor: colors.background,
+    },
+    langItem: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: spacing.lg,
-      paddingVertical: 14,
+      paddingHorizontal: 20,
+      paddingVertical: 16,
     },
-    modalItemText: { fontSize: fontSize.md },
-    modalCancel: {
-      marginTop: 8,
-      paddingTop: 12,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      alignItems: "center",
+    langItemText: {
+      fontSize: fontSize.md,
     },
-    modalCancelText: { fontSize: fontSize.md },
   });
 }
