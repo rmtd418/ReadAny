@@ -192,12 +192,12 @@ export function FloatingTTSBubble() {
 
   const statusText =
     playState === "loading"
-      ? "加载中…"
+      ? t("tts.loading")
       : playState === "playing"
-        ? "播放中"
+        ? t("tts.playing")
         : playState === "paused"
-          ? "已暂停"
-        : "已停止";
+          ? t("tts.paused")
+          : t("tts.stopped");
 
   const sleepTimerLabel = useMemo(() => {
     void now;
@@ -278,7 +278,7 @@ export function FloatingTTSBubble() {
           type="button"
           onClick={handleBubbleClick}
           className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform active:scale-95 select-none"
-          title="TTS 播放器"
+          title={t("tts.player")}
         >
           {playState === "loading" ? (
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -302,7 +302,7 @@ export function FloatingTTSBubble() {
             <Headphones className="h-4 w-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-foreground">
-                {currentBookTitle || "正在听书"}
+                {currentBookTitle || t("tts.listeningToBook")}
               </p>
               {!!currentChapterTitle && (
                 <p className="truncate text-xs text-muted-foreground">{currentChapterTitle}</p>
@@ -351,7 +351,7 @@ export function FloatingTTSBubble() {
               type="button"
               onClick={handleStop}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/80 text-foreground transition-colors hover:bg-muted"
-              title="停止"
+              title={t("tts.stop")}
             >
               <Square className="h-3.5 w-3.5" />
             </button>

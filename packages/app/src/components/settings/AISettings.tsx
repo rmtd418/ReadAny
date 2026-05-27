@@ -30,20 +30,23 @@ function createEndpointId(): string {
   return `ep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-const PROVIDER_OPTIONS: { value: AIProviderType; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "google", label: "Google Gemini" },
-  { value: "deepseek", label: "DeepSeek" },
-  { value: "ollama", label: "Ollama" },
-  { value: "lmstudio", label: "LM Studio" },
-  { value: "openrouter", label: "OpenRouter" },
-  { value: "siliconflow", label: "SiliconFlow" },
-  { value: "moonshot", label: "Moonshot (Kimi)" },
-  { value: "zhipu", label: "智谱 GLM" },
-  { value: "aliyun", label: "阿里云通义" },
-  { value: "custom", label: "Custom (OpenAI Compatible)" },
-];
+function useProviderOptions(): { value: AIProviderType; label: string }[] {
+  const { t } = useTranslation();
+  return useMemo(() => [
+    { value: "openai", label: "OpenAI" },
+    { value: "anthropic", label: "Anthropic" },
+    { value: "google", label: "Google Gemini" },
+    { value: "deepseek", label: "DeepSeek" },
+    { value: "ollama", label: "Ollama" },
+    { value: "lmstudio", label: "LM Studio" },
+    { value: "openrouter", label: "OpenRouter" },
+    { value: "siliconflow", label: "SiliconFlow" },
+    { value: "moonshot", label: "Moonshot (Kimi)" },
+    { value: "zhipu", label: t("settings.ai_provider_zhipu") },
+    { value: "aliyun", label: t("settings.ai_provider_aliyun") },
+    { value: "custom", label: t("settings.ai_provider_custom") },
+  ], [t]);
+}
 
 /** Searchable model list with filter input */
 function ModelSearchableList({
@@ -59,6 +62,7 @@ function ModelSearchableList({
   onSelect: (model: string) => void;
   onRemove: (model: string) => void;
 }) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const filtered = search.trim()
     ? models.filter((m) => m.toLowerCase().includes(search.toLowerCase()))
@@ -69,20 +73,20 @@ function ModelSearchableList({
     <div className="space-y-1.5">
       {currentActive && models.includes(currentActive) && (
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-muted-foreground">当前:</span>
+          <span className="text-muted-foreground">{t("settings.ai_currentLabel")}:</span>
           <span className="text-primary font-medium">{currentActive}</span>
         </div>
       )}
       <input
         type="text"
         className="w-full h-7 px-2.5 text-xs border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        placeholder="搜索模型..."
+        placeholder={t("settings.ai_searchModels")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
       <div className="max-h-36 overflow-y-auto border rounded-md bg-background">
         {filtered.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground text-center">无匹配结果</div>
+          <div className="px-3 py-2 text-xs text-muted-foreground text-center">{t("settings.ai_noMatchingResults")}</div>
         ) : (
           filtered.map((m) => {
             const isActive = m === currentActive;
@@ -110,7 +114,7 @@ function ModelSearchableList({
           })
         )}
       </div>
-      <div className="text-[10px] text-muted-foreground">共 {models.length} 个模型</div>
+      <div className="text-[10px] text-muted-foreground">{t("settings.ai_totalModels", { count: models.length })}</div>
     </div>
   );
 }
@@ -139,6 +143,7 @@ function EndpointCard({
   onToggleExpand: () => void;
 }) {
   const { t } = useTranslation();
+  const PROVIDER_OPTIONS = useProviderOptions();
   const [newModelName, setNewModelName] = useState("");
   const [testModel, setTestModel] = useState("__auto__");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");

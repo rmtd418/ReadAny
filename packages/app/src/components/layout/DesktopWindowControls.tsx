@@ -1,6 +1,7 @@
 import { cn } from "@readany/core/utils";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Window as TauriWindow } from "@tauri-apps/api/window";
 import type { RefObject } from "react";
 
@@ -24,6 +25,7 @@ export function DesktopWindowControls({
   showMaximize = true,
   showClose = true,
 }: DesktopWindowControlsProps) {
+  const { t } = useTranslation();
   const [isTauriPlatform, setIsTauriPlatform] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isMacPlatform, setIsMacPlatform] = useState(false);
@@ -309,7 +311,7 @@ export function DesktopWindowControls({
           type="button"
           className="desktop-window-button flex h-8 w-11 items-center justify-center text-neutral-500 transition-colors hover:bg-black/5"
           onClick={handleMinimize}
-          title="最小化"
+          title={t("window.minimize")}
           style={NO_DRAG_STYLE}
           data-no-window-drag
           data-tauri-drag-region="false"
@@ -327,7 +329,7 @@ export function DesktopWindowControls({
           onClick={(e) => {
             void handleToggleMaximize(e);
           }}
-          title={isMacPlatform ? (isFullscreen ? "退出全屏" : "进入全屏") : isMaximized ? "还原" : "最大化"}
+          title={isMacPlatform ? (isFullscreen ? t("window.exitFullscreen") : t("window.enterFullscreen")) : isMaximized ? t("window.restore") : t("window.maximize")}
           style={NO_DRAG_STYLE}
           data-no-window-drag
           data-tauri-drag-region="false"
@@ -373,7 +375,7 @@ export function DesktopWindowControls({
           type="button"
           className="desktop-window-button flex h-8 w-11 items-center justify-center text-neutral-500 transition-colors hover:bg-red-600 hover:text-white"
           onClick={handleClose}
-          title="关闭"
+          title={t("window.close")}
           style={NO_DRAG_STYLE}
           data-no-window-drag
           data-tauri-drag-region="false"

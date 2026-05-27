@@ -1,11 +1,19 @@
-import { BookOpenIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
+import { BookOpenIcon, CheckIcon, ChevronDownIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { useTheme } from "@/styles/ThemeContext";
 import type { ThemeMode } from "@/styles/ThemeContext";
 import { fontSize, fontWeight, radius, spacing } from "@/styles/theme";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SettingsHeader } from "./SettingsHeader";
 
@@ -16,24 +24,29 @@ const THEMES: { id: ThemeMode; labelKey: string; fallback: string; Icon: typeof 
 ];
 
 const LANGUAGES = [
-  { code: "zh", labelKey: "settings.simplifiedChinese", fallback: "简体中文" },
-  { code: "en", labelKey: "settings.english", fallback: "English" },
+  { code: "zh", label: "简体中文" },
+  { code: "zh-TW", label: "繁體中文" },
+  { code: "en", label: "English" },
+  { code: "ja", label: "日本語" },
+  { code: "ko", label: "한국어" },
+  { code: "fr", label: "Français" },
+  { code: "es", label: "Español" },
 ] as const;
 
 export default function AppearanceSettingsScreen() {
   const { t, i18n } = useTranslation();
   const { mode, setMode, colors } = useTheme();
   const layout = useResponsiveLayout();
-  const [lang, setLang] = useState(() => (i18n.language?.startsWith("zh") ? "zh" : "en"));
+  const [lang, setLang] = useState(() => i18n.language || "en");
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
-  // Update lang state when i18n.language changes
   useEffect(() => {
-    const newLang = i18n.language?.startsWith("zh") ? "zh" : "en";
-    setLang(newLang);
+    setLang(i18n.language || "en");
   }, [i18n.language]);
 
   const handleLangChange = useCallback(async (code: string) => {
     setLang(code);
+    setShowLangPicker(false);
     try {
       const { changeAndPersistLanguage } = await import("@readany/core/i18n");
       await changeAndPersistLanguage(code);
@@ -42,12 +55,14 @@ export default function AppearanceSettingsScreen() {
     }
   }, []);
 
+  const currentLangLabel = LANGUAGES.find((l) => l.code === lang)?.label || lang;
+
   const s = makeStyles(colors);
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={["top"]}>
       <SettingsHeader
-        title={t("settings.appearanceLanguage", "外观与语言")}
+        title={t("settings.general", "通用")}
         subtitle={t("settings.realtimeHint")}
       />
 
@@ -96,42 +111,82 @@ export default function AppearanceSettingsScreen() {
             </View>
           </View>
 
-          {/* Language */}
+          {/* Language — single row, tap to open bottom sheet */}
           <View style={s.section}>
             <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>
               {t("settings.language", "语言")}
             </Text>
-            <View style={[s.listCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {LANGUAGES.map((l, idx) => (
-                <TouchableOpacity
-                  key={l.code}
-                  style={[
-                    s.listItem,
-                    idx < LANGUAGES.length - 1 && {
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.border,
-                    },
-                  ]}
-                  onPress={() => handleLangChange(l.code)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.listItemText, { color: colors.foreground }]}>
-                    {t(l.labelKey, l.fallback)}
-                  </Text>
-                  {lang === l.code && (
-                    <Text style={[s.checkPrimary, { color: colors.primary }]}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={[s.langRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setShowLangPicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.langRowLabel, { color: colors.foreground }]}>
+                {currentLangLabel}
+              </Text>
+              <ChevronDownIcon size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+
+      {/* Custom bottom sheet language picker */}
+      <Modal
+        visible={showLangPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLangPicker(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setShowLangPicker(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
+            {/* Handle bar */}
+            <View style={s.handleBar}>
+              <View style={[s.handle, { backgroundColor: colors.border }]} />
+            </View>
+
+            <Text style={[s.modalTitle, { color: colors.foreground }]}>
+              {t("settings.language")}
+            </Text>
+
+            <View style={s.langList}>
+              {LANGUAGES.map((l, idx) => {
+                const isActive = lang === l.code;
+                return (
+                  <TouchableOpacity
+                    key={l.code}
+                    style={[
+                      s.langItem,
+                      { backgroundColor: isActive ? colors.primary + "10" : "transparent" },
+                      idx < LANGUAGES.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => handleLangChange(l.code)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        s.langItemText,
+                        { color: isActive ? colors.primary : colors.foreground },
+                        isActive && { fontWeight: fontWeight.medium },
+                      ]}
+                    >
+                      {l.label}
+                    </Text>
+                    {isActive && <CheckIcon size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function makeStyles(_colors: ReturnType<typeof useTheme>["colors"]) {
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
   return StyleSheet.create({
     container: { flex: 1 },
     scroll: { flex: 1 },
@@ -159,19 +214,57 @@ function makeStyles(_colors: ReturnType<typeof useTheme>["colors"]) {
     themeLabel: { fontSize: fontSize.sm },
     checkBadge: { position: "absolute", top: 8, right: 8 },
     checkMark: { fontSize: 14 },
-    listCard: {
-      borderRadius: radius.xl,
-      borderWidth: 1,
-      overflow: "hidden",
-    },
-    listItem: {
+    langRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
       paddingVertical: 14,
+      borderRadius: radius.xl,
+      borderWidth: 1,
     },
-    listItemText: { fontSize: fontSize.md },
-    checkPrimary: { fontSize: 14 },
+    langRowLabel: { fontSize: fontSize.md },
+    // Bottom sheet
+    modalOverlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.35)",
+    },
+    modalSheet: {
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingBottom: 40,
+    },
+    handleBar: {
+      alignItems: "center",
+      paddingVertical: 12,
+    },
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+    },
+    modalTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: fontWeight.semibold,
+      textAlign: "center",
+      marginBottom: 8,
+    },
+    langList: {
+      marginHorizontal: 16,
+      borderRadius: radius.xl,
+      overflow: "hidden",
+      backgroundColor: colors.background,
+    },
+    langItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+    },
+    langItemText: {
+      fontSize: fontSize.md,
+    },
   });
 }

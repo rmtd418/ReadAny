@@ -28,6 +28,7 @@ function getLanguageName(code: string): string {
     pl: "Polish",
     nl: "Dutch",
     sv: "Swedish",
+    ug: "Uyghur",
   };
   return langMap[code] || code;
 }
@@ -576,14 +577,8 @@ export async function microsoftTranslate(
   const token = await getMicrosoftToken();
   const mappedSource = toMicrosoftLangCode(sourceLang);
   // If source lang is "auto"/"AUTO", empty, or not recognized by Microsoft, omit it for auto-detection
-  // Exception: for zh-Hans/zh-Hant targets, explicitly set the opposite as source
-  // to prevent Microsoft from detecting them as the same language and skipping translation
-  let from = (!sourceLang || sourceLang.toLowerCase() === "auto" || !MS_SUPPORTED_LANGS.has(mappedSource)) ? "" : mappedSource;
+  const from = (!sourceLang || sourceLang.toLowerCase() === "auto" || !MS_SUPPORTED_LANGS.has(mappedSource)) ? "" : mappedSource;
   const to = toMicrosoftLangCode(targetLang);
-
-  if (!from && (to === "zh-Hans" || to === "zh-Hant")) {
-    from = to === "zh-Hans" ? "zh-Hant" : "zh-Hans";
-  }
 
   const body = texts.map((t) => ({ Text: t }));
 

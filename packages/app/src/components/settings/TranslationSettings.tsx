@@ -47,7 +47,7 @@ export function TranslationSettings() {
       provider: {
         ...translationConfig.provider,
         id: providerId as "ai" | "deepl" | "microsoft",
-        name: TRANSLATOR_PROVIDERS.find((p) => p.id === providerId)?.name || "",
+        name: TRANSLATOR_PROVIDERS.find((p) => p.id === providerId)?.labelKey || "",
       },
     });
   };
@@ -116,7 +116,7 @@ export function TranslationSettings() {
                 onClick={() => setProviderOpen(!providerOpen)}
                 className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm hover:bg-muted"
               >
-                <span>{currentProvider?.name || t("settings.selectEngine")}</span>
+                <span>{currentProvider ? t(currentProvider.labelKey) : t("settings.selectEngine")}</span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
               {providerOpen && (
@@ -135,7 +135,7 @@ export function TranslationSettings() {
                           isActive ? "bg-primary/10 text-primary" : "hover:bg-muted"
                         }`}
                       >
-                        <span>{provider.name}</span>
+                        <span>{t(provider.labelKey)}</span>
                         {isActive && <Check className="h-4 w-4 shrink-0" />}
                       </button>
                     );

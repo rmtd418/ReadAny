@@ -346,7 +346,7 @@ export function ProfileScreen() {
         items: [
           {
             icon: PaletteIcon,
-            label: t("settings.appearance", "外观"),
+            label: t("settings.general", "通用"),
             route: "AppearanceSettings" as const,
           },
           {
