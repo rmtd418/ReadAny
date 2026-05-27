@@ -362,9 +362,13 @@ export class WebDavClient {
     }
   }
 
-  /** Test if the server is reachable and credentials are valid */
-  async ping(): Promise<void> {
-    const resp = await this.request("PROPFIND", "/", {
+  /**
+   * Test if the server is reachable and credentials are valid. Pass `path` when
+   * baseUrl is the bare origin; the default "/" probes the root, which
+   * subpath-only servers (e.g. Jianguoyun /dav/) reject.
+   */
+  async ping(path = "/"): Promise<void> {
+    const resp = await this.request("PROPFIND", path, {
       headers: { Depth: "0" },
       body: '<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
       contentType: "application/xml",
@@ -373,7 +377,7 @@ export class WebDavClient {
     if (resp.ok || resp.status === 207) {
       return;
     }
-    throw createHttpWebDavError(resp.status, resp.statusText, "PROPFIND", this.buildUrl("/"));
+    throw createHttpWebDavError(resp.status, resp.statusText, "PROPFIND", this.buildUrl(path));
   }
 
   /** Test connection, returns true if successful */
