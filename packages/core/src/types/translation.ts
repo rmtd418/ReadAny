@@ -33,7 +33,8 @@ export type TranslationTargetLang =
   | "tr"
   | "pl"
   | "nl"
-  | "sv";
+  | "sv"
+  | "ug";
 
 export interface TranslationConfig {
   provider: TranslationProvider;
@@ -66,4 +67,5 @@ export const TRANSLATOR_LANGS: Record<TranslationTargetLang, string> = {
   pl: "Polski",
   nl: "Nederlands",
   sv: "Svenska",
+  ug: "ئۇيغۇرچە",
 };
