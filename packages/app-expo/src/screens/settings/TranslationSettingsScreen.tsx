@@ -100,11 +100,11 @@ export default function TranslationSettingsScreen() {
                       styles.listItem,
                       idx < TRANSLATOR_PROVIDERS.length - 1 && styles.listItemBorder,
                     ]}
-                    onPress={() => handleProviderChange(p.id, p.name)}
+                    onPress={() => handleProviderChange(p.id, p.labelKey)}
                     activeOpacity={0.7}
                   >
                     <View>
-                      <Text style={styles.listItemText}>{p.name}</Text>
+                      <Text style={styles.listItemText}>{t(p.labelKey)}</Text>
                       {p.id === "ai" && (
                         <Text style={styles.listItemSub}>
                           {t("translation.useAIModel", {

@@ -1,11 +1,21 @@
-import { BookOpenIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
+import { BookOpenIcon, ChevronDownIcon, MoonIcon, SunIcon } from "@/components/ui/Icon";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { useTheme } from "@/styles/ThemeContext";
 import type { ThemeMode } from "@/styles/ThemeContext";
 import { fontSize, fontWeight, radius, spacing } from "@/styles/theme";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActionSheetIOS,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SettingsHeader } from "./SettingsHeader";
 
@@ -30,6 +40,7 @@ export default function AppearanceSettingsScreen() {
   const { mode, setMode, colors } = useTheme();
   const layout = useResponsiveLayout();
   const [lang, setLang] = useState(() => i18n.language || "en");
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
   // Update lang state when i18n.language changes
   useEffect(() => {
@@ -38,6 +49,7 @@ export default function AppearanceSettingsScreen() {
 
   const handleLangChange = useCallback(async (code: string) => {
     setLang(code);
+    setShowLangPicker(false);
     try {
       const { changeAndPersistLanguage } = await import("@readany/core/i18n");
       await changeAndPersistLanguage(code);
@@ -46,12 +58,30 @@ export default function AppearanceSettingsScreen() {
     }
   }, []);
 
+  const currentLangLabel = LANGUAGES.find((l) => l.code === lang)?.label || lang;
+
+  const openLangPicker = useCallback(() => {
+    if (Platform.OS === "ios") {
+      const options = [...LANGUAGES.map((l) => l.label), t("common.cancel")];
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: options.length - 1, title: t("settings.language") },
+        (idx) => {
+          if (idx < LANGUAGES.length) {
+            handleLangChange(LANGUAGES[idx].code);
+          }
+        },
+      );
+    } else {
+      setShowLangPicker(true);
+    }
+  }, [handleLangChange, t]);
+
   const s = makeStyles(colors);
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={["top"]}>
       <SettingsHeader
-        title={t("settings.appearanceLanguage", "外观与语言")}
+        title={t("settings.general", "通用")}
         subtitle={t("settings.realtimeHint")}
       />
 
@@ -100,26 +130,46 @@ export default function AppearanceSettingsScreen() {
             </View>
           </View>
 
-          {/* Language */}
+          {/* Language — single row with current value, tap to pick */}
           <View style={s.section}>
             <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>
               {t("settings.language", "语言")}
             </Text>
-            <View style={[s.listCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {LANGUAGES.map((l, idx) => (
+            <TouchableOpacity
+              style={[s.langRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={openLangPicker}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.langRowLabel, { color: colors.foreground }]}>
+                {currentLangLabel}
+              </Text>
+              <ChevronDownIcon size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Android bottom sheet picker */}
+      {Platform.OS !== "ios" && (
+        <Modal
+          visible={showLangPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowLangPicker(false)}
+        >
+          <Pressable style={s.modalOverlay} onPress={() => setShowLangPicker(false)}>
+            <View style={[s.modalSheet, { backgroundColor: colors.card }]}>
+              <Text style={[s.modalTitle, { color: colors.foreground }]}>
+                {t("settings.language")}
+              </Text>
+              {LANGUAGES.map((l) => (
                 <TouchableOpacity
                   key={l.code}
-                  style={[
-                    s.listItem,
-                    idx < LANGUAGES.length - 1 && {
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.border,
-                    },
-                  ]}
+                  style={s.modalItem}
                   onPress={() => handleLangChange(l.code)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.listItemText, { color: colors.foreground }]}>
+                  <Text style={[s.modalItemText, { color: colors.foreground }]}>
                     {l.label}
                   </Text>
                   {lang === l.code && (
@@ -127,10 +177,18 @@ export default function AppearanceSettingsScreen() {
                   )}
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity
+                style={[s.modalCancel, { borderTopColor: colors.border }]}
+                onPress={() => setShowLangPicker(false)}
+              >
+                <Text style={[s.modalCancelText, { color: colors.mutedForeground }]}>
+                  {t("common.cancel")}
+                </Text>
+              </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </ScrollView>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -163,19 +221,50 @@ function makeStyles(_colors: ReturnType<typeof useTheme>["colors"]) {
     themeLabel: { fontSize: fontSize.sm },
     checkBadge: { position: "absolute", top: 8, right: 8 },
     checkMark: { fontSize: 14 },
-    listCard: {
+    langRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: spacing.lg,
+      paddingVertical: 14,
       borderRadius: radius.xl,
       borderWidth: 1,
-      overflow: "hidden",
     },
-    listItem: {
+    langRowLabel: { fontSize: fontSize.md },
+    checkPrimary: { fontSize: 14 },
+    // Modal styles for Android
+    modalOverlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.4)",
+    },
+    modalSheet: {
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingTop: 20,
+      paddingBottom: 34,
+      paddingHorizontal: 8,
+    },
+    modalTitle: {
+      fontSize: fontSize.base,
+      fontWeight: fontWeight.semibold,
+      textAlign: "center",
+      marginBottom: 12,
+    },
+    modalItem: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
       paddingVertical: 14,
     },
-    listItemText: { fontSize: fontSize.md },
-    checkPrimary: { fontSize: 14 },
+    modalItemText: { fontSize: fontSize.md },
+    modalCancel: {
+      marginTop: 8,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      alignItems: "center",
+    },
+    modalCancelText: { fontSize: fontSize.md },
   });
 }
