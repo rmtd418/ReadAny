@@ -87,7 +87,8 @@
     "nextChapter": "Next Chapter",
     "systemVoiceNote": "Choose the system voice in your device settings",
     "browserVoiceNote": "Choose the system voice in your device settings",
-    "stop": "Stop"
+    "stop": "Stop",
+    "noTextFound": "No readable text found on this page"
   },
   "fonts": {
     "title": "Fonts",

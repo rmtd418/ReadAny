@@ -87,7 +87,8 @@
     "nextChapter": "下一章",
     "systemVoiceNote": "系统音色请在设备系统设置中选择",
     "browserVoiceNote": "系统音色请在设备系统设置中选择",
-    "stop": "停止"
+    "stop": "停止",
+    "noTextFound": "当前页面未找到可朗读的文本"
   },
   "fonts": {
     "title": "字体",

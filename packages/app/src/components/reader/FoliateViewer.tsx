@@ -550,11 +550,30 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const sectionIndex = current?.index ?? 0;
           if (!doc) continue;
 
-          const visibleBlocks = Array.from(doc.querySelectorAll(blockSelector)).filter((block) => {
+          let visibleBlocks = Array.from(doc.querySelectorAll(blockSelector)).filter((block) => {
             if (!block.textContent?.trim()) return false;
             if (block.closest(".readany-translation")) return false;
             return isRectVisibleInReader(block.getBoundingClientRect());
           });
+
+          // Fallback: if no standard block elements found (e.g., epub uses only
+          // <div>/<span> for text), try broader selectors
+          if (visibleBlocks.length === 0) {
+            visibleBlocks = Array.from(doc.querySelectorAll("div, section, article, span")).filter(
+              (el) => {
+                if (!el.textContent?.trim()) return false;
+                if (el.closest(".readany-translation")) return false;
+                // Only leaf-level elements with direct text content
+                if (el.querySelector("div, section, article, p")) return false;
+                return isRectVisibleInReader(el.getBoundingClientRect());
+              },
+            );
+          }
+
+          // Last resort: use body directly if still nothing found
+          if (visibleBlocks.length === 0 && doc.body?.textContent?.trim()) {
+            visibleBlocks = [doc.body];
+          }
 
           for (const block of visibleBlocks) {
             const walker = doc.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
