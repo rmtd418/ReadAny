@@ -34,7 +34,8 @@
       "Bash(python3 -c \"import json,sys; print\\('\\\\n'.join\\(json.load\\(sys.stdin\\).get\\('scripts', {}\\).keys\\(\\)\\)\\)\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('test:', d['scripts']['test']\\); print\\('vitest:', d.get\\('devDependencies',{}\\).get\\('vitest'\\)\\)\")",
       "Bash(npx vitest *)",
-      "Bash(awk 'NR>=520 && NR<=580 {print NR\": \"$0}' /Users/tuntuntutu/Project/ReadAny/packages/app/src/stores/library-store.ts)"
+      "Bash(awk 'NR>=520 && NR<=580 {print NR\": \"$0}' /Users/tuntuntutu/Project/ReadAny/packages/app/src/stores/library-store.ts)",
+      "Bash(node *)"
     ]
   }
 }

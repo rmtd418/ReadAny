@@ -10,6 +10,7 @@ import {
   type StatsInsight,
   type StatsReport,
 } from "@readany/core/stats";
+import i18n from "@readany/core/i18n";
 import { cn } from "@readany/core/utils";
 import type { ReactNode } from "react";
 import type { StatsCopy } from "./stats-copy";
@@ -32,64 +33,58 @@ export const DIMENSIONS: StatsDimension[] = ["day", "week", "month", "year", "li
 
 /* ─── Time formatters ─── */
 
-export function formatMinutes(minutes: number, isZh: boolean): string {
-  if (minutes <= 0) return isZh ? "0 分钟" : "0m";
-  if (minutes < 60) return isZh ? `${Math.round(minutes)} 分钟` : `${Math.round(minutes)}m`;
+export function formatMinutes(minutes: number, _isZh?: boolean): string {
+  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesLong");
+  if (minutes < 60) return i18n.t("stats.format.nMinutesLong", { n: Math.round(minutes) });
   const hours = Math.floor(minutes / 60);
   const mins = Math.round(minutes % 60);
-  if (mins <= 0) return isZh ? `${hours} 小时` : `${hours}h`;
-  return isZh ? `${hours} 小时 ${mins} 分钟` : `${hours}h ${mins}m`;
+  if (mins <= 0) return i18n.t("stats.format.nHoursLong", { n: hours });
+  return i18n.t("stats.format.nHoursMinutesLong", { h: hours, m: mins });
 }
 
-export function formatCompactMinutes(minutes: number, isZh = false): string {
-  if (minutes <= 0) return isZh ? "0分" : "0m";
-  if (minutes < 60) return isZh ? `${Math.round(minutes)}分` : `${Math.round(minutes)}m`;
+export function formatCompactMinutes(minutes: number, _isZh = false): string {
+  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
+  if (minutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: Math.round(minutes) });
   const hours = Math.floor(minutes / 60);
   const mins = Math.round(minutes % 60);
-  if (isZh) {
-    return mins > 0 ? `${hours}时${mins}分` : `${hours}时`;
-  }
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { h: hours, m: mins });
+  return i18n.t("stats.format.nHoursCompact", { n: hours });
 }
 
-export function formatChartMinutes(minutes: number, isZh: boolean): string {
-  if (minutes <= 0) return isZh ? "0分" : "0m";
-  if (minutes < 60) return isZh ? `${Math.round(minutes)}分` : `${Math.round(minutes)}m`;
+export function formatChartMinutes(minutes: number, _isZh?: boolean): string {
+  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
+  if (minutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: Math.round(minutes) });
   const hours = Math.floor(minutes / 60);
   const mins = Math.round(minutes % 60);
-  return isZh
-    ? mins > 0
-      ? `${hours}时${mins}分`
-      : `${hours}时`
-    : mins > 0
-      ? `${hours}h${mins}m`
-      : `${hours}h`;
+  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { h: hours, m: mins });
+  return i18n.t("stats.format.nHoursCompact", { n: hours });
 }
 
-export function formatCharacterCount(value: number, isZh: boolean): string {
+export function formatCharacterCount(value: number, _isZh?: boolean): string {
   const rounded = Math.max(0, Math.round(value));
+  const isZh = i18n.language?.startsWith("zh");
 
   if (isZh) {
     if (rounded >= 10000) {
       const wan = rounded / 10000;
       const digits = wan >= 100 ? 0 : 1;
-      return `${wan.toFixed(digits).replace(/\.0$/, "")} 万字`;
+      return i18n.t("stats.format.tenThousandChars", { n: wan.toFixed(digits).replace(/\.0$/, "") });
     }
-    return `${rounded.toLocaleString()} 字`;
+    return i18n.t("stats.format.chars", { n: rounded.toLocaleString() });
   }
 
   if (rounded >= 1000) {
     const thousands = rounded / 1000;
     const digits = thousands >= 100 ? 0 : 1;
-    return `${thousands.toFixed(digits).replace(/\.0$/, "")}k chars`;
+    return i18n.t("stats.format.thousandChars", { n: thousands.toFixed(digits).replace(/\.0$/, "") });
   }
 
-  return `${rounded.toLocaleString()} chars`;
+  return i18n.t("stats.format.chars", { n: rounded.toLocaleString() });
 }
 
-export function formatCharactersPerMinute(value: number, isZh: boolean): string {
+export function formatCharactersPerMinute(value: number, _isZh?: boolean): string {
   const rounded = Math.max(0, Math.round(value));
-  return isZh ? `${rounded.toLocaleString()} 字/分` : `${rounded.toLocaleString()} chars/min`;
+  return i18n.t("stats.format.charsPerMinute", { n: rounded.toLocaleString() });
 }
 
 export function formatClock(timestamp: number | undefined, isZh: boolean): string {

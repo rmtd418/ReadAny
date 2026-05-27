@@ -58,7 +58,8 @@
     "deleteTag": "태그 삭제",
     "noTags": "태그가 없어요",
     "expandTags": "더보기 ({{count}})",
-    "collapseTags": "접기"
+    "collapseTags": "접기",
+    "deleteGroupConfirm": "이 그룹을 삭제하시겠습니까? 책은 삭제되지 않습니다."
   },
   "tabs": {
     "library": "서재",
@@ -461,7 +462,10 @@
     "error": "번역 오류",
     "noApiKey": "먼저 AI 설정을 구성해주세요",
     "noResult": "번역에 실패했어요 — 다시 시도해주세요",
-    "translation": "번역"
+    "translation": "번역",
+    "providerMicrosoft": "Microsoft 번역 (무료)",
+    "providerAI": "AI 번역",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "노랑",
@@ -981,7 +985,14 @@
     "syncConfig": "동기화 설정",
     "transferConfig": "설정 전송",
     "vectorConfig": "벡터 설정",
-    "webdavAllowInsecure": "비보안 연결 허용"
+    "webdavAllowInsecure": "비보안 연결 허용",
+    "ai_provider_zhipu": "智谱 GLM",
+    "ai_provider_aliyun": "알리바바클라우드 통의",
+    "ai_provider_custom": "커스텀 (OpenAI 호환)",
+    "ai_currentLabel": "현재:",
+    "ai_searchModels": "모델 검색...",
+    "ai_noMatchingResults": "일치하는 결과 없음",
+    "ai_totalModels": "총 {{count}}개 모델"
   },
   "tour": {
     "next": "다음",
@@ -1221,8 +1232,8 @@
       "annualShelfDesc": "최근 몇 년의 컴팩트한 스트립으로 장기 독서 이야기를 한눈에 볼 수 있어요.",
       "milestones": "마일스톤",
       "milestonesDesc": "전체 기간 보기에서 독서 여정의 기억할 만한 순간들을 추가해요.",
-      "sharePreview": "공유 카드 미리보기",
-      "sharePreviewDesc": "이미지 내보내기가 곧 추가돼요. 지금은 계층과 분위기를 미리 볼 수 있어요.",
+      "sharePreview": "배지 벽 공유",
+      "sharePreviewDesc": "공유하거나 로컬에 저장할 수 있는 배지 포스터를 생성해요.",
       "noDataTitle": "이 기간에 아직 독서 활동이 없어요",
       "noDataDesc": "조금만 읽으면 이 페이지가 훨씬 풍부한 이야기를 들려줄 거예요.",
       "noTopBooks": "이 기간에 아직 눈에 띄는 책이 없어요.",
@@ -1337,8 +1348,6 @@
       "badgeNotEarned": "아직 미획득",
       "myBadges": "내 배지",
       "myBadgesDesc": "독서 마일스톤",
-      "sharePreview": "배지 벽 공유",
-      "sharePreviewDesc": "공유하거나 로컬에 저장할 수 있는 배지 포스터를 생성해요.",
       "badgeSharePreparing": "준비 중...",
       "badgeShareAction": "이미지 공유",
       "badgeSaveAction": "사진에 저장",
@@ -1425,6 +1434,32 @@
       "badge_perfect-week_desc": "일주일 내내 매일 독서",
       "badge_midnight-reader_title": "심야 독서가",
       "badge_midnight-reader_desc": "새벽 3시~5시 사이에 독서"
+    },
+    "format": {
+      "zeroMinutes": "0분",
+      "minutes": "{{m}}분",
+      "hours": "{{h}}시간",
+      "hoursMinutes": "{{h}}시간 {{m}}분",
+      "compactZero": "0분",
+      "compactMinutes": "{{m}}분",
+      "compactHours": "{{h}}시{{m}}분",
+      "compactHoursOnly": "{{h}}시",
+      "chartZero": "0",
+      "chartMinutes": "{{m}}분",
+      "chartHoursMinutes": "{{h}}시{{m}}분",
+      "chartHoursOnly": "{{h}}시",
+      "tenThousandChars": "{{count}}만자",
+      "chars": "{{count}}자",
+      "charsPerMinute": "{{count}}자/분",
+      "zeroMinutesLong": "0분",
+      "nMinutesLong": "{{n}}분",
+      "nHoursLong": "{{n}}시간",
+      "nHoursMinutesLong": "{{n}}시간 {{m}}분",
+      "zeroMinutesCompact": "0분",
+      "nMinutesCompact": "{{n}}분",
+      "nHoursCompact": "{{n}}시",
+      "nHoursMinutesCompact": "{{n}}시{{m}}분",
+      "thousandChars": "{{n}}천 자"
     }
   },
   "vectorize": {
@@ -1530,7 +1565,12 @@
     "nextChapter": "다음 챕터",
     "systemVoiceNote": "기기 설정에서 시스템 음성을 선택하세요",
     "browserVoiceNote": "기기 설정에서 시스템 음성을 선택하세요",
-    "stop": "중지"
+    "stop": "중지",
+    "engineDescEdge": "Microsoft · 다국어",
+    "engineDescDashscope": "알리바바클라우드 통의 · 중국어 최적화",
+    "engineDescSystem": "시스템 내장 · 무료",
+    "player": "TTS 플레이어",
+    "listeningToBook": "오디오북 재생 중"
   },
   "fonts": {
     "title": "글꼴",
@@ -1572,5 +1612,13 @@
     "add": "추가",
     "presets": "추천 글꼴 (온라인, 탭하여 추가)",
     "systemDefault": "시스템 기본"
+  },
+  "window": {
+    "minimize": "최소화",
+    "maximize": "최대화",
+    "restore": "복원",
+    "enterFullscreen": "전체 화면",
+    "exitFullscreen": "전체 화면 종료",
+    "close": "닫기"
   }
 }

@@ -58,7 +58,8 @@
     "deleteTag": "删除标签",
     "noTags": "还没有标签",
     "expandTags": "展开更多 ({{count}})",
-    "collapseTags": "收起"
+    "collapseTags": "收起",
+    "deleteGroupConfirm": "确定删除此分组？书籍不会被删除。"
   },
   "tabs": {
     "library": "书库",
@@ -461,7 +462,10 @@
     "error": "翻译出错",
     "noApiKey": "请先配置 AI 设置",
     "noResult": "翻译失败，请重试",
-    "translation": "译文"
+    "translation": "译文",
+    "providerMicrosoft": "微软翻译（免费）",
+    "providerAI": "AI 翻译",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "黄色",
@@ -697,6 +701,13 @@
     "ai_noEndpoints": "暂无端点",
     "ai_setDefault": "设为默认",
     "ai_name": "名称",
+    "ai_provider_zhipu": "智谱 GLM",
+    "ai_provider_aliyun": "阿里云通义",
+    "ai_provider_custom": "Custom (OpenAI Compatible)",
+    "ai_currentLabel": "当前",
+    "ai_searchModels": "搜索模型...",
+    "ai_noMatchingResults": "无匹配结果",
+    "ai_totalModels": "共 {{count}} 个模型",
     "ai_providerLabel": "提供商",
     "ai_deleteEndpoint": "删除端点",
     "ai_globalParams": "全局参数",
@@ -1023,6 +1034,20 @@
     "nextPeriod": "下一期",
     "viewHeatmap": "热力图",
     "viewBarChart": "柱状图",
+    "format": {
+      "zeroMinutesLong": "0 分钟",
+      "nMinutesLong": "{{n}} 分钟",
+      "nHoursLong": "{{n}} 小时",
+      "nHoursMinutesLong": "{{n}} 小时 {{m}} 分钟",
+      "zeroMinutesCompact": "0分",
+      "nMinutesCompact": "{{n}}分",
+      "nHoursCompact": "{{n}}时",
+      "nHoursMinutesCompact": "{{n}}时{{m}}分",
+      "tenThousandChars": "{{n}} 万字",
+      "thousandChars": "{{n}}k 字",
+      "chars": "{{n}} 字",
+      "charsPerMinute": "{{n}} 字/分"
+    },
     "desktop": {
       "pageTitle": "阅读统计",
       "pageSubtitle": "按今天、本周、本月、今年和总查看你的阅读节奏，把热度、封面和长期习惯放进同一张统计年鉴。",
@@ -1080,8 +1105,8 @@
       "annualShelfDesc": "把近几年的阅读缩成一排短册，回头看会很像自己的阅读年鉴。",
       "milestones": "阅读里程碑",
       "milestonesDesc": "总视图会额外记录和 ReadAny 一起走过的重要节点。",
-      "sharePreview": "分享卡片预览",
-      "sharePreviewDesc": "后续会直接导出成图片，这里先把布局和信息层级预览出来。",
+      "sharePreview": "分享勋章墙",
+      "sharePreviewDesc": "生成一张勋章海报，分享到社交平台或保存到本地。",
       "noDataTitle": "这段时间还没有阅读记录",
       "noDataDesc": "先读一点点，统计页就会慢慢长出自己的节奏和故事。",
       "noTopBooks": "这一周期还没有形成主读书籍。",
@@ -1196,8 +1221,6 @@
       "badgeNotEarned": "尚未解锁",
       "myBadges": "我的勋章",
       "myBadgesDesc": "记录我的阅读成就",
-      "sharePreview": "分享勋章墙",
-      "sharePreviewDesc": "生成一张勋章海报，分享到社交平台或保存到本地。",
       "badgeSharePreparing": "生成中...",
       "badgeShareAction": "分享图片",
       "badgeSaveAction": "保存到相册",
@@ -1319,6 +1342,9 @@
     "browserEngineDesc": "免费离线，使用设备系统语音",
     "dashscopeEngine": "DashScope",
     "dashscopeEngineDesc": "高质量云端语音，需要 API 密钥",
+    "engineDescEdge": "Microsoft · 多语言",
+    "engineDescDashscope": "阿里云通义 · 中文优化",
+    "engineDescSystem": "系统内置 · 免费",
     "voice": "语音",
     "defaultVoice": "默认语音",
     "sleepTimer": "定时停止",
@@ -1342,6 +1368,8 @@
     "playing": "正在播放",
     "paused": "已暂停",
     "stopped": "已停止",
+    "player": "TTS 播放器",
+    "listeningToBook": "正在听书",
     "slower": "减速",
     "faster": "加速",
     "rate": "语速",
@@ -1572,5 +1600,13 @@
     "add": "添加",
     "presets": "推荐字体（在线，点击即可添加）",
     "systemDefault": "系统默认"
+  },
+  "window": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "enterFullscreen": "进入全屏",
+    "exitFullscreen": "退出全屏",
+    "close": "关闭"
   }
 }

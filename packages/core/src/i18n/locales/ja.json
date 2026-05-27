@@ -58,7 +58,8 @@
     "deleteTag": "タグを削除",
     "noTags": "タグはまだありません",
     "expandTags": "もっと表示 ({{count}})",
-    "collapseTags": "折りたたむ"
+    "collapseTags": "折りたたむ",
+    "deleteGroupConfirm": "このグループを削除しますか？書籍は削除されません。"
   },
   "tabs": {
     "library": "ライブラリ",
@@ -461,7 +462,10 @@
     "error": "翻訳エラー",
     "noApiKey": "先にAI設定を行ってください",
     "noResult": "翻訳に失敗しました — もう一度お試しください",
-    "translation": "翻訳"
+    "translation": "翻訳",
+    "providerMicrosoft": "Microsoft翻訳（無料）",
+    "providerAI": "AI翻訳",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "黄色",
@@ -981,7 +985,14 @@
     "syncConfig": "同期設定",
     "transferConfig": "設定を転送",
     "vectorConfig": "ベクトル設定",
-    "webdavAllowInsecure": "安全でない接続を許可"
+    "webdavAllowInsecure": "安全でない接続を許可",
+    "ai_provider_zhipu": "智譜 GLM",
+    "ai_provider_aliyun": "アリババクラウド通義",
+    "ai_provider_custom": "カスタム（OpenAI互換）",
+    "ai_currentLabel": "現在:",
+    "ai_searchModels": "モデルを検索...",
+    "ai_noMatchingResults": "一致する結果がありません",
+    "ai_totalModels": "{{count}}モデル"
   },
   "tour": {
     "next": "次へ",
@@ -1221,8 +1232,8 @@
       "annualShelfDesc": "直近数年のコンパクトなストリップで、長期的な読書の物語を年鑑のように表示します。",
       "milestones": "マイルストーン",
       "milestonesDesc": "全期間表示では、読書の旅の印象的な瞬間を追加します。",
-      "sharePreview": "共有カードプレビュー",
-      "sharePreviewDesc": "画像エクスポートは近日公開。今はヒエラルキーと雰囲気のプレビューです。",
+      "sharePreview": "バッジウォールを共有",
+      "sharePreviewDesc": "共有またはローカル保存できるバッジポスターを生成します。",
       "noDataTitle": "この期間にはまだ読書アクティビティがありません",
       "noDataDesc": "少し読書すると、このページがもっと豊かな物語を語り始めます。",
       "noTopBooks": "この期間にはまだ目立った本がありません。",
@@ -1337,8 +1348,6 @@
       "badgeNotEarned": "未獲得",
       "myBadges": "マイバッジ",
       "myBadgesDesc": "読書のマイルストーン",
-      "sharePreview": "バッジウォールを共有",
-      "sharePreviewDesc": "共有またはローカル保存できるバッジポスターを生成します。",
       "badgeSharePreparing": "準備中...",
       "badgeShareAction": "画像を共有",
       "badgeSaveAction": "写真に保存",
@@ -1425,6 +1434,32 @@
       "badge_perfect-week_desc": "1週間毎日読書した",
       "badge_midnight-reader_title": "深夜の読者",
       "badge_midnight-reader_desc": "午前3時から5時の間に読書した"
+    },
+    "format": {
+      "zeroMinutes": "0分",
+      "minutes": "{{m}}分",
+      "hours": "{{h}}時間",
+      "hoursMinutes": "{{h}}時間{{m}}分",
+      "compactZero": "0分",
+      "compactMinutes": "{{m}}分",
+      "compactHours": "{{h}}時{{m}}分",
+      "compactHoursOnly": "{{h}}時",
+      "chartZero": "0",
+      "chartMinutes": "{{m}}分",
+      "chartHoursMinutes": "{{h}}時{{m}}分",
+      "chartHoursOnly": "{{h}}時",
+      "tenThousandChars": "{{count}}万字",
+      "chars": "{{count}}字",
+      "charsPerMinute": "{{count}}字/分",
+      "zeroMinutesLong": "0分",
+      "nMinutesLong": "{{n}}分",
+      "nHoursLong": "{{n}}時間",
+      "nHoursMinutesLong": "{{n}}時間{{m}}分",
+      "zeroMinutesCompact": "0分",
+      "nMinutesCompact": "{{n}}分",
+      "nHoursCompact": "{{n}}時",
+      "nHoursMinutesCompact": "{{n}}時{{m}}分",
+      "thousandChars": "{{n}}千字"
     }
   },
   "vectorize": {
@@ -1530,7 +1565,12 @@
     "nextChapter": "次の章",
     "systemVoiceNote": "デバイスの設定でシステム音声を選択してください",
     "browserVoiceNote": "デバイスの設定でシステム音声を選択してください",
-    "stop": "停止"
+    "stop": "停止",
+    "engineDescEdge": "Microsoft · 多言語",
+    "engineDescDashscope": "アリババクラウド通義 · 中国語最適化",
+    "engineDescSystem": "システム内蔵 · 無料",
+    "player": "TTSプレーヤー",
+    "listeningToBook": "オーディオブック再生中"
   },
   "fonts": {
     "title": "フォント",
@@ -1572,5 +1612,13 @@
     "add": "追加",
     "presets": "おすすめフォント（オンライン、タップで追加）",
     "systemDefault": "システムデフォルト"
+  },
+  "window": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "元に戻す",
+    "enterFullscreen": "全画面表示",
+    "exitFullscreen": "全画面解除",
+    "close": "閉じる"
   }
 }

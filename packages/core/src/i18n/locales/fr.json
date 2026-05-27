@@ -58,7 +58,8 @@
     "deleteTag": "Supprimer le tag",
     "noTags": "Aucun tag pour l'instant",
     "expandTags": "Afficher plus ({{count}})",
-    "collapseTags": "Afficher moins"
+    "collapseTags": "Afficher moins",
+    "deleteGroupConfirm": "Supprimer ce groupe ? Les livres ne seront pas supprimés."
   },
   "tabs": {
     "library": "Bibliothèque",
@@ -461,7 +462,10 @@
     "error": "Erreur de traduction",
     "noApiKey": "Veuillez d'abord configurer les paramètres IA",
     "noResult": "Échec de la traduction — veuillez réessayer",
-    "translation": "Traduction"
+    "translation": "Traduction",
+    "providerMicrosoft": "Microsoft Traduction (Gratuit)",
+    "providerAI": "Traduction IA",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "Jaune",
@@ -981,7 +985,14 @@
     "syncConfig": "Configuration de synchronisation",
     "transferConfig": "Transférer la configuration",
     "vectorConfig": "Configuration vectorielle",
-    "webdavAllowInsecure": "Autoriser les connexions non sécurisées"
+    "webdavAllowInsecure": "Autoriser les connexions non sécurisées",
+    "ai_provider_zhipu": "Zhipu GLM",
+    "ai_provider_aliyun": "Alibaba Cloud Tongyi",
+    "ai_provider_custom": "Personnalisé (Compatible OpenAI)",
+    "ai_currentLabel": "Actuel :",
+    "ai_searchModels": "Rechercher un modèle...",
+    "ai_noMatchingResults": "Aucun résultat",
+    "ai_totalModels": "{{count}} modèles au total"
   },
   "tour": {
     "next": "Suivant",
@@ -1221,8 +1232,8 @@
       "annualShelfDesc": "Une bande compacte des années récentes pour que votre histoire de lecture à long terme ressemble à un vrai almanach.",
       "milestones": "Étapes clés",
       "milestonesDesc": "La vue globale ajoute des moments mémorables tout au long de votre parcours de lecture.",
-      "sharePreview": "Aperçu de la carte de partage",
-      "sharePreviewDesc": "L'exportation d'image arrive bientôt. Pour l'instant, ceci prévisualise la hiérarchie et l'ambiance.",
+      "sharePreview": "Partager le mur de badges",
+      "sharePreviewDesc": "Générez un poster de badges que vous pouvez partager ou sauvegarder localement.",
       "noDataTitle": "Aucune activité de lecture pour cette période",
       "noDataDesc": "Lisez un peu et cette page commencera à raconter une histoire bien plus riche.",
       "noTopBooks": "Aucun livre remarquable pour cette période.",
@@ -1337,8 +1348,6 @@
       "badgeNotEarned": "Pas encore obtenu",
       "myBadges": "Mes badges",
       "myBadgesDesc": "Étapes de lecture",
-      "sharePreview": "Partager le mur de badges",
-      "sharePreviewDesc": "Générez un poster de badges que vous pouvez partager ou sauvegarder localement.",
       "badgeSharePreparing": "Préparation...",
       "badgeShareAction": "Partager l'image",
       "badgeSaveAction": "Enregistrer dans les photos",
@@ -1425,6 +1434,32 @@
       "badge_perfect-week_desc": "Lire tous les jours pendant une semaine entière",
       "badge_midnight-reader_title": "Lecteur de minuit",
       "badge_midnight-reader_desc": "Lire entre 3h et 5h du matin"
+    },
+    "format": {
+      "zeroMinutes": "0 min",
+      "minutes": "{{m}} min",
+      "hours": "{{h}} h",
+      "hoursMinutes": "{{h}} h {{m}} min",
+      "compactZero": "0m",
+      "compactMinutes": "{{m}}m",
+      "compactHours": "{{h}}h{{m}}m",
+      "compactHoursOnly": "{{h}}h",
+      "chartZero": "0",
+      "chartMinutes": "{{m}} min",
+      "chartHoursMinutes": "{{h}}h{{m}}m",
+      "chartHoursOnly": "{{h}}h",
+      "tenThousandChars": "{{count}}0k car.",
+      "chars": "{{count}} car.",
+      "charsPerMinute": "{{count}} car./min",
+      "zeroMinutesLong": "0 minute",
+      "nMinutesLong": "{{n}} minutes",
+      "nHoursLong": "{{n}} heures",
+      "nHoursMinutesLong": "{{n}} h {{m}} min",
+      "zeroMinutesCompact": "0m",
+      "nMinutesCompact": "{{n}}m",
+      "nHoursCompact": "{{n}}h",
+      "nHoursMinutesCompact": "{{n}}h{{m}}m",
+      "thousandChars": "{{n}}k car."
     }
   },
   "vectorize": {
@@ -1530,7 +1565,12 @@
     "nextChapter": "Chapitre suivant",
     "systemVoiceNote": "Choisissez la voix système dans les paramètres de votre appareil",
     "browserVoiceNote": "Choisissez la voix système dans les paramètres de votre appareil",
-    "stop": "Arrêter"
+    "stop": "Arrêter",
+    "engineDescEdge": "Microsoft · Multilingue",
+    "engineDescDashscope": "Alibaba Tongyi · Chinois optimisé",
+    "engineDescSystem": "Système intégré · Gratuit",
+    "player": "Lecteur TTS",
+    "listeningToBook": "Lecture audio en cours"
   },
   "fonts": {
     "title": "Polices",
@@ -1572,5 +1612,13 @@
     "add": "Ajouter",
     "presets": "Polices recommandées (en ligne, appuyez pour ajouter)",
     "systemDefault": "Système par défaut"
+  },
+  "window": {
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "restore": "Restaurer",
+    "enterFullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran",
+    "close": "Fermer"
   }
 }

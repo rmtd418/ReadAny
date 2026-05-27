@@ -58,7 +58,8 @@
     "deleteTag": "Eliminar etiqueta",
     "noTags": "Aún no hay etiquetas",
     "expandTags": "Mostrar más ({{count}})",
-    "collapseTags": "Mostrar menos"
+    "collapseTags": "Mostrar menos",
+    "deleteGroupConfirm": "¿Eliminar este grupo? Los libros no se eliminarán."
   },
   "tabs": {
     "library": "Biblioteca",
@@ -461,7 +462,10 @@
     "error": "Error de traducción",
     "noApiKey": "Configura los ajustes de IA primero",
     "noResult": "La traducción falló — intenta de nuevo",
-    "translation": "Traducción"
+    "translation": "Traducción",
+    "providerMicrosoft": "Microsoft Traducción (Gratis)",
+    "providerAI": "Traducción IA",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "Amarillo",
@@ -981,7 +985,14 @@
     "syncConfig": "Configuración de sincronización",
     "transferConfig": "Transferir configuración",
     "vectorConfig": "Configuración vectorial",
-    "webdavAllowInsecure": "Permitir conexiones inseguras"
+    "webdavAllowInsecure": "Permitir conexiones inseguras",
+    "ai_provider_zhipu": "Zhipu GLM",
+    "ai_provider_aliyun": "Alibaba Cloud Tongyi",
+    "ai_provider_custom": "Personalizado (Compatible OpenAI)",
+    "ai_currentLabel": "Actual:",
+    "ai_searchModels": "Buscar modelo...",
+    "ai_noMatchingResults": "Sin resultados",
+    "ai_totalModels": "{{count}} modelos en total"
   },
   "tour": {
     "next": "Siguiente",
@@ -1221,8 +1232,8 @@
       "annualShelfDesc": "Una franja compacta de años recientes para que tu historia de lectura a largo plazo se sienta como un verdadero almanaque.",
       "milestones": "Hitos",
       "milestonesDesc": "La vista de todo el tiempo agrega momentos memorables a lo largo de tu viaje de lectura completo.",
-      "sharePreview": "Vista previa de tarjeta para compartir",
-      "sharePreviewDesc": "La exportación de imagen viene próximamente. Por ahora, esto muestra la jerarquía y el estilo.",
+      "sharePreview": "Compartir muro de insignias",
+      "sharePreviewDesc": "Genera un póster de insignias que puedes compartir o guardar localmente.",
       "noDataTitle": "Aún no hay actividad de lectura en este período",
       "noDataDesc": "Lee un poco y esta página comenzará a contar una historia mucho más rica.",
       "noTopBooks": "Aún no hay libros destacados en este período.",
@@ -1337,8 +1348,6 @@
       "badgeNotEarned": "Aún no obtenida",
       "myBadges": "Mis insignias",
       "myBadgesDesc": "Hitos de lectura",
-      "sharePreview": "Compartir muro de insignias",
-      "sharePreviewDesc": "Genera un póster de insignias que puedes compartir o guardar localmente.",
       "badgeSharePreparing": "Preparando...",
       "badgeShareAction": "Compartir imagen",
       "badgeSaveAction": "Guardar en fotos",
@@ -1425,6 +1434,32 @@
       "badge_perfect-week_desc": "Leíste todos los días durante una semana entera",
       "badge_midnight-reader_title": "Lector de medianoche",
       "badge_midnight-reader_desc": "Leíste entre las 3am y las 5am"
+    },
+    "format": {
+      "zeroMinutes": "0 min",
+      "minutes": "{{m}} min",
+      "hours": "{{h}} h",
+      "hoursMinutes": "{{h}} h {{m}} min",
+      "compactZero": "0m",
+      "compactMinutes": "{{m}}m",
+      "compactHours": "{{h}}h{{m}}m",
+      "compactHoursOnly": "{{h}}h",
+      "chartZero": "0",
+      "chartMinutes": "{{m}} min",
+      "chartHoursMinutes": "{{h}}h{{m}}m",
+      "chartHoursOnly": "{{h}}h",
+      "tenThousandChars": "{{count}}0k car.",
+      "chars": "{{count}} car.",
+      "charsPerMinute": "{{count}} car./min",
+      "zeroMinutesLong": "0 minutos",
+      "nMinutesLong": "{{n}} minutos",
+      "nHoursLong": "{{n}} horas",
+      "nHoursMinutesLong": "{{n}} h {{m}} min",
+      "zeroMinutesCompact": "0m",
+      "nMinutesCompact": "{{n}}m",
+      "nHoursCompact": "{{n}}h",
+      "nHoursMinutesCompact": "{{n}}h{{m}}m",
+      "thousandChars": "{{n}}k car."
     }
   },
   "vectorize": {
@@ -1530,7 +1565,12 @@
     "nextChapter": "Capítulo siguiente",
     "systemVoiceNote": "Elige la voz del sistema en la configuración de tu dispositivo",
     "browserVoiceNote": "Elige la voz del sistema en la configuración de tu dispositivo",
-    "stop": "Detener"
+    "stop": "Detener",
+    "engineDescEdge": "Microsoft · Multilingüe",
+    "engineDescDashscope": "Alibaba Tongyi · Chino optimizado",
+    "engineDescSystem": "Sistema integrado · Gratis",
+    "player": "Reproductor TTS",
+    "listeningToBook": "Reproduciendo audiolibro"
   },
   "fonts": {
     "title": "Fuentes",
@@ -1572,5 +1612,13 @@
     "add": "Agregar",
     "presets": "Fuentes recomendadas (en línea, toca para agregar)",
     "systemDefault": "Predeterminada del sistema"
+  },
+  "window": {
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "restore": "Restaurar",
+    "enterFullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "close": "Cerrar"
   }
 }

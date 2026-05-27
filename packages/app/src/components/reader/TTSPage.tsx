@@ -394,10 +394,10 @@ export function TTSPage({
                         eng === "edge" ? "Edge TTS" : eng === "dashscope" ? "DashScope" : t("tts.system");
                       const desc =
                         eng === "edge"
-                          ? "Microsoft · 多语言"
+                          ? t("tts.engineDescEdge")
                           : eng === "dashscope"
-                            ? "阿里云通义 · 中文优化"
-                            : "系统内置 · 免费";
+                            ? t("tts.engineDescDashscope")
+                            : t("tts.engineDescSystem");
                       return (
                         <button
                           key={eng}

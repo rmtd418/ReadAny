@@ -58,7 +58,8 @@
     "deleteTag": "Delete Tag",
     "noTags": "No tags yet",
     "expandTags": "Show more ({{count}})",
-    "collapseTags": "Show less"
+    "collapseTags": "Show less",
+    "deleteGroupConfirm": "Delete this group? Books will not be deleted."
   },
   "tabs": {
     "library": "Library",
@@ -461,7 +462,10 @@
     "error": "Translation error",
     "noApiKey": "Please configure AI settings first",
     "noResult": "Translation failed — please try again",
-    "translation": "Translation"
+    "translation": "Translation",
+    "providerMicrosoft": "Microsoft Translate (Free)",
+    "providerAI": "AI Translation",
+    "providerDeepL": "DeepL"
   },
   "highlights": {
     "yellow": "Yellow",
@@ -697,6 +701,13 @@
     "ai_noEndpoints": "No endpoints configured",
     "ai_setDefault": "Set as Default",
     "ai_name": "Name",
+    "ai_provider_zhipu": "Zhipu GLM",
+    "ai_provider_aliyun": "Alibaba Cloud Tongyi",
+    "ai_provider_custom": "Custom (OpenAI Compatible)",
+    "ai_currentLabel": "Current",
+    "ai_searchModels": "Search models...",
+    "ai_noMatchingResults": "No matching results",
+    "ai_totalModels": "{{count}} models total",
     "webdavUrl": "WebDAV Server URL",
     "webdavUsername": "Username",
     "webdavPassword": "App Password",
@@ -1164,6 +1175,20 @@
     "nextPeriod": "Next",
     "viewHeatmap": "Heatmap",
     "viewBarChart": "Bar Chart",
+    "format": {
+      "zeroMinutesLong": "0 minutes",
+      "nMinutesLong": "{{n}} minutes",
+      "nHoursLong": "{{n}} hours",
+      "nHoursMinutesLong": "{{n}} hours {{m}} minutes",
+      "zeroMinutesCompact": "0m",
+      "nMinutesCompact": "{{n}}m",
+      "nHoursCompact": "{{n}}h",
+      "nHoursMinutesCompact": "{{n}}h{{m}}m",
+      "tenThousandChars": "{{n}}k chars",
+      "thousandChars": "{{n}}k chars",
+      "chars": "{{n}} chars",
+      "charsPerMinute": "{{n}} chars/min"
+    },
     "desktop": {
       "pageTitle": "Reading Statistics",
       "pageSubtitle": "See your reading across today, this week, this month, this year, and all time in one place.",
@@ -1460,6 +1485,9 @@
     "browserEngineDesc": "Free offline, uses the device system voice",
     "dashscopeEngine": "DashScope",
     "dashscopeEngineDesc": "High-quality cloud voice, requires API key",
+    "engineDescEdge": "Microsoft · Multilingual",
+    "engineDescDashscope": "Alibaba Cloud Tongyi · Chinese optimized",
+    "engineDescSystem": "Built-in · Free",
     "voice": "Voice",
     "defaultVoice": "Default Voice",
     "sleepTimer": "Sleep timer",
@@ -1483,6 +1511,8 @@
     "playing": "Playing",
     "paused": "Paused",
     "stopped": "Stopped",
+    "player": "TTS Player",
+    "listeningToBook": "Listening to book",
     "slower": "Slower",
     "faster": "Faster",
     "rate": "Rate",
@@ -1572,5 +1602,13 @@
     "add": "Add",
     "presets": "Recommended fonts (online, tap to add)",
     "systemDefault": "System default"
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "enterFullscreen": "Enter Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
+    "close": "Close"
   }
 }

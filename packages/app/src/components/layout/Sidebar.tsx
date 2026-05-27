@@ -233,7 +233,7 @@ export function HomeSidebar() {
                           onContextMenu={(e) => {
                             e.preventDefault();
                             const action = window.confirm(
-                              `${group.name}\n\n确定删除此分组？书籍不会被删除。`,
+                              `${group.name}\n\n${t("sidebar.deleteGroupConfirm")}`,
                             );
                             if (action) void removeGroup(group.id);
                           }}
