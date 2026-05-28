@@ -98,6 +98,10 @@ export function ChatScreen() {
   const [showSidebar, setShowSidebar] = useState(false);
   const sidebarAnim = useRef(new Animated.Value(-sidebarWidth)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  const showSidebarRef = useRef(showSidebar);
+  useEffect(() => {
+    showSidebarRef.current = showSidebar;
+  }, [showSidebar]);
 
   useEffect(() => {
     if (isTabletLandscape) {
@@ -106,9 +110,10 @@ export function ChatScreen() {
       backdropAnim.setValue(0);
       return;
     }
-
-    sidebarAnim.setValue(showSidebar ? 0 : -sidebarWidth);
-  }, [backdropAnim, isTabletLandscape, showSidebar, sidebarAnim, sidebarWidth]);
+    if (!showSidebarRef.current) {
+      sidebarAnim.setValue(-sidebarWidth);
+    }
+  }, [backdropAnim, isTabletLandscape, sidebarAnim, sidebarWidth]);
 
   const openSidebar = useCallback(() => {
     if (isTabletLandscape) return;
@@ -142,7 +147,9 @@ export function ChatScreen() {
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => setShowSidebar(false));
+    ]).start(({ finished }) => {
+      if (finished) setShowSidebar(false);
+    });
   }, [backdropAnim, isTabletLandscape, sidebarAnim, sidebarWidth]);
 
   // Chat store
@@ -509,9 +516,15 @@ export function ChatScreen() {
       )}
 
       {/* Thread sidebar overlay */}
-      {showSidebar && !isTabletLandscape && (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 20 }]} pointerEvents="box-none">
-          <Animated.View style={[s.sidebarBackdrop, { opacity: backdropAnim }]}>
+      {!isTabletLandscape && (
+        <View
+          style={[StyleSheet.absoluteFill, { zIndex: 20 }]}
+          pointerEvents={showSidebar ? "box-none" : "none"}
+        >
+          <Animated.View
+            style={[s.sidebarBackdrop, { opacity: backdropAnim }]}
+            pointerEvents={showSidebar ? "auto" : "none"}
+          >
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSidebar} />
           </Animated.View>
           <Animated.View
