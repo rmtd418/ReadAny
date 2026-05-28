@@ -125,5 +125,17 @@
     "orderedList": "번호 목록",
     "blockquote": "인용구",
     "horizontalRule": "구분선"
+  },
+  "ruby": {
+    "title": "발음 표기",
+    "desc": "한자 위에 병음이나 후리가나를 표시합니다. 먼저 사전 패키지를 다운로드하세요.",
+    "dictZh": "중국어 (병음)",
+    "dictJa": "일본어 (후리가나)",
+    "download": "다운로드",
+    "mode": "표기 모드",
+    "off": "끄기",
+    "pinyin": "병음",
+    "zhuyin": "주음부호 (ㄅㄆㄇ)",
+    "furigana": "후리가나"
   }
 }

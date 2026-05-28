@@ -125,5 +125,17 @@
     "orderedList": "Ordered List",
     "blockquote": "Blockquote",
     "horizontalRule": "Horizontal Rule"
+  },
+  "ruby": {
+    "title": "Pronunciation",
+    "desc": "Show pinyin or furigana above characters. Download the dictionary package first.",
+    "dictZh": "Chinese (Pinyin)",
+    "dictJa": "Japanese (Furigana)",
+    "download": "Download",
+    "mode": "Annotation Mode",
+    "off": "Off",
+    "pinyin": "Pinyin",
+    "zhuyin": "Zhùyīn (ㄅㄆㄇ)",
+    "furigana": "Furigana (ふりがな)"
   }
 }

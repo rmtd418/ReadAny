@@ -125,5 +125,17 @@
     "orderedList": "Lista numerada",
     "blockquote": "Cita",
     "horizontalRule": "Línea horizontal"
+  },
+  "ruby": {
+    "title": "Pronunciación",
+    "desc": "Mostrar pinyin o furigana sobre los caracteres. Descarga primero el diccionario.",
+    "dictZh": "Chino (Pinyin)",
+    "dictJa": "Japonés (Furigana)",
+    "download": "Descargar",
+    "mode": "Modo de anotación",
+    "off": "Desactivado",
+    "pinyin": "Pinyin",
+    "zhuyin": "Zhùyīn (ㄅㄆㄇ)",
+    "furigana": "Furigana (ふりがな)"
   }
 }

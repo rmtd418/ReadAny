@@ -191,10 +191,10 @@ function RubySettingsSection() {
   return (
     <section className="rounded-lg bg-muted/60 p-4">
       <h2 className="mb-4 text-sm font-medium text-foreground">
-        {t("reader.ruby", "Pronunciation")}
+        {t("ruby.title")}
       </h2>
       <p className="mb-4 text-xs text-muted-foreground">
-        {t("reader.rubyDesc", "Show pinyin/furigana above characters. Download the dictionary first.")}
+        {t("ruby.desc")}
       </p>
 
       <div className="space-y-4">
@@ -202,7 +202,7 @@ function RubySettingsSection() {
         <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
           <div>
             <span className="text-sm text-foreground">
-              {t("reader.rubyDictZh", "Chinese (Pinyin)")}
+              {t("ruby.dictZh")}
             </span>
             <span className="ml-2 text-xs text-muted-foreground">~3MB</span>
           </div>
@@ -230,7 +230,7 @@ function RubySettingsSection() {
               ) : (
                 <>
                   <Download className="h-3 w-3" />
-                  {t("reader.rubyDownload", "Download")}
+                  {t("ruby.download")}
                 </>
               )}
             </button>
@@ -241,16 +241,16 @@ function RubySettingsSection() {
         {zhReady && currentBookId && (
           <div className="flex items-center justify-between">
             <span className="text-sm text-foreground">
-              {t("reader.rubyMode", "Annotation Mode")}
+              {t("ruby.mode")}
             </span>
             <Select value={currentRubyMode || "off"} onValueChange={handleModeChange}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="off">{t("reader.rubyOff", "Off")}</SelectItem>
-                <SelectItem value="zh-pinyin">{t("reader.rubyPinyin", "Pinyin")}</SelectItem>
-                <SelectItem value="zh-zhuyin">{t("reader.rubyZhuyin", "Zhùyīn (ㄅㄆㄇ)")}</SelectItem>
+                <SelectItem value="off">{t("ruby.off")}</SelectItem>
+                <SelectItem value="zh-pinyin">{t("ruby.pinyin")}</SelectItem>
+                <SelectItem value="zh-zhuyin">{t("ruby.zhuyin")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

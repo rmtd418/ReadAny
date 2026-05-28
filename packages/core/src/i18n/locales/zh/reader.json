@@ -125,5 +125,17 @@
     "orderedList": "有序列表",
     "blockquote": "引用",
     "horizontalRule": "分割线"
+  },
+  "ruby": {
+    "title": "注音",
+    "desc": "在汉字或日文上方显示读音标注。需先下载注音字典包。",
+    "dictZh": "中文（拼音）",
+    "dictJa": "日文（假名）",
+    "download": "下载",
+    "mode": "注音模式",
+    "off": "关闭",
+    "pinyin": "拼音",
+    "zhuyin": "注音符号（ㄅㄆㄇ）",
+    "furigana": "振假名（ふりがな）"
   }
 }
