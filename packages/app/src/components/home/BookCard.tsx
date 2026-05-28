@@ -166,11 +166,14 @@ export const BookCard = memo(function BookCard({
   const hasVisibleCover = Boolean(coverSrc && imageLoaded && !imageError);
 
   // Vectorize progress percentage for display
+  // Use local state (from manual trigger) OR store progress (from auto-vectorize after import)
   const vecPct = vectorProgress
     ? vectorProgress.totalChunks > 0
       ? Math.round((vectorProgress.processedChunks / vectorProgress.totalChunks) * 100)
       : 0
-    : 0;
+    : book.vectorizeProgress > 0 && book.vectorizeProgress < 1
+      ? Math.round(book.vectorizeProgress * 100)
+      : 0;
 
   return (
     <div
@@ -250,7 +253,7 @@ export const BookCard = memo(function BookCard({
         )}
 
         {/* Vectorization progress overlay */}
-        {vectorizing && (
+        {(vectorizing || (book.vectorizeProgress > 0 && book.vectorizeProgress < 1)) && (
           <div className="absolute inset-0 z-15 flex flex-col items-center justify-center rounded bg-black/50 backdrop-blur-sm">
             <Loader2 className="h-6 w-6 animate-spin text-white" />
             <span className="mt-1.5 text-xs font-medium text-white">
@@ -260,7 +263,9 @@ export const BookCard = memo(function BookCard({
                   ? `${vecPct}%`
                   : vectorProgress?.status === "indexing"
                     ? t("home.vec_indexing")
-                    : t("home.vec_processing")}
+                    : vecPct > 0
+                      ? `${vecPct}%`
+                      : t("home.vec_processing")}
             </span>
           </div>
         )}

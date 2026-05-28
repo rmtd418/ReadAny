@@ -1093,7 +1093,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           // Auto-vectorize if enabled
           const vmState = useVectorModelStore.getState();
           if (vmState.vectorModelEnabled && vmState.hasVectorCapability()) {
-            triggerVectorizeBook(book.id, relativePath).catch((err) => {
+            triggerVectorizeBook(book.id, relativePath, (progress) => {
+              // Update book's vectorizeProgress so BookCard can show it
+              const pct = progress.totalChunks > 0
+                ? progress.processedChunks / progress.totalChunks
+                : 0;
+              get().updateBook(book.id, { vectorizeProgress: pct });
+            }).catch((err) => {
               console.warn(`[importBooks] Auto-vectorize failed for ${title}:`, err);
             });
           }
