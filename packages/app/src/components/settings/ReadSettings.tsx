@@ -204,7 +204,7 @@ function RubySettingsSection() {
             <span className="text-sm text-foreground">
               {t("ruby.dictZh")}
             </span>
-            <span className="ml-2 text-xs text-muted-foreground">~3MB</span>
+            <span className="ml-2 text-xs text-muted-foreground">~2.5MB</span>
           </div>
           {zhReady ? (
             <button
