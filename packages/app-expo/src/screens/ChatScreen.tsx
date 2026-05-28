@@ -98,6 +98,10 @@ export function ChatScreen() {
   const [showSidebar, setShowSidebar] = useState(false);
   const sidebarAnim = useRef(new Animated.Value(-sidebarWidth)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  const showSidebarRef = useRef(showSidebar);
+  useEffect(() => {
+    showSidebarRef.current = showSidebar;
+  }, [showSidebar]);
 
   useEffect(() => {
     if (isTabletLandscape) {
@@ -106,9 +110,10 @@ export function ChatScreen() {
       backdropAnim.setValue(0);
       return;
     }
-
-    sidebarAnim.setValue(showSidebar ? 0 : -sidebarWidth);
-  }, [backdropAnim, isTabletLandscape, showSidebar, sidebarAnim, sidebarWidth]);
+    if (!showSidebarRef.current) {
+      sidebarAnim.setValue(-sidebarWidth);
+    }
+  }, [backdropAnim, isTabletLandscape, sidebarAnim, sidebarWidth]);
 
   const openSidebar = useCallback(() => {
     if (isTabletLandscape) return;
