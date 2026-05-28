@@ -214,7 +214,9 @@ export function BookChatScreen({ route, navigation }: Props) {
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => setShowSidebar(false));
+    ]).start(({ finished }) => {
+      if (finished) setShowSidebar(false);
+    });
   }, [backdropAnim, isTabletLandscape, sidebarAnim, sidebarWidth]);
 
   // Streaming chat
