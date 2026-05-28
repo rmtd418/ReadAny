@@ -10,7 +10,7 @@
 
 // CDN URL for pinyin dictionary (~3MB)
 export const PINYIN_DICT_URL =
-  "https://cdn.jsdelivr.net/npm/pinyin-pro@3/dist/dict.json";
+  "https://cdn.jsdelivr.net/npm/@pinyin-pro/data@latest/json/modern.json";
 
 export const PINYIN_DICT_FILENAME = "pinyin-dict.json";
 
