@@ -24,8 +24,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { BookCard } from "./BookCard";
 import { BookGrid } from "./BookGrid";
 import { GroupCard } from "./GroupCard";
@@ -70,6 +71,91 @@ export function HomePage() {
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const groupBtnRef = useRef<HTMLButtonElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const importBooks = useLibraryStore((s) => s.importBooks);
+  const lastDropTime = useRef(0);
+  const importBooksRef = useRef(importBooks);
+  importBooksRef.current = importBooks;
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  const SUPPORTED_EXTS = new Set(["epub", "pdf", "mobi", "azw", "azw3", "fb2", "fbz", "txt", "umd", "cbz"]);
+
+  // Use Tauri's native drag-drop event (HTML5 dataTransfer.files doesn't have paths in Tauri v2)
+  // Register ONCE — use refs to avoid re-subscribing on every render
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      try {
+        const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+        const webview = getCurrentWebview();
+        unlisten = await webview.onDragDropEvent((event) => {
+          if (event.payload.type === "over") {
+            setIsDragOver(true);
+          } else if (event.payload.type === "leave") {
+            setIsDragOver(false);
+          } else if (event.payload.type === "drop") {
+            setIsDragOver(false);
+            // Guard against duplicate drop events firing within 2s
+            const now = Date.now();
+            if (now - lastDropTime.current < 2000) return;
+            lastDropTime.current = now;
+
+            const paths = (event.payload.paths || []).filter((p: string) => {
+              const ext = p.split(".").pop()?.toLowerCase() || "";
+              return SUPPORTED_EXTS.has(ext);
+            });
+            if (paths.length > 0) {
+              importBooksRef.current(paths).then((result) => {
+                toast.success(
+                  tRef.current("library.importResultSummary", {
+                    imported: result.imported.length,
+                    skipped: result.skippedDuplicates.length,
+                    failed: result.failures.length,
+                  }),
+                );
+              });
+            }
+          }
+        });
+      } catch {
+        // Not in Tauri environment (browser dev mode) — HTML5 fallback handled below
+      }
+    })();
+
+    return () => { unlisten?.(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — refs keep values fresh
+
+  // HTML5 fallback for browser dev mode (Tauri provides paths via its own event)
+  const handleFileDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const files = e.dataTransfer.files;
+      const paths: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i] as File & { path?: string };
+        if (f.path) {
+          const ext = f.name.split(".").pop()?.toLowerCase() || "";
+          if (SUPPORTED_EXTS.has(ext)) {
+            paths.push(f.path);
+          }
+        }
+      }
+      if (paths.length > 0) {
+        const result = await importBooks(paths);
+        toast.success(
+          t("library.importResultSummary", {
+            imported: result.imported.length,
+            skipped: result.skippedDuplicates.length,
+            failed: result.failures.length,
+          }),
+        );
+      }
+    },
+    [importBooks, t],
+  );
 
   const filtered = useMemo(() => {
     let result = books.filter((b) => {
@@ -272,7 +358,20 @@ export function HomePage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="relative flex h-full flex-col"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleFileDrop}
+    >
+      {/* Drop overlay */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2">
+            <Plus className="size-10 text-primary" />
+            <p className="text-sm font-medium text-primary">{t("home.dropToUpload")}</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between px-6 pt-5 pb-2">
         {selectionMode ? (
