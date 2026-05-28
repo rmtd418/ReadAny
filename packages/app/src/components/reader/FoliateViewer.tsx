@@ -333,7 +333,7 @@ export interface FoliateViewerHandle {
   /** Inject ruby (pinyin/furigana) annotations into current document */
   injectRuby: (mode: "zh-pinyin" | "zh-zhuyin" | "ja") => Promise<void>;
   /** Remove all ruby annotations from current document */
-  removeRuby: () => void;
+  removeRuby: () => Promise<void>;
 }
 
 interface FoliateViewerProps {
@@ -1274,15 +1274,14 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             console.warn("[injectRuby] Error:", err);
           }
         },
-        removeRuby: () => {
+        removeRuby: async () => {
           try {
             const renderer = viewRef.current?.renderer;
             const contents = renderer?.getContents?.();
             if (!contents?.[0]?.doc) return;
             const doc = contents[0].doc as Document;
-            import("@/lib/ruby/ruby-injector").then(({ removeRubyAnnotations }) => {
-              removeRubyAnnotations(doc);
-            });
+            const { removeRubyAnnotations } = await import("@/lib/ruby/ruby-injector");
+            removeRubyAnnotations(doc);
           } catch (err) {
             console.warn("[removeRuby] Error:", err);
           }

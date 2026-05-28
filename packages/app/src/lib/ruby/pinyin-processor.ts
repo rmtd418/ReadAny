@@ -32,18 +32,22 @@ let _pinyinDict: Record<string, [string, number]> | null = null;
  * Call this once after download completes.
  */
 export async function loadPinyinDict(dictPath: string): Promise<void> {
+  // On Tauri desktop, use readTextFile directly (fetch won't work with bare fs paths)
+  try {
+    const { readTextFile } = await import("@tauri-apps/plugin-fs");
+    const text = await readTextFile(dictPath);
+    _pinyinDict = JSON.parse(text);
+    return;
+  } catch {
+    // Not Tauri or readTextFile failed — try fetch as fallback
+  }
+
   try {
     const response = await fetch(dictPath);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     _pinyinDict = await response.json();
   } catch (err) {
-    // Try Tauri fs read as fallback
-    try {
-      const { readTextFile } = await import("@tauri-apps/plugin-fs");
-      const text = await readTextFile(dictPath);
-      _pinyinDict = JSON.parse(text);
-    } catch {
-      throw new Error(`Failed to load pinyin dictionary: ${err}`);
-    }
+    throw new Error(`Failed to load pinyin dictionary from ${dictPath}: ${err}`);
   }
 }
 

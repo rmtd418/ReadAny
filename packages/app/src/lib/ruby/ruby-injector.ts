@@ -47,6 +47,32 @@ function injectRubyStyles(doc: Document): void {
 }
 
 /**
+ * Extract original text from a ruby-processed span, excluding <rt>/<rp> content.
+ * el.textContent would include the pronunciation text from <rt>, so we must
+ * manually walk and skip those elements.
+ */
+function extractOriginalText(el: Element): string {
+  let result = "";
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      result += child.nodeValue || "";
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = (child as Element).tagName?.toLowerCase();
+      if (tag === "rt" || tag === "rp") {
+        // Skip pronunciation annotations
+        continue;
+      } else if (tag === "ruby") {
+        // For <ruby>, extract only the base text (skip nested <rt>/<rp>)
+        result += extractOriginalText(child as Element);
+      } else {
+        result += extractOriginalText(child as Element);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * Remove all ruby annotations from the document.
  */
 export function removeRubyAnnotations(doc: Document): void {
@@ -56,9 +82,9 @@ export function removeRubyAnnotations(doc: Document): void {
   // Find all ruby-processed elements and restore original text
   const processed = doc.querySelectorAll(`[${RUBY_PROCESSED_ATTR}]`);
   for (const el of processed) {
-    // Extract just the text content (strips <ruby><rt> tags)
-    const textContent = el.textContent || "";
-    const textNode = doc.createTextNode(textContent);
+    // Extract just the base characters, excluding <rt>/<rp> pronunciation text
+    const originalText = extractOriginalText(el);
+    const textNode = doc.createTextNode(originalText);
     el.parentNode?.replaceChild(textNode, el);
   }
 }
@@ -76,8 +102,8 @@ function shouldSkipElement(el: Element): boolean {
   return false;
 }
 
-// CJK character detection
-const HAS_CJK = /[一-鿿㐀-䶿豈-﫿㐀-䶿]/;
+// CJK character detection (Unified Ideographs + Extension A + Compatibility)
+const HAS_CJK = /[一-鿿㐀-䶿豈-﫿]/;
 
 /**
  * Inject ruby annotations into visible blocks of the document.
