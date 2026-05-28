@@ -587,6 +587,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                 if (!parent) return NodeFilter.FILTER_ACCEPT;
                 const tag = parent.tagName.toLowerCase();
                 if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
+                if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
                 if (parent.closest(".readany-translation")) return NodeFilter.FILTER_REJECT;
                 return NodeFilter.FILTER_ACCEPT;
               },
@@ -995,6 +996,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                   const parent = (node as Text).parentElement;
                   const tag = parent?.tagName?.toLowerCase();
                   if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
+                  if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
                   if (parent?.closest?.(".readany-translation")) return NodeFilter.FILTER_REJECT;
                   return NodeFilter.FILTER_ACCEPT;
                 },
@@ -1027,6 +1029,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     const parent = (node as Text).parentElement;
                     const tag = parent?.tagName?.toLowerCase();
                     if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
+                    if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
                   },
                 });
