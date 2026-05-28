@@ -53,6 +53,7 @@ import { TOCPanel } from "./TOCPanel";
 import { TTSPage } from "./TTSPage";
 import { TranslationPopover } from "./TranslationPopover";
 import { toast } from "sonner";
+import { useRubyStore } from "@readany/core/stores/ruby-store";
 
 const REFLOWABLE_CHARACTERS_PER_LOCATION = 1500;
 const MAX_TRACKED_LOCATION_DELTA = 20;
@@ -925,6 +926,17 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   useEffect(() => {
     loadAnnotations(bookId);
   }, [bookId, loadAnnotations]);
+
+  // Watch ruby mode changes and inject/remove annotations
+  const rubyMode = useRubyStore((s) => s.bookRubySettings[bookId] ?? null);
+  useEffect(() => {
+    if (!foliateRef.current) return;
+    if (rubyMode) {
+      foliateRef.current.injectRuby(rubyMode);
+    } else {
+      foliateRef.current.removeRuby();
+    }
+  }, [rubyMode]);
 
   // Handle book not found
   useEffect(() => {
