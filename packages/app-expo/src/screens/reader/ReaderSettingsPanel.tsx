@@ -326,10 +326,8 @@ function RubySettingsRow({
   ];
 
   return (
-    <>
-      {/* Divider */}
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 12 }} />
-      <View style={s.settingRow}>
+    <View style={[s.settingRow, { flexDirection: "column", alignItems: "stretch", gap: 10 }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <View style={{ flex: 1 }}>
           <Text style={s.settingLabel}>{t("ruby.title", "注音")}</Text>
           <Text style={[s.settingLabel, { fontSize: 11, opacity: 0.6, marginTop: 2 }]}>
@@ -363,25 +361,22 @@ function RubySettingsRow({
         )}
       </View>
       {zhReady && (
-        <View style={s.settingRow}>
-          <Text style={s.settingLabel}>{t("ruby.mode", "注音模式")}</Text>
-          <View style={s.viewModeRow}>
-            {modes.map((m) => (
-              <TouchableOpacity
-                key={m.value ?? "off"}
-                style={[s.viewModeBtn, currentMode === m.value && s.viewModeBtnActive]}
-                onPress={() => handleModeChange(m.value)}
+        <View style={s.viewModeRow}>
+          {modes.map((m) => (
+            <TouchableOpacity
+              key={m.value ?? "off"}
+              style={[s.viewModeBtn, currentMode === m.value && s.viewModeBtnActive]}
+              onPress={() => handleModeChange(m.value)}
+            >
+              <Text
+                style={[s.viewModeBtnText, currentMode === m.value && s.viewModeBtnTextActive]}
               >
-                <Text
-                  style={[s.viewModeBtnText, currentMode === m.value && s.viewModeBtnTextActive]}
-                >
-                  {m.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {m.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
-    </>
+    </View>
   );
 }
