@@ -460,23 +460,43 @@ export class WebDavClient {
     console.log(`[WebDAV] GET ${logPath} (with progress)`);
     const startTime = Date.now();
 
-    const resp = await platform.fetch(url, {
-      method: "GET",
-      headers: { Authorization: this.authHeader },
-      allowInsecure: this.allowInsecure,
-      timeoutMs: TRANSFER_TIMEOUT_MS,
-      responseType: "arraybuffer",
-      onDownloadProgress: onProgress,
-    });
+    try {
+      const resp = await platform.fetch(url, {
+        method: "GET",
+        headers: { Authorization: this.authHeader },
+        allowInsecure: this.allowInsecure,
+        timeoutMs: TRANSFER_TIMEOUT_MS,
+        responseType: "arraybuffer",
+        onDownloadProgress: onProgress,
+      });
 
-    const elapsed = Date.now() - startTime;
-    if (!resp.ok) {
-      console.error(`[WebDAV] GET ${logPath} failed after ${elapsed}ms: ${resp.status}`);
-      throw new Error(`WebDAV GET failed for ${path}: ${resp.status} ${resp.statusText || ""}`);
+      const elapsed = Date.now() - startTime;
+      if (!resp.ok) {
+        console.error(`[WebDAV] GET ${logPath} failed after ${elapsed}ms: ${resp.status}`);
+        throw new Error(`WebDAV GET failed for ${path}: ${resp.status} ${resp.statusText || ""}`);
+      }
+      console.log(`[WebDAV] GET ${logPath} completed in ${elapsed}ms (status: ${resp.status})`);
+      const buffer = await resp.arrayBuffer();
+      return new Uint8Array(buffer);
+    } catch (error: unknown) {
+      const msg = (error as { message?: string })?.message ?? "";
+      // Tauri/Chromium rejects response headers containing non-ISO-8859-1
+      // characters (e.g. Chinese filenames in Content-Disposition). When this
+      // happens, fall back to the regular `get()` which goes through
+      // `request()` and has retry protection. Progress reporting is lost but
+      // the download still succeeds.
+      if (
+        msg.includes("ISO-8859-1") ||
+        msg.includes("non ISO") ||
+        msg.includes("Failed to construct 'Headers'")
+      ) {
+        console.warn(
+          `[WebDAV] GET ${logPath} failed due to non-ASCII response headers; falling back to get() without progress`,
+        );
+        return this.get(path);
+      }
+      throw error;
     }
-    console.log(`[WebDAV] GET ${logPath} completed in ${elapsed}ms (status: ${resp.status})`);
-    const buffer = await resp.arrayBuffer();
-    return new Uint8Array(buffer);
   }
 
   /** Download text content from a path (GET) */
