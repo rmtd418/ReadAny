@@ -174,6 +174,7 @@
     let bookTextMetricsTimer = null;
     let bookmarkPullGestureActive = false;
     let pullBookmarkResetTimer = null;
+    let refreshAnnotationsTimer = null;
     let bookmarkPullStateMeta = {
       bookmarked: false,
       pullToAdd: '下滑添加书签',
@@ -216,6 +217,25 @@
       tapNavigationResetTimer = setTimeout(() => {
         clearTapNavigationLock();
       }, 220);
+    }
+
+    function refreshUserAnnotations(delay) {
+      if (!view) return;
+      if (refreshAnnotationsTimer) clearTimeout(refreshAnnotationsTimer);
+      refreshAnnotationsTimer = setTimeout(() => {
+        refreshAnnotationsTimer = null;
+        if (!view) return;
+
+        for (const [, annotation] of userAnnotations) {
+          view.addAnnotation(annotation).catch(() => {
+            // Ignore annotations outside the currently rendered section.
+          });
+        }
+
+        if (ttsHighlightState.cfi) {
+          setTTSHighlight(ttsHighlightState.cfi, ttsHighlightState.color);
+        }
+      }, delay == null ? 100 : delay);
     }
 
     function applyFixedLayoutRendererSettings(renderer, paginatedLayout) {
@@ -973,16 +993,7 @@
           attachSelectionListener(doc);
           attachNoteLongPress(doc);
           attachContinuousScrollListener(doc);
-          // Re-add all user annotations for this page
-          // foliate-view will only render those that belong to current section
-          for (const [cfi, annotation] of userAnnotations) {
-            view.addAnnotation(annotation).catch(err => {
-              // Ignore errors for annotations not on current page
-            });
-          }
-          if (ttsHighlightState.cfi) {
-            setTTSHighlight(ttsHighlightState.cfi, ttsHighlightState.color);
-          }
+          refreshUserAnnotations(100);
           // Auto-inject ruby annotations if enabled
           if (_rubyMode && (_rubyWordDict || _rubyCharDict)) {
             try { doInjectRubyAnnotations(doc, _rubyMode); } catch(e) {}
@@ -993,6 +1004,7 @@
         el.addEventListener('relocate', (e) => {
           markLoaded();
           const detail = e.detail;
+          const previousSectionIndex = currentSectionIndex;
           if (tapNavigationInFlight) {
             setTimeout(() => {
               clearTapNavigationLock();
@@ -1030,6 +1042,9 @@
             pageItem: detail.pageItem,
             cfi: detail.cfi,
           });
+          if (currentSectionIndex !== previousSectionIndex) {
+            refreshUserAnnotations(120);
+          }
           // Extract text after page render settles
           if (snippetTimer) clearTimeout(snippetTimer);
           snippetTimer = setTimeout(() => {
