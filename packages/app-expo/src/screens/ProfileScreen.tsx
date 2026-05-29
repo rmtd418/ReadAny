@@ -1,4 +1,3 @@
-import { SyncButton } from "@/components/ui/SyncButton";
 import {
   BarChart3Icon,
   BookOpenIcon,
@@ -17,7 +16,12 @@ import {
   TypeIcon,
   Volume2Icon,
 } from "@/components/ui/Icon";
+import { SyncButton } from "@/components/ui/SyncButton";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
+import {
+  mergeCurrentSessionIntoDailyStats,
+  mergeCurrentSessionIntoOverallStats,
+} from "@/lib/stats/live-reading-stats";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
 import {
   formatCharacterCount,
@@ -25,10 +29,6 @@ import {
   formatTimeLocalized,
 } from "@/screens/stats/stats-utils";
 import { useReadingSessionStore } from "@/stores";
-import {
-  mergeCurrentSessionIntoDailyStats,
-  mergeCurrentSessionIntoOverallStats,
-} from "@/lib/stats/live-reading-stats";
 import {
   type ThemeColors,
   fontSize,
@@ -39,12 +39,11 @@ import {
 } from "@/styles/theme";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { readingStatsService } from "@readany/core/stats";
 import { refreshAndCountUnreadFeedback } from "@readany/core/feedback";
+import { readingStatsService } from "@readany/core/stats";
+import type { DailyStats, OverallStats } from "@readany/core/stats";
 import { eventBus } from "@readany/core/utils/event-bus";
 import Constants from "expo-constants";
-import type { DailyStats, OverallStats } from "@readany/core/stats";
 /**
  * ProfileScreen — matching Tauri mobile ProfilePage exactly.
  * Features: reading stats cards, heatmap, settings menu (general/skills/about),
@@ -60,12 +59,15 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  type ViewStyle,
   View,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const ICP_NUMBER = "粤ICP备2025444251号-2A";
+const ICP_URL = "https://beian.miit.gov.cn/";
 
 function StatCard({
   icon,
@@ -210,9 +212,9 @@ function MiniHeatmap({ dailyStats }: { dailyStats: DailyStats[] }) {
     >
       {containerWidth > 0 && (
         <View style={[s.heatmapGrid, { width: gridWidth, height: gridHeight }]}>
-          {cells.map((cell, i) => (
+          {cells.map((cell) => (
             <TouchableOpacity
-              key={i}
+              key={cell.date}
               style={{
                 position: "absolute",
                 left: cell.col * (CELL + GAP),
@@ -283,7 +285,6 @@ export function ProfileScreen() {
   const statsGridColumns = layout.isTablet ? 4 : 2;
   const statCardSlotWidth = `${100 / statsGridColumns}%` as `${number}%`;
   const nav = useNavigation<Nav>();
-  const tabBarHeight = useBottomTabBarHeight();
   const [overall, setOverall] = useState<OverallStats | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -401,7 +402,9 @@ export function ProfileScreen() {
   );
 
   const booksRead = liveOverall?.totalBooks ?? 0;
-  const totalTime = liveOverall ? formatTimeLocalized(liveOverall.totalReadingTime, isZh) : formatTimeLocalized(0, isZh);
+  const totalTime = liveOverall
+    ? formatTimeLocalized(liveOverall.totalReadingTime, isZh)
+    : formatTimeLocalized(0, isZh);
   const totalCharacters = liveOverall
     ? formatCharacterCount(liveOverall.totalCharactersRead ?? 0, isZh)
     : formatCharacterCount(0, isZh);
@@ -454,7 +457,7 @@ export function ProfileScreen() {
 
       <ScrollView
         style={s.scrollView}
-        contentContainerStyle={{ paddingTop: 20, paddingBottom: 16 }}
+        contentContainerStyle={{ paddingTop: 20, paddingBottom: 12 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Stats cards */}
@@ -545,6 +548,15 @@ export function ProfileScreen() {
         <Text style={s.version} maxFontSizeMultiplier={1.4}>
           {t("profile.version", { version: Constants.expoConfig?.version ?? "1.0.0" })}
         </Text>
+        <TouchableOpacity
+          style={s.icpLink}
+          onPress={() => Linking.openURL(ICP_URL)}
+          activeOpacity={0.7}
+        >
+          <Text style={s.icpText} maxFontSizeMultiplier={1.4}>
+            {ICP_NUMBER}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -736,6 +748,17 @@ const makeStyles = (colors: ThemeColors) =>
       lineHeight: fontSize.xs * 1.6,
       color: colors.mutedForeground,
       marginTop: 16,
-      marginBottom: 4,
+      marginBottom: 2,
+    },
+    icpLink: {
+      alignSelf: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+    },
+    icpText: {
+      textAlign: "center",
+      fontSize: fontSize.xs,
+      lineHeight: fontSize.xs * 1.6,
+      color: colors.mutedForeground,
     },
   });
