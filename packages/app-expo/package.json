@@ -1,16 +1,13 @@
 {
   "name": "@readany/app-expo",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "private": true,
   "main": "index.js",
   "expo": {
     "entryPoint": "./index.js",
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": [
-          "react-native-tcp-socket",
-          "react-native-track-player"
-        ],
+        "exclude": ["react-native-tcp-socket", "react-native-track-player"],
         "listUnknownPackages": false
       }
     }

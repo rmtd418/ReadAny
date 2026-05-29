@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type IPlatformService, setPlatformService } from "../services/platform";
+import { type FetchOptions, type IPlatformService, setPlatformService } from "../services/platform";
 import {
   WebDavImportService,
   getWebDavImportRootPrefix,
@@ -97,7 +97,7 @@ const PROPFIND_BOOKS_XML = `<?xml version="1.0" encoding="utf-8"?>
 function installFetchCapture(): { requests: Array<{ method: string; url: string }> } {
   const requests: Array<{ method: string; url: string }> = [];
   setPlatformService({
-    async fetch(url, options) {
+    async fetch(url: string, options?: FetchOptions) {
       const method = options?.method ?? "GET";
       requests.push({ method, url });
       if (method === "PROPFIND") {
