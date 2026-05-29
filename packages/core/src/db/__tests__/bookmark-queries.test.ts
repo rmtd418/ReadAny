@@ -70,6 +70,30 @@ describe("bookmark-queries", () => {
       expect(bookmarks).toEqual([]);
     });
 
+    it("returns bookmarks sorted by book position", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "bm-10",
+          book_id: "book-1",
+          cfi: "epubcfi(/6/10!/4/2)",
+          label: null,
+          chapter_title: null,
+          created_at: 3000,
+        },
+        {
+          id: "bm-2",
+          book_id: "book-1",
+          cfi: "epubcfi(/6/2!/4/2)",
+          label: null,
+          chapter_title: null,
+          created_at: 1000,
+        },
+      ]);
+
+      const bookmarks = await getBookmarks("book-1");
+      expect(bookmarks.map((bookmark) => bookmark.id)).toEqual(["bm-2", "bm-10"]);
+    });
+
     it("handles null label and chapter_title", async () => {
       mockSelect.mockResolvedValue([
         {

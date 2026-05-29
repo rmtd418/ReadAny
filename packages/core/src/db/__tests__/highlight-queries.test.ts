@@ -1,5 +1,5 @@
-import type { Highlight } from "../../types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Highlight } from "../../types";
 
 const mockExecute = vi.fn();
 const mockSelect = vi.fn();
@@ -71,6 +71,36 @@ describe("highlight-queries", () => {
       expect(highlights[0].id).toBe("hl-1");
       expect(highlights[0].bookId).toBe("book-1");
       expect(highlights[0].color).toBe("yellow");
+    });
+
+    it("returns highlights sorted by book position", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "hl-10",
+          book_id: "book-1",
+          cfi: "epubcfi(/6/10!/4/2)",
+          text: "Later text",
+          color: "yellow",
+          note: null,
+          chapter_title: null,
+          created_at: 3000,
+          updated_at: 3000,
+        },
+        {
+          id: "hl-2",
+          book_id: "book-1",
+          cfi: "epubcfi(/6/2!/4/2)",
+          text: "Earlier text",
+          color: "yellow",
+          note: null,
+          chapter_title: null,
+          created_at: 1000,
+          updated_at: 1000,
+        },
+      ]);
+
+      const highlights = await getHighlights("book-1");
+      expect(highlights.map((highlight) => highlight.id)).toEqual(["hl-2", "hl-10"]);
     });
   });
 
@@ -144,14 +174,15 @@ describe("highlight-queries", () => {
   describe("getHighlightStats", () => {
     it("returns aggregated statistics", async () => {
       mockSelect
-        .mockResolvedValueOnce([{ count: 10 }])  // total
-        .mockResolvedValueOnce([{ count: 3 }])   // with notes
-        .mockResolvedValueOnce([{ count: 5 }])   // distinct books
-        .mockResolvedValueOnce([               // color distribution
+        .mockResolvedValueOnce([{ count: 10 }]) // total
+        .mockResolvedValueOnce([{ count: 3 }]) // with notes
+        .mockResolvedValueOnce([{ count: 5 }]) // distinct books
+        .mockResolvedValueOnce([
+          // color distribution
           { color: "yellow", count: 6 },
           { color: "blue", count: 4 },
         ])
-        .mockResolvedValueOnce([{ count: 2 }]);  // recent
+        .mockResolvedValueOnce([{ count: 2 }]); // recent
 
       const stats = await getHighlightStats();
       expect(stats.totalHighlights).toBe(10);

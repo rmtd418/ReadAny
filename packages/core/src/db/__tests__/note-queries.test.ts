@@ -1,5 +1,5 @@
-import type { Note } from "../../types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Note } from "../../types";
 
 const mockExecute = vi.fn();
 const mockSelect = vi.fn();
@@ -13,19 +13,19 @@ const coreMocks = vi.hoisted(() => ({
   insertTombstone: vi.fn(),
   parseJSON: vi.fn((str: string | null | undefined, fallback: unknown) => {
     if (!str) return fallback;
-    try { return JSON.parse(str); } catch { return fallback; }
+    try {
+      return JSON.parse(str);
+    } catch {
+      return fallback;
+    }
   }),
 }));
 
 vi.mock("../db-core", () => coreMocks);
 
-const {
-  getNotes,
-  getAllNotes,
-  insertNote,
-  updateNote,
-  deleteNote,
-} = await import("../note-queries");
+const { getNotes, getAllNotes, insertNote, updateNote, deleteNote } = await import(
+  "../note-queries"
+);
 
 const sampleNote: Note = {
   id: "note-1",
@@ -105,6 +105,38 @@ describe("note-queries", () => {
       expect(notes[0].cfi).toBeUndefined();
       expect(notes[0].chapterTitle).toBeUndefined();
     });
+
+    it("returns notes sorted by book position", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "note-10",
+          book_id: "book-1",
+          highlight_id: null,
+          cfi: "epubcfi(/6/10!/4/2)",
+          title: "Later",
+          content: "Later content",
+          chapter_title: null,
+          tags: "[]",
+          created_at: 3000,
+          updated_at: 3000,
+        },
+        {
+          id: "note-2",
+          book_id: "book-1",
+          highlight_id: null,
+          cfi: "epubcfi(/6/2!/4/2)",
+          title: "Earlier",
+          content: "Earlier content",
+          chapter_title: null,
+          tags: "[]",
+          created_at: 1000,
+          updated_at: 1000,
+        },
+      ]);
+
+      const notes = await getNotes("book-1");
+      expect(notes.map((note) => note.id)).toEqual(["note-2", "note-10"]);
+    });
   });
 
   describe("getAllNotes", () => {
@@ -142,7 +174,7 @@ describe("note-queries", () => {
       expect(sql).toContain("INSERT INTO notes");
       expect(params[0]).toBe("note-1");
       expect(params[1]).toBe("book-1");
-      expect(params[2]).toBe("hl-1");  // highlightId
+      expect(params[2]).toBe("hl-1"); // highlightId
       expect(params[4]).toBe("My Note"); // title
       expect(params[7]).toBe('["important","review"]'); // tags serialized
     });

@@ -4,16 +4,17 @@ import { Input } from "@/components/ui/input";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { useResolvedSrc, useSyncVersion } from "@/hooks/use-resolved-src";
 import type { HighlightWithBook } from "@/lib/db/database";
-import { openDesktopBook } from "@/lib/library/open-book";
 import { getBook as getBookRecord } from "@/lib/db/database";
+import { openDesktopBook } from "@/lib/library/open-book";
 import { useAnnotationStore } from "@/stores/annotation-store";
 import { useAppStore } from "@/stores/app-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { type ExportFormat, annotationExporter } from "@readany/core/export";
+import { sortAnnotationsByPosition } from "@readany/core/reader";
 import type { Highlight, Note } from "@readany/core/types";
-import { eventBus } from "@readany/core/utils/event-bus";
 import { HIGHLIGHT_COLOR_HEX } from "@readany/core/types";
 import { cn } from "@readany/core/utils";
+import { eventBus } from "@readany/core/utils/event-bus";
 import {
   BookOpen,
   Check,
@@ -58,7 +59,14 @@ function CoverImage({ url, fallback, ...imgProps }: CoverImageProps) {
     return <>{fallback}</>;
   }
 
-  return <img key={`${resolvedSrc}-${syncVersion}`} src={resolvedSrc} onError={() => setHasError(true)} {...imgProps} />;
+  return (
+    <img
+      key={`${resolvedSrc}-${syncVersion}`}
+      src={resolvedSrc}
+      onError={() => setHasError(true)}
+      {...imgProps}
+    />
+  );
 }
 
 export function NotesPage() {
@@ -157,7 +165,7 @@ export function NotesPage() {
           h.chapterTitle?.toLowerCase().includes(q),
       );
     }
-    const sorted = all.sort((a, b) => b.createdAt - a.createdAt);
+    const sorted = sortAnnotationsByPosition(all);
     return {
       notes: sorted.filter((h) => h.note),
       highlightsOnly: sorted.filter((h) => !h.note),
@@ -181,7 +189,10 @@ export function NotesPage() {
   const handleOpenBook = async (bookId: string, _title: string, cfi?: string) => {
     const book =
       books.find((item) => item.id === bookId) ??
-      (await getBookRecord(bookId, { includeDeleted: true }).catch((err) => { console.warn("[Notes] Failed to get book record:", err); return null; }));
+      (await getBookRecord(bookId, { includeDeleted: true }).catch((err) => {
+        console.warn("[Notes] Failed to get book record:", err);
+        return null;
+      }));
     if (!book) return;
 
     await openDesktopBook({

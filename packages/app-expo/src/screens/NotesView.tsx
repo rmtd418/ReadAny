@@ -1,5 +1,3 @@
-import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
-import { SyncButton } from "@/components/ui/SyncButton";
 import {
   BookOpenIcon,
   ChevronLeftIcon,
@@ -9,16 +7,16 @@ import {
   ShareIcon,
   XIcon,
 } from "@/components/ui/Icon";
+import { SyncButton } from "@/components/ui/SyncButton";
+import { openMobileBook } from "@/lib/library/open-mobile-book";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
-import type { TabParamList } from "@/navigation/TabNavigator";
 import { useAnnotationStore, useLibraryStore } from "@/stores";
 import { useColors, useTheme } from "@/styles/theme";
-import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { HighlightWithBook } from "@readany/core/db/database";
 import { AnnotationExporter, type ExportFormat } from "@readany/core/export";
-import { HIGHLIGHT_COLOR_HEX } from "@readany/core/types";
+import { sortAnnotationsByPosition } from "@readany/core/reader";
 import type { Highlight } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 /**
@@ -28,7 +26,6 @@ import { eventBus } from "@readany/core/utils/event-bus";
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openMobileBook } from "@/lib/library/open-mobile-book";
 import {
   Alert,
   FlatList,
@@ -44,8 +41,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { HighlightCard } from "./notes/HighlightCard";
-import { NotebookCard } from "./notes/NotebookCard";
 import { NoteCard } from "./notes/NoteCard";
+import { NotebookCard } from "./notes/NotebookCard";
 import { makeStyles } from "./notes/notes-styles";
 import { useResolvedCovers } from "./notes/useResolvedCovers";
 
@@ -54,7 +51,6 @@ const NOTE_DARK_PNG = require("../../assets/note-dark.png");
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailTab = "notes" | "highlights";
-type Props = BottomTabScreenProps<TabParamList, "Notes">;
 
 export function NotesView({
   initialBookId,
@@ -185,7 +181,7 @@ export function NotesView({
           h.chapterTitle?.toLowerCase().includes(q),
       );
     }
-    const sorted = all.sort((a, b) => b.createdAt - a.createdAt);
+    const sorted = sortAnnotationsByPosition(all);
     return {
       notesList: sorted.filter((h) => h.note),
       highlightsList: sorted.filter((h) => !h.note),

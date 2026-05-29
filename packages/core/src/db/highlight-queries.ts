@@ -1,5 +1,6 @@
+import { sortAnnotationsByPosition } from "../reader/annotation-order";
 import type { Highlight } from "../types";
-import { getDB, getDeviceId, nextSyncVersion, nextUpdatedAt, insertTombstone } from "./db-core";
+import { getDB, getDeviceId, insertTombstone, nextSyncVersion, nextUpdatedAt } from "./db-core";
 
 /** Extended highlight with book info for notes page */
 export interface HighlightWithBook extends Highlight {
@@ -20,21 +21,20 @@ export async function getHighlights(bookId: string): Promise<Highlight[]> {
     chapter_title: string | null;
     created_at: number;
     updated_at: number;
-  }>(
-    "SELECT * FROM highlights WHERE book_id = ? ORDER BY created_at DESC",
-    [bookId],
+  }>("SELECT * FROM highlights WHERE book_id = ? ORDER BY created_at DESC", [bookId]);
+  return sortAnnotationsByPosition(
+    rows.map((r) => ({
+      id: r.id,
+      bookId: r.book_id,
+      cfi: r.cfi,
+      text: r.text,
+      color: r.color as Highlight["color"],
+      note: r.note || undefined,
+      chapterTitle: r.chapter_title || undefined,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })),
   );
-  return rows.map((r) => ({
-    id: r.id,
-    bookId: r.book_id,
-    cfi: r.cfi,
-    text: r.text,
-    color: r.color as Highlight["color"],
-    note: r.note || undefined,
-    chapterTitle: r.chapter_title || undefined,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
 }
 
 /** Get all highlights across all books (for general chat without bookId) */
@@ -50,10 +50,7 @@ export async function getAllHighlights(limit = 50): Promise<Highlight[]> {
     chapter_title: string | null;
     created_at: number;
     updated_at: number;
-  }>(
-    "SELECT * FROM highlights ORDER BY created_at DESC LIMIT ?",
-    [limit],
-  );
+  }>("SELECT * FROM highlights ORDER BY created_at DESC LIMIT ?", [limit]);
   return rows.map((r) => ({
     id: r.id,
     bookId: r.book_id,

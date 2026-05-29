@@ -25,3 +25,8 @@ export type { SessionEvent, SessionDetector } from "./session-detector";
 // Annotation mutations
 export { createSelectionNoteMutation } from "./selection-note";
 export type { SelectionNoteMutation, SelectionNoteMutationInput } from "./selection-note";
+export {
+  compareAnnotationPosition,
+  compareCfiPosition,
+  sortAnnotationsByPosition,
+} from "./annotation-order";

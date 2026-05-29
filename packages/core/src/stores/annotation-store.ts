@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { HighlightWithBook } from "../db/database";
 import * as db from "../db/database";
+import { sortAnnotationsByPosition } from "../reader/annotation-order";
 /**
  * Annotation store — highlights, notes, bookmarks management
  * Connected to SQLite for persistence via core db module
@@ -67,9 +68,9 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   bookmarks: [],
   stats: null,
 
-  setHighlights: (highlights) => set({ highlights }),
+  setHighlights: (highlights) => set({ highlights: sortAnnotationsByPosition(highlights) }),
   addHighlight: (highlight) => {
-    set((state) => ({ highlights: [...state.highlights, highlight] }));
+    set((state) => ({ highlights: sortAnnotationsByPosition([...state.highlights, highlight]) }));
     db.insertHighlight(highlight)
       .then(async () => {
         eventBus.emit("annotation:added", {
@@ -83,7 +84,9 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   },
   updateHighlight: (id, updates) => {
     set((state) => ({
-      highlights: state.highlights.map((h) => (h.id === id ? { ...h, ...updates } : h)),
+      highlights: sortAnnotationsByPosition(
+        state.highlights.map((h) => (h.id === id ? { ...h, ...updates } : h)),
+      ),
       highlightsWithBooks: state.highlightsWithBooks.map((h) =>
         h.id === id ? { ...h, ...updates } : h,
       ),
@@ -108,8 +111,8 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   },
   changeHighlightColor: (id, color) => {
     set((state) => ({
-      highlights: state.highlights.map((h) =>
-        h.id === id ? { ...h, color, updatedAt: Date.now() } : h,
+      highlights: sortAnnotationsByPosition(
+        state.highlights.map((h) => (h.id === id ? { ...h, color, updatedAt: Date.now() } : h)),
       ),
       highlightsWithBooks: state.highlightsWithBooks.map((h) =>
         h.id === id ? { ...h, color, updatedAt: Date.now() } : h,
@@ -122,15 +125,15 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
       .catch((err) => console.error("Failed to update highlight color:", err));
   },
 
-  setNotes: (notes) => set({ notes }),
+  setNotes: (notes) => set({ notes: sortAnnotationsByPosition(notes) }),
   addNote: (note) => {
-    set((state) => ({ notes: [...state.notes, note] }));
+    set((state) => ({ notes: sortAnnotationsByPosition([...state.notes, note]) }));
     db.insertNote(note).catch((err) => console.error("Failed to insert note:", err));
   },
   updateNote: (id, updates) => {
     set((state) => ({
-      notes: state.notes.map((n) =>
-        n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n,
+      notes: sortAnnotationsByPosition(
+        state.notes.map((n) => (n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n)),
       ),
     }));
     db.updateNote(id, updates).catch((err) => console.error("Failed to update note:", err));
@@ -140,9 +143,9 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     db.deleteNote(id).catch((err) => console.error("Failed to delete note:", err));
   },
 
-  setBookmarks: (bookmarks) => set({ bookmarks }),
+  setBookmarks: (bookmarks) => set({ bookmarks: sortAnnotationsByPosition(bookmarks) }),
   addBookmark: (bookmark) => {
-    set((state) => ({ bookmarks: [...state.bookmarks, bookmark] }));
+    set((state) => ({ bookmarks: sortAnnotationsByPosition([...state.bookmarks, bookmark]) }));
     db.insertBookmark(bookmark).catch((err) => console.error("Failed to insert bookmark:", err));
   },
   removeBookmark: (id) => {
@@ -159,7 +162,11 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
         db.getNotes(bookId),
         db.getBookmarks(bookId),
       ]);
-      set({ highlights, notes, bookmarks });
+      set({
+        highlights: sortAnnotationsByPosition(highlights),
+        notes: sortAnnotationsByPosition(notes),
+        bookmarks: sortAnnotationsByPosition(bookmarks),
+      });
     } catch (err) {
       console.error("Failed to load annotations:", err);
     }
@@ -168,7 +175,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   loadAllHighlights: async (limit = 500) => {
     try {
       const highlights = await db.getAllHighlights(limit);
-      set({ highlights });
+      set({ highlights: sortAnnotationsByPosition(highlights) });
     } catch (err) {
       console.error("Failed to load all highlights:", err);
     }

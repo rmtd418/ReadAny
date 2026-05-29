@@ -1,3 +1,4 @@
+import { sortAnnotationsByPosition } from "../reader/annotation-order";
 import type { Bookmark } from "../types";
 import { getDB, getDeviceId, insertTombstone, nextSyncVersion } from "./db-core";
 
@@ -11,14 +12,16 @@ export async function getBookmarks(bookId: string): Promise<Bookmark[]> {
     chapter_title: string | null;
     created_at: number;
   }>("SELECT * FROM bookmarks WHERE book_id = ? ORDER BY created_at DESC", [bookId]);
-  return rows.map((r) => ({
-    id: r.id,
-    bookId: r.book_id,
-    cfi: r.cfi,
-    label: r.label || undefined,
-    chapterTitle: r.chapter_title || undefined,
-    createdAt: r.created_at,
-  }));
+  return sortAnnotationsByPosition(
+    rows.map((r) => ({
+      id: r.id,
+      bookId: r.book_id,
+      cfi: r.cfi,
+      label: r.label || undefined,
+      chapterTitle: r.chapter_title || undefined,
+      createdAt: r.created_at,
+    })),
+  );
 }
 
 export async function insertBookmark(bookmark: Bookmark): Promise<void> {

@@ -1,5 +1,13 @@
+import { sortAnnotationsByPosition } from "../reader/annotation-order";
 import type { Note } from "../types";
-import { getDB, getDeviceId, nextSyncVersion, nextUpdatedAt, insertTombstone, parseJSON } from "./db-core";
+import {
+  getDB,
+  getDeviceId,
+  insertTombstone,
+  nextSyncVersion,
+  nextUpdatedAt,
+  parseJSON,
+} from "./db-core";
 
 export async function getNotes(bookId: string): Promise<Note[]> {
   const database = await getDB();
@@ -15,18 +23,20 @@ export async function getNotes(bookId: string): Promise<Note[]> {
     created_at: number;
     updated_at: number;
   }>("SELECT * FROM notes WHERE book_id = ? ORDER BY created_at DESC", [bookId]);
-  return rows.map((r) => ({
-    id: r.id,
-    bookId: r.book_id,
-    highlightId: r.highlight_id || undefined,
-    cfi: r.cfi || undefined,
-    title: r.title,
-    content: r.content,
-    chapterTitle: r.chapter_title || undefined,
-    tags: parseJSON(r.tags, []),
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
+  return sortAnnotationsByPosition(
+    rows.map((r) => ({
+      id: r.id,
+      bookId: r.book_id,
+      highlightId: r.highlight_id || undefined,
+      cfi: r.cfi || undefined,
+      title: r.title,
+      content: r.content,
+      chapterTitle: r.chapter_title || undefined,
+      tags: parseJSON(r.tags, []),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })),
+  );
 }
 
 /** Get all notes across all books (for general chat without bookId) */
