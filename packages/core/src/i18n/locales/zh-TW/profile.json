@@ -14,7 +14,17 @@
     "avgDaily": "日均",
     "readingActivity": "閱讀活動",
     "viewDetails": "查看詳情",
-    "version": "ReadAny Mobile v{{version}}"
+    "version": "ReadAny Mobile v{{version}}",
+    "storage": "儲存空間",
+    "clearCache": "清除快取",
+    "clearingCache": "清除中...",
+    "clearCacheTitle": "清除快取",
+    "clearCacheConfirm": "將清除暫存匯入檔案、TTS 音訊快取和其他執行快取。書籍、筆記、設定和同步資料不會被刪除。",
+    "clearCacheAction": "清除快取",
+    "clearCacheDoneTitle": "快取已清除",
+    "clearCacheDoneDesc": "已清除 {{count}} 個快取檔案，釋放 {{size}}。",
+    "clearCacheFailedTitle": "清除失敗",
+    "clearCacheFailedDesc": "請稍後再試。"
   },
   "skills": {
     "title": "技能管理",

@@ -14,7 +14,17 @@
     "avgDaily": "日均",
     "readingActivity": "阅读活动",
     "viewDetails": "查看详情",
-    "version": "ReadAny Mobile v{{version}}"
+    "version": "ReadAny Mobile v{{version}}",
+    "storage": "存储",
+    "clearCache": "清除缓存",
+    "clearingCache": "清除中...",
+    "clearCacheTitle": "清除缓存",
+    "clearCacheConfirm": "将清除临时导入文件、TTS 音频缓存和其他运行缓存。书籍、笔记、设置和同步数据不会被删除。",
+    "clearCacheAction": "清除缓存",
+    "clearCacheDoneTitle": "缓存已清除",
+    "clearCacheDoneDesc": "已清除 {{count}} 个缓存文件，释放 {{size}}。",
+    "clearCacheFailedTitle": "清除失败",
+    "clearCacheFailedDesc": "请稍后重试。"
   },
   "skills": {
     "title": "技能管理",
