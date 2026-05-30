@@ -2231,11 +2231,8 @@ a { color: ${primary} !important; }
         var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
           acceptNode: function(node) {
             if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_SKIP;
-            var parent = node.parentElement;
-            var tag = parent && parent.tagName && parent.tagName.toLowerCase();
-            if (tag === 'script' || tag === 'style') return NodeFilter.FILTER_REJECT;
-            if (tag === 'rt' || tag === 'rp') return NodeFilter.FILTER_REJECT;
-            if (parent && parent.closest && parent.closest('.readany-translation')) return NodeFilter.FILTER_REJECT;
+            if (isTTSFootnoteMarker(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+            if (shouldSkipTTSNode(node.parentElement)) return NodeFilter.FILTER_REJECT;
             return NodeFilter.FILTER_ACCEPT;
           }
         });
@@ -2263,12 +2260,12 @@ a { color: ${primary} !important; }
           }
           
           if (isVisible) {
-            var t = textNode.nodeValue.trim();
+            var t = normalizeTTSText(textNode.nodeValue);
             if (t) { texts.push(t); totalLen += t.length; }
           }
           textNode = walker.nextNode();
         }
-        var result = texts.join(' ').trim();
+        var result = normalizeTTSText(texts.join(' '));
         return result.length > maxLen ? result.slice(0, maxLen) : result;
       } catch (e) { return ''; }
     }
@@ -2300,11 +2297,8 @@ a { color: ${primary} !important; }
         var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
           acceptNode: function(node) {
             if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_SKIP;
-            var parent = node.parentElement;
-            var tag = parent && parent.tagName && parent.tagName.toLowerCase();
-            if (tag === 'script' || tag === 'style') return NodeFilter.FILTER_REJECT;
-            if (tag === 'rt' || tag === 'rp') return NodeFilter.FILTER_REJECT;
-            if (parent && parent.closest && parent.closest('.readany-translation')) return NodeFilter.FILTER_REJECT;
+            if (isTTSFootnoteMarker(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+            if (shouldSkipTTSNode(node.parentElement)) return NodeFilter.FILTER_REJECT;
             return NodeFilter.FILTER_ACCEPT;
           }
         });
@@ -2343,13 +2337,13 @@ a { color: ${primary} !important; }
           
           if (isVisible) {
             visibleCount++;
-            var t = textNode.nodeValue.trim();
+            var t = normalizeTTSText(textNode.nodeValue);
             if (t) { texts.push(t); }
           }
           textNode = walker.nextNode();
         }
         
-        var result = texts.join(' ').trim();
+        var result = normalizeTTSText(texts.join(' '));
         return { 
           text: result, 
           debug: {
@@ -2470,7 +2464,7 @@ a { color: ${primary} !important; }
       if (!win) return [];
       return Array.from(blocks).filter((block) => {
         if (!block || !block.textContent || !block.textContent.trim()) return false;
-        if (block.closest && block.closest('.readany-translation')) return false;
+        if (shouldSkipTTSNode(block)) return false;
         try {
           const range = doc.createRange();
           range.selectNodeContents(block);
@@ -2485,7 +2479,7 @@ a { color: ${primary} !important; }
       const blockSelector = "p, h1, h2, h3, h4, h5, h6, li, blockquote, dd, dt, figcaption, pre, td, th";
       return Array.from(doc.querySelectorAll(blockSelector)).filter((block) => {
         if (!block || !block.textContent || !block.textContent.trim()) return false;
-        if (block.closest && block.closest('.readany-translation')) return false;
+        if (shouldSkipTTSNode(block)) return false;
         return true;
       });
     }
@@ -2506,10 +2500,51 @@ a { color: ${primary} !important; }
     }
 
     function fallbackSentenceSegments(text) {
-      const normalized = (text || '').replace(/\s+/g, ' ').trim();
+      const normalized = normalizeTTSText(text);
       if (!normalized) return [];
       const matches = normalized.match(/[^。！？!?；;\n]+[。！？!?；;…]?/gu) || [];
       return (matches.length ? matches : [normalized]).map((segment) => segment.trim()).filter(Boolean);
+    }
+
+    const TTS_FOOTNOTE_MARKER_PATTERN = /(?:\s*(?:\[(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\]|［(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})］|【(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})】|〔(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})〕|［?（(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})）］?|\((?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\)))+/gu;
+    const TTS_FOOTNOTE_MARKER_ONLY_PATTERN = /^(?:\s*(?:\[(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\]|［(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})］|【(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})】|〔(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})〕|［?（(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})）］?|\((?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\)))+\s*$/u;
+    const TTS_SKIPPED_ELEMENT_SELECTOR = [
+      'script',
+      'style',
+      'rt',
+      'rp',
+      'sup',
+      '.readany-translation',
+      '[role="doc-noteref"]',
+      '[role="doc-footnote"]',
+      '[epub\\:type~="noteref"]',
+      '[epub\\:type~="footnote"]',
+      '[type~="noteref"]',
+      '[type~="footnote"]',
+      'a[href^="#fn"]',
+      'a[href^="#footnote"]',
+      'a[href*="footnote"]',
+      'a[href*="note"]',
+      'a.noteref',
+      'a.footnote',
+      '.noteref',
+      '.footnote',
+      '.footnote-ref',
+      '.endnote',
+      '.duokan-footnote',
+      '.calibre-footnote',
+    ].join(',');
+
+    function normalizeTTSText(text) {
+      return String(text || '').replace(TTS_FOOTNOTE_MARKER_PATTERN, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function isTTSFootnoteMarker(text) {
+      return TTS_FOOTNOTE_MARKER_ONLY_PATTERN.test(String(text || ''));
+    }
+
+    function shouldSkipTTSNode(element) {
+      return !!(element && element.closest && element.closest(TTS_SKIPPED_ELEMENT_SELECTOR));
     }
 
     function stripCfiAssertions(value) {
@@ -2538,12 +2573,12 @@ a { color: ${primary} !important; }
     }
 
     function getTTSSegmentIdentity(cfi, text) {
-      return `${getTTSCfiStartIdentity(cfi)}::${String(text || '').replace(/\s+/g, ' ').trim()}`;
+      return `${getTTSCfiStartIdentity(cfi)}::${normalizeTTSText(text)}`;
     }
 
     function summarizeTTSSegmentsForLog(segments, limit) {
       return (segments || []).slice(0, limit || 8).map(function(segment, index) {
-        var text = String(segment && segment.text || '').replace(/\s+/g, ' ').trim();
+        var text = normalizeTTSText(segment && segment.text);
         return {
           index: index,
           cfi: segment && segment.cfi || null,
@@ -2604,7 +2639,7 @@ a { color: ${primary} !important; }
       const seen = new Set();
       for (const detail of [current, ...(following || [])]) {
         if (!detail || !detail.text || !detail.cfi) continue;
-        const text = String(detail.text).replace(/\s+/g, ' ').trim();
+        const text = normalizeTTSText(detail.text);
         const identity = getTTSSegmentIdentity(detail.cfi, text);
         if (!text || seen.has(identity)) continue;
         seen.add(identity);
@@ -2640,7 +2675,7 @@ a { color: ${primary} !important; }
             : null;
         const currentText =
           current && current.text
-            ? String(current.text).replace(/\s+/g, ' ').trim()
+            ? normalizeTTSText(current.text)
             : '';
         const currentIdentity = currentText ? getTTSSegmentIdentity(current && current.cfi, currentText) : null;
 
@@ -2649,7 +2684,7 @@ a { color: ${primary} !important; }
           const seen = new Set();
           for (const detail of details || []) {
             if (!detail || !detail.text || !detail.cfi) continue;
-            const text = String(detail.text).replace(/\s+/g, ' ').trim();
+            const text = normalizeTTSText(detail.text);
             const identity = getTTSSegmentIdentity(detail.cfi, text);
             if (!text || (currentIdentity && identity === currentIdentity) || seen.has(identity)) continue;
             seen.add(identity);
@@ -2722,7 +2757,7 @@ a { color: ${primary} !important; }
           }
           if (!started) continue;
 
-          const textNodes = getTextNodes(block).map((node) => {
+          const textNodes = getTTSTextNodes(block).map((node) => {
             const text = node.nodeValue || '';
             return { node, text };
           }).filter((item) => item.text.trim().length > 0);
@@ -2771,7 +2806,7 @@ a { color: ${primary} !important; }
             range.setStart(startPos.node, startPos.offset);
             range.setEnd(endPos.node, endPos.offset);
 
-            const text = absoluteText.slice(start, end).replace(/\s+/g, ' ').trim();
+            const text = normalizeTTSText(absoluteText.slice(start, end));
             if (!text) continue;
 
             try {
@@ -2902,7 +2937,7 @@ a { color: ${primary} !important; }
 
           for (var blockIndex = 0; blockIndex < visibleBlocks.length; blockIndex++) {
             const block = visibleBlocks[blockIndex];
-            const textNodes = getTextNodes(block).map((node) => {
+            const textNodes = getTTSTextNodes(block).map((node) => {
               const text = node.nodeValue || '';
               return { node, text };
             }).filter((item) => item.text.trim().length > 0);
@@ -2965,7 +3000,7 @@ a { color: ${primary} !important; }
                 continue;
               }
 
-              const text = absoluteText.slice(start, end).replace(/\s+/g, ' ').trim();
+              const text = normalizeTTSText(absoluteText.slice(start, end));
               if (!text) {
                 stats.skippedEmptyText++;
                 continue;
@@ -3621,6 +3656,29 @@ a { color: ${primary} !important; }
         {
           acceptNode: function (node) {
             if (isInsideRubyAnnotation(node)) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        }
+      );
+      const nodes = [];
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.textContent && node.textContent.trim()) {
+          nodes.push(node);
+        }
+      }
+      return nodes;
+    }
+
+    function getTTSTextNodes(element) {
+      const walker = element.ownerDocument.createTreeWalker(
+        element,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: function (node) {
+            if (isInsideRubyAnnotation(node)) return NodeFilter.FILTER_REJECT;
+            if (isTTSFootnoteMarker(node.nodeValue || '')) return NodeFilter.FILTER_REJECT;
+            if (shouldSkipTTSNode(node.parentElement)) return NodeFilter.FILTER_REJECT;
             return NodeFilter.FILTER_ACCEPT;
           },
         }
