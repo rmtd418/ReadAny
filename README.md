@@ -57,7 +57,7 @@
 | Reading Stats | ✅ | ❌ | ❌ | Limited |
 | WebDAV Sync | ✅ | ❌ | ❌ | ❌ |
 | Skills System | ✅ | ❌ | ❌ | ❌ |
-| Format Support | 8+ | 15+ | 10+ | 2 |
+| Format Support | 10+ | 15+ | 10+ | 2 |
 | Note Export | 5 formats | Limited | Limited | Limited |
 | Open Source | ✅ | ✅ | ✅ | ❌ |
 
@@ -146,7 +146,9 @@
 
 ### 📚 Multi-Format Support
 
-**EPUB** · **PDF** · **MOBI** · **AZW** · **AZW3** · **FB2** · **FBZ** · **CBZ**
+**EPUB** · **PDF** · **MOBI** · **AZW** · **AZW3** · **FB2** · **FBZ** · **CBZ** · **TXT** · **UMD**
+
+TXT and UMD are imported by converting them to EPUB for reading, notes, search, and sync.
 
 ### 🎨 Customizable Experience
 
