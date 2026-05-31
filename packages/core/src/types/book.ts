@@ -1,4 +1,5 @@
 /** Book and reading configuration types */
+import type { HighlightColor } from "./annotation";
 
 export interface BookMeta {
   title: string;
@@ -73,6 +74,7 @@ export interface ReadSettings extends ViewSettings {
   showTopTitleProgress: boolean;
   showBottomTimeBattery: boolean;
   volumeButtonsPageTurn: boolean;
+  defaultHighlightColor?: HighlightColor;
   /**
    * Mobile-only opt-in: when true, the reader scales fontSize by the OS
    * accessibility font scale (PixelRatio.getFontScale()) before rendering.

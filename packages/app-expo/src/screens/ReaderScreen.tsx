@@ -41,7 +41,7 @@ import { useReadingSession } from "@readany/core/hooks/use-reading-session";
 import { createSelectionNoteMutation } from "@readany/core/reader";
 import { getPlatformService } from "@readany/core/services";
 import { getCSSFontFace, useFontStore } from "@readany/core/stores";
-import type { ReadSettings, TOCItem } from "@readany/core/types";
+import type { HighlightColor, ReadSettings, TOCItem } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 import { throttle } from "@readany/core/utils/throttle";
 import { Asset } from "expo-asset";
@@ -977,14 +977,36 @@ export function ReaderScreen({ route, navigation }: Props) {
 
   // Selection popover handlers
   const handleHighlight = useCallback(
-    (color: string) => {
+    (color: HighlightColor = readSettings.defaultHighlightColor ?? "yellow") => {
       if (!selection) return;
+      updateReadSettings({ defaultHighlightColor: color });
+
+      const existingHighlight = highlights.find(
+        (h) => h.bookId === bookId && h.cfi === selection.cfi,
+      );
+
+      if (existingHighlight) {
+        updateHighlight(existingHighlight.id, {
+          color,
+          updatedAt: Date.now(),
+        });
+        bridge.removeAnnotation({ value: existingHighlight.cfi });
+        bridge.addAnnotation({
+          value: existingHighlight.cfi,
+          type: "highlight",
+          color,
+          note: existingHighlight.note,
+        });
+        setSelection(null);
+        return;
+      }
+
       const highlight = {
         id: `hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         bookId,
         cfi: selection.cfi,
         text: selection.text,
-        color: color as any,
+        color,
         chapterTitle: currentChapter,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -993,7 +1015,17 @@ export function ReaderScreen({ route, navigation }: Props) {
       bridge.addAnnotation({ value: selection.cfi, type: "highlight", color });
       setSelection(null);
     },
-    [selection, bookId, currentChapter, addHighlight, bridge],
+    [
+      selection,
+      readSettings.defaultHighlightColor,
+      updateReadSettings,
+      highlights,
+      bookId,
+      currentChapter,
+      addHighlight,
+      updateHighlight,
+      bridge,
+    ],
   );
 
   const handleDismissSelection = useCallback(() => {
@@ -1371,7 +1403,8 @@ export function ReaderScreen({ route, navigation }: Props) {
 
   const isPanelOpen = showTOC || showSettings || showSearch || showNotebook || showTranslation;
   const existingSelectionHighlight = selection
-    ? (highlights.find((highlight) => highlight.cfi === selection.cfi) ?? null)
+    ? (highlights.find((highlight) => highlight.bookId === bookId && highlight.cfi === selection.cfi) ??
+      null)
     : null;
   const readerTopMargin = !showSearch
     ? showTopTitleProgress
@@ -1570,7 +1603,7 @@ export function ReaderScreen({ route, navigation }: Props) {
               note: text,
               chapterTitle: currentChapter,
               existingHighlight: existingSelectionHighlight,
-              defaultColor: "yellow",
+              defaultColor: readSettings.defaultHighlightColor ?? "yellow",
             });
 
             if (mutation.kind === "create") {
@@ -1605,8 +1638,11 @@ export function ReaderScreen({ route, navigation }: Props) {
                 }
               : null
           }
+          defaultColor={readSettings.defaultHighlightColor ?? "yellow"}
           onRemoveHighlight={() => {
-            const existing = highlights.find((h) => h.cfi === selectionPopoverSelection.cfi);
+            const existing = highlights.find(
+              (h) => h.bookId === bookId && h.cfi === selectionPopoverSelection.cfi,
+            );
             if (existing) {
               removeHighlight(existing.id);
               bridge.removeAnnotation({ value: existing.cfi });

@@ -12,6 +12,8 @@ import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import type { SelectionEvent } from "@/hooks/use-reader-bridge";
 import { radius, spacing, useColors } from "@/styles/theme";
 import type { ThemeColors } from "@/styles/theme";
+import { HIGHLIGHT_COLORS, HIGHLIGHT_COLOR_HEX } from "@readany/core/types";
+import type { HighlightColor } from "@readany/core/types";
 import * as Clipboard from "expo-clipboard";
 /**
  * SelectionPopover — floating action bar shown when text is selected in the reader.
@@ -31,15 +33,6 @@ import {
   View,
 } from "react-native";
 
-const HIGHLIGHT_COLORS = [
-  { key: "yellow", hex: "#facc15" },
-  { key: "red", hex: "#f87171" },
-  { key: "green", hex: "#4ade80" },
-  { key: "blue", hex: "#60a5fa" },
-  { key: "violet", hex: "#a78bfa" },
-  { key: "pink", hex: "#f472b6" },
-] as const;
-
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const POPOVER_MARGIN = 8;
@@ -53,7 +46,7 @@ const SELECTION_POPOVER_BELOW_OFFSET = 6;
 
 interface Props {
   selection: SelectionEvent;
-  onHighlight: (color: string) => void;
+  onHighlight: (color: HighlightColor) => void;
   onDismiss: () => void;
   onCopy: () => void;
   onAIChat: () => void;
@@ -61,7 +54,8 @@ interface Props {
   onNote?: (text: string, cfi: string) => void;
   onTranslate?: (text: string) => void;
   onRemoveHighlight?: () => void;
-  existingHighlight?: { id: string; color: string; note?: string } | null;
+  existingHighlight?: { id: string; color: HighlightColor; note?: string } | null;
+  defaultColor?: HighlightColor;
 }
 
 export function SelectionPopover({
@@ -75,6 +69,7 @@ export function SelectionPopover({
   onTranslate,
   onRemoveHighlight,
   existingHighlight,
+  defaultColor = "yellow",
 }: Props) {
   const { t } = useTranslation();
   const colors = useColors();
@@ -82,17 +77,23 @@ export function SelectionPopover({
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showColors, setShowColors] = useState(!!existingHighlight);
   const [noteContent, setNoteContent] = useState(existingHighlight?.note || "");
+  const existingHighlightNote = existingHighlight?.note || "";
+  const hasExistingHighlight = !!existingHighlight;
 
   useEffect(() => {
-    setNoteContent(existingHighlight?.note || "");
-  }, [existingHighlight?.id, existingHighlight?.note, selection.cfi]);
+    setNoteContent(existingHighlightNote);
+  }, [existingHighlightNote]);
+
+  useEffect(() => {
+    setShowColors(hasExistingHighlight);
+  }, [hasExistingHighlight]);
 
   const buttonCount =
     4 +
     (onNote ? 1 : 0) +
     (onTranslate ? 1 : 0) +
     (onSpeak ? 1 : 0) +
-    (existingHighlight && onRemoveHighlight ? 1 : 0);
+    (hasExistingHighlight && onRemoveHighlight ? 1 : 0);
   const colorRowHeight = showColors ? 40 : 0;
   const popoverHeight = 44 + colorRowHeight + POPOVER_PADDING * 2 + GAP;
   const popoverWidth = Math.min(
@@ -114,18 +115,14 @@ export function SelectionPopover({
     const yAbove = selTop - popoverHeight + SELECTION_POPOVER_ABOVE_OFFSET;
     const yBelow = selBottom + SELECTION_POPOVER_BELOW_OFFSET;
     const aboveValid = yAbove >= SAFE_TOP;
-    const belowValid =
-      yBelow + popoverHeight + POPOVER_MARGIN <= SCREEN_HEIGHT - SAFE_BOTTOM;
+    const belowValid = yBelow + popoverHeight + POPOVER_MARGIN <= SCREEN_HEIGHT - SAFE_BOTTOM;
 
     if (aboveValid) {
       y = yAbove;
     } else if (belowValid) {
       y = yBelow;
     } else {
-      y = Math.max(
-        SAFE_TOP,
-        Math.min(yBelow, SCREEN_HEIGHT - popoverHeight - POPOVER_MARGIN),
-      );
+      y = Math.max(SAFE_TOP, Math.min(yBelow, SCREEN_HEIGHT - popoverHeight - POPOVER_MARGIN));
     }
 
     return { x, y };
@@ -170,9 +167,13 @@ export function SelectionPopover({
     onDismiss();
   }, [onRemoveHighlight, onDismiss]);
 
-  const toggleColors = useCallback(() => {
-    setShowColors((prev) => !prev);
-  }, []);
+  const handleHighlightPress = useCallback(() => {
+    if (hasExistingHighlight) {
+      setShowColors((prev) => !prev);
+      return;
+    }
+    onHighlight(defaultColor);
+  }, [defaultColor, hasExistingHighlight, onHighlight]);
 
   return (
     <View style={[s.overlay]} pointerEvents="box-none">
@@ -180,15 +181,15 @@ export function SelectionPopover({
       <View style={[s.popover, { left: position.x, top: position.y }]}>
         {showColors && (
           <View style={s.colorRow}>
-            {HIGHLIGHT_COLORS.map((c) => (
+            {HIGHLIGHT_COLORS.map((color) => (
               <TouchableOpacity
-                key={c.key}
+                key={color}
                 style={[
                   s.colorDot,
-                  { backgroundColor: c.hex },
-                  existingHighlight?.color === c.key && s.colorDotActive,
+                  { backgroundColor: HIGHLIGHT_COLOR_HEX[color] },
+                  (existingHighlight?.color ?? defaultColor) === color && s.colorDotActive,
                 ]}
-                onPress={() => onHighlight(c.key)}
+                onPress={() => onHighlight(color)}
               />
             ))}
           </View>
@@ -197,7 +198,7 @@ export function SelectionPopover({
         <View style={s.actionRow}>
           <TouchableOpacity
             style={[s.iconBtn, showColors && s.iconBtnActive]}
-            onPress={toggleColors}
+            onPress={handleHighlightPress}
           >
             <HighlighterIcon size={18} color={showColors ? colors.primary : colors.foreground} />
           </TouchableOpacity>

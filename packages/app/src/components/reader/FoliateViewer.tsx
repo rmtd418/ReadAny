@@ -1543,6 +1543,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         green: "rgba(74, 222, 128, 0.4)", // green-400
         blue: "rgba(96, 165, 250, 0.4)", // blue-400
         pink: "rgba(236, 72, 153, 0.4)", // pink-400 - ADDED
+        purple: "rgba(192, 132, 252, 0.4)", // purple-400
         violet: "rgba(167, 139, 250, 0.4)", // violet-400
       };
 
