@@ -318,11 +318,11 @@
       "zeroMinutesLong": "0 minute",
       "nMinutesLong": "{{n}} minutes",
       "nHoursLong": "{{n}} heures",
-      "nHoursMinutesLong": "{{n}} h {{m}} min",
+      "nHoursMinutesLong": "{{h}} h {{m}} min",
       "zeroMinutesCompact": "0m",
       "nMinutesCompact": "{{n}}m",
       "nHoursCompact": "{{n}}h",
-      "nHoursMinutesCompact": "{{n}}h{{m}}m",
+      "nHoursMinutesCompact": "{{h}}h{{m}}m",
       "thousandChars": "{{n}}k car."
     }
   }
