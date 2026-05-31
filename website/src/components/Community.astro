@@ -38,6 +38,11 @@ const sponsorQrCodes = [
     name: t("community.sponsor.alipay"),
     image: "/ReadAny/images/支付宝收款码.jpg",
   },
+  {
+    name: t("community.sponsor.table"),
+    href: "https://ifdian.net/a/codedogQBY",
+    description: t("community.sponsor.tableDesc"),
+  },
 ];
 ---
 
@@ -98,14 +103,26 @@ const sponsorQrCodes = [
     <div class="mt-16 pt-12 border-t border-border/50">
       <h3 class="text-lg font-semibold mb-2">{t('community.sponsor.title')}</h3>
       <p class="text-sm text-muted-foreground mb-6">{t('community.sponsor.subtitle')}</p>
-      <div class="flex gap-8">
+      <div class="flex flex-wrap gap-8">
         {sponsorQrCodes.map((qr) => (
           <div class="text-center">
-            <img 
-              src={qr.image} 
-              alt={qr.name}
-              class="w-40 h-40 rounded-lg border border-border/50 shadow-md"
-            />
+            {qr.image ? (
+              <img
+                src={qr.image}
+                alt={qr.name}
+                class="w-40 h-40 rounded-lg border border-border/50 shadow-md"
+              />
+            ) : (
+              <a
+                href={qr.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex h-40 w-40 flex-col items-center justify-center rounded-lg border border-border/50 bg-background px-5 text-center shadow-md transition-colors hover:border-foreground/30 hover:bg-muted/50"
+              >
+                <span class="text-lg font-semibold text-foreground">{qr.name}</span>
+                <span class="mt-2 text-xs leading-relaxed text-muted-foreground">{qr.description}</span>
+              </a>
+            )}
             <p class="mt-3 text-sm text-muted-foreground">{qr.name}</p>
           </div>
         ))}

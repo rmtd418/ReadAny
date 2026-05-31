@@ -330,6 +330,10 @@ If you find ReadAny helpful, consider buying me a coffee to support ongoing deve
   <img src="assets/支付宝收款码.jpg" width="200" alt="支付宝收款码">
 </p>
 
+<p align="center">
+  <a href="https://ifdian.net/a/codedogQBY">Dining Table on Afdian</a>
+</p>
+
 ---
 
 ## Star History

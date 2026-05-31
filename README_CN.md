@@ -330,6 +330,10 @@ pnpm tauri build
   <img src="assets/支付宝收款码.jpg" width="200" alt="支付宝收款码">
 </p>
 
+<p align="center">
+  <a href="https://ifdian.net/a/codedogQBY">餐桌：爱发电支持</a>
+</p>
+
 ---
 
 ## Star 历史

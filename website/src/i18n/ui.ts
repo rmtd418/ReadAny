@@ -68,6 +68,8 @@ export const ui = {
     "community.sponsor.subtitle": "If you find ReadAny helpful, consider buying me a coffee!",
     "community.sponsor.wechat": "WeChat",
     "community.sponsor.alipay": "Alipay",
+    "community.sponsor.table": "Dining Table",
+    "community.sponsor.tableDesc": "Support on Afdian",
     "footer.github": "Star on GitHub",
     "footer.copyright": "© 2025 ReadAny. GPL-3.0 License.",
     
@@ -207,6 +209,8 @@ export const ui = {
     "community.sponsor.subtitle": "如果你觉得 ReadAny 对你有帮助，欢迎支持项目的持续开发！",
     "community.sponsor.wechat": "微信赞赏",
     "community.sponsor.alipay": "支付宝",
+    "community.sponsor.table": "餐桌",
+    "community.sponsor.tableDesc": "前往爱发电支持",
     "footer.github": "Star on GitHub",
     "footer.copyright": "© 2025 ReadAny. GPL-3.0 许可证。",
     
