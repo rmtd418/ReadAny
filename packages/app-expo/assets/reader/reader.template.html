@@ -2031,7 +2031,7 @@ a { color: ${primary} !important; }
     }
 
     function emitSelection(doc, sel, range) {
-      const text = sel.toString().trim();
+      const text = getRangeTextWithoutRuby(range, sel.toString());
       if (!text) return;
 
       const rect = range.getBoundingClientRect();
@@ -2129,6 +2129,18 @@ a { color: ${primary} !important; }
       if (!selection || !selection.rangeCount) return null;
       const range = selection.getRangeAt(0);
       return range && !range.collapsed ? range : null;
+    }
+
+    function getRangeTextWithoutRuby(range, fallback) {
+      try {
+        const fragment = range.cloneContents();
+        fragment.querySelectorAll('rt, rp').forEach(function (node) {
+          node.remove();
+        });
+        const text = (fragment.textContent || '').trim();
+        if (text) return text;
+      } catch {}
+      return (fallback || '').trim();
     }
 
     function getSelectionEndRect(range) {
