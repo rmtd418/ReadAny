@@ -1266,7 +1266,7 @@
 
         let fontFamily;
         if (currentCustomFontFamily) {
-          fontFamily = currentCustomFontFamily;
+          fontFamily = cssString(currentCustomFontFamily);
         } else {
           const theme = fontThemes[currentFontTheme] || fontThemes.default;
           // For themes with multi-value font stacks (like system default), use as-is
@@ -1368,6 +1368,10 @@
         importUrls,
         fontFaceCSS: fontFaceLines.join('\n').trim(),
       };
+    }
+
+    function cssString(value) {
+      return JSON.stringify(String(value || ''));
     }
 
     function syncCustomFontStylesForDoc(doc, css) {
