@@ -2,10 +2,54 @@
  * TTS text processing utilities — platform agnostic.
  */
 
-/** Clean text for TTS: remove references like [1], extra whitespace */
+const FOOTNOTE_MARKER_PATTERN =
+  /(?:\s*(?:\[(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\]|［(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})］|【(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})】|〔(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})〕|［?（(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})）］?|\((?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\)))+/gu;
+
+const FOOTNOTE_MARKER_ONLY_PATTERN =
+  /^(?:\s*(?:\[(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\]|［(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})］|【(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})】|〔(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})〕|［?（(?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})）］?|\((?:\d{1,4}|[一二三四五六七八九十百千万零〇两]{1,8}|[ivxlcdmIVXLCDM]{1,10})\)))+\s*$/u;
+
+const TTS_SKIPPED_ELEMENT_SELECTOR = [
+  "script",
+  "style",
+  "rt",
+  "rp",
+  "sup",
+  ".readany-translation",
+  '[role="doc-noteref"]',
+  '[role="doc-footnote"]',
+  '[epub\\:type~="noteref"]',
+  '[epub\\:type~="footnote"]',
+  '[type~="noteref"]',
+  '[type~="footnote"]',
+  'a[href^="#fn"]',
+  'a[href^="#footnote"]',
+  'a[href*="footnote"]',
+  'a[href*="note"]',
+  'a.noteref',
+  'a.footnote',
+  ".noteref",
+  ".footnote",
+  ".footnote-ref",
+  ".endnote",
+  ".duokan-footnote",
+  ".calibre-footnote",
+].join(",");
+
+/** Return true when a text node only contains a footnote marker such as [12] or [十二]. */
+export function isTTSFootnoteMarker(text: string): boolean {
+  return FOOTNOTE_MARKER_ONLY_PATTERN.test(text);
+}
+
+/** Return true when an element should not contribute text to TTS. */
+export function shouldSkipTTSNode(element: Element | null | undefined): boolean {
+  if (!element) return false;
+  return Boolean(element.closest(TTS_SKIPPED_ELEMENT_SELECTOR));
+}
+
+/** Clean text for TTS: remove footnote references and extra whitespace. */
 export function cleanText(text: string): string {
   return text
-    .replace(/\[\d+\]/g, "")
+    .replace(FOOTNOTE_MARKER_PATTERN, "")
     .replace(/\s+/g, " ")
     .trim();
 }
