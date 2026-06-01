@@ -57,6 +57,12 @@ export class WebDavBackend implements ISyncBackend {
     return resolved;
   }
 
+  private joinLogicalPath(parentPath: string, name: string): string {
+    const parent = parentPath.replace(/\/+$/, "") || "/";
+    const encodedName = name.replace(/^\/+|\/+$/g, "");
+    return parent === "/" ? `/${encodedName}` : `${parent}/${encodedName}`;
+  }
+
   async testConnection(): Promise<boolean> {
     await this.client.testConnection();
     await this.ensureDirectories();
@@ -144,7 +150,7 @@ export class WebDavBackend implements ISyncBackend {
     const resources = await this.client.safeReadDir(this.resolvePath(path));
     return resources.map((r) => ({
       name: r.name,
-      path: r.href,
+      path: this.joinLogicalPath(path, r.name),
       size: r.contentLength ?? 0,
       lastModified: r.lastModified ? new Date(r.lastModified).getTime() : 0,
       isDirectory: r.isCollection,
