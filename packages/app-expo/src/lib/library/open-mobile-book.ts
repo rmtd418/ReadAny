@@ -1,12 +1,13 @@
 import type { RootStackParamList } from "@/navigation/RootNavigator";
 import { useLibraryStore } from "@/stores/library-store";
+import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getBook } from "@readany/core/db/database";
 import { getPlatformService } from "@readany/core/services";
 import type { Book } from "@readany/core/types";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { TFunction } from "i18next";
 import * as DocumentPicker from "expo-document-picker";
-import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
+import type { TFunction } from "i18next";
+import { Alert } from "react-native";
 
 type MobileNavigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -57,7 +58,9 @@ function authorsLikelyMatch(a?: string, b?: string): boolean {
   if (left === right || left.includes(right) || right.includes(left)) return true;
   const leftParts = left.split(/[,，、/&]+/).filter((part) => part.length > 1);
   const rightParts = right.split(/[,，、/&]+/).filter((part) => part.length > 1);
-  return leftParts.some((part) => rightParts.some((candidate) => part.includes(candidate) || candidate.includes(part)));
+  return leftParts.some((part) =>
+    rightParts.some((candidate) => part.includes(candidate) || candidate.includes(part)),
+  );
 }
 
 function shouldConfirmReimportCandidate(
@@ -128,6 +131,14 @@ export async function openMobileBook({
   if (book.syncStatus === "remote") {
     navigation.navigate("Reader", { bookId, cfi, highlight });
     return true;
+  }
+
+  if (book.syncStatus === "downloading") {
+    Alert.alert(
+      t("library.downloading", "下载中"),
+      t("library.downloadInProgress", "书籍还在下载中，请稍后再打开。"),
+    );
+    return false;
   }
 
   // A soft-deleted book is no longer in the live store — even if the file

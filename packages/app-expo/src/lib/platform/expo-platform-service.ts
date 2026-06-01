@@ -433,7 +433,15 @@ export class ExpoPlatformService implements IPlatformService {
             },
             arrayBuffer: async () => {
               if (responseType === "arraybuffer") {
-                return xhr.response as ArrayBuffer;
+                if (xhr.response instanceof ArrayBuffer) {
+                  return xhr.response;
+                }
+                if (xhr.response instanceof Blob) {
+                  return xhr.response.arrayBuffer();
+                }
+                throw new Error(
+                  `Expected arraybuffer response for ${method} ${url}, got ${Object.prototype.toString.call(xhr.response)}`,
+                );
               }
               return new TextEncoder().encode(textResponse).buffer;
             },

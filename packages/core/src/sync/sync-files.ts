@@ -1331,6 +1331,13 @@ export async function downloadBookFile(
       return sawNon404Error ? "error" : "not-found";
     }
 
+    const localSize = await adapter.getFileSize(localPath);
+    if (localSize === 0) {
+      console.warn(`[Sync] Downloaded empty book file for ${bookId}; keeping it remote`);
+      await setBookSyncStatus(bookId, "remote");
+      return "error";
+    }
+
     onProgress?.({ downloaded: 100, total: 100 });
     await setBookSyncStatus(bookId, "local");
     console.log(`[Sync] ✓ Book ${bookId} downloaded and marked as local`);
