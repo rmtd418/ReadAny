@@ -495,7 +495,7 @@ async function listRemoteDeviceFiles(
       .filter((f) => !f.isDirectory && f.name.startsWith("device-") && f.name.endsWith(".json"))
       .map((f) => ({
         deviceId: f.name.replace(/^device-/, "").replace(/\.json$/, ""),
-        path: `${SYNC_DIR}/${f.name}`,
+        path: f.path || `${SYNC_DIR}/${f.name}`,
       }));
   } catch {
     return [];
@@ -560,15 +560,25 @@ export async function runSimpleSync(
     console.log(`[SimpleSync] Found ${remoteFiles.length} remote device snapshot(s)`);
 
     let totalApplied = 0;
-    let remoteSyncError: string | null = null;
+    let skippedRemoteSnapshots = 0;
     for (const { deviceId, path } of remoteFiles) {
       // Skip our own file
       if (deviceId === localDeviceId) continue;
 
+      let payload: DeviceSyncPayload | null;
       try {
         console.log(`[SimpleSync] Downloading changes from device ${deviceId}...`);
-        const payload = await backend.getJSON<DeviceSyncPayload>(path);
-        if (!payload) continue;
+        payload = await backend.getJSON<DeviceSyncPayload>(path);
+      } catch (e) {
+        skippedRemoteSnapshots++;
+        console.warn(
+          `[SimpleSync] Skipping unreadable remote snapshot from device ${deviceId}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        continue;
+      }
+
+      if (!payload) continue;
+      try {
         console.log(
           `[SimpleSync] Downloaded device ${deviceId}: ${Object.keys(payload.tables).length} table(s)`,
         );
@@ -587,29 +597,15 @@ export async function runSimpleSync(
         totalApplied += result.applied;
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e);
-        remoteSyncError = `Failed to apply changes from device ${deviceId}: ${error}`;
-        console.warn(`[SimpleSync] ${remoteSyncError}`);
-        break;
+        console.warn(`[SimpleSync] Failed to apply changes from device ${deviceId}: ${error}`);
+        throw e;
       }
     }
 
-    if (remoteSyncError) {
-      onProgress?.({
-        phase: "database",
-        operation: "download",
-        completedFiles: 0,
-        totalFiles: 0,
-        message: "同步中止：远端数据读取失败",
-      });
-      return {
-        success: false,
-        changes: totalApplied,
-        filesUploaded: 0,
-        filesDownloaded: 0,
-        filesUploadFailed: 0,
-        filesDownloadFailed: 0,
-        error: remoteSyncError,
-      };
+    if (skippedRemoteSnapshots > 0) {
+      console.warn(
+        `[SimpleSync] Skipped ${skippedRemoteSnapshots} unreadable remote device snapshot(s)`,
+      );
     }
 
     // 3. Collect and push local changes
