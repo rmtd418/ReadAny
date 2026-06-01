@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { TFunction } from "i18next";
 import * as DocumentPicker from "expo-document-picker";
 import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
+import { Alert } from "react-native";
 
 type MobileNavigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -128,6 +129,14 @@ export async function openMobileBook({
   if (book.syncStatus === "remote") {
     navigation.navigate("Reader", { bookId, cfi, highlight });
     return true;
+  }
+
+  if (book.syncStatus === "downloading") {
+    Alert.alert(
+      t("library.downloading", "下载中"),
+      t("library.downloadInProgress", "书籍还在下载中，请稍后再打开。"),
+    );
+    return false;
   }
 
   // A soft-deleted book is no longer in the live store — even if the file
