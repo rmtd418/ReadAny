@@ -14,7 +14,17 @@
     "avgDaily": "Promedio diario",
     "readingActivity": "Actividad de lectura",
     "viewDetails": "Ver detalles",
-    "version": "ReadAny Mobile v{{version}}"
+    "version": "ReadAny Mobile v{{version}}",
+    "storage": "Almacenamiento",
+    "clearCache": "Limpiar caché",
+    "clearingCache": "Limpiando...",
+    "clearCacheTitle": "Limpiar caché",
+    "clearCacheConfirm": "Esto eliminará archivos temporales de importación, caché de audio TTS y otros cachés de ejecución. No se eliminarán libros, notas, ajustes ni datos de sincronización.",
+    "clearCacheAction": "Limpiar caché",
+    "clearCacheDoneTitle": "Caché limpiada",
+    "clearCacheDoneDesc": "Se eliminaron {{count}} archivo(s) en caché y se liberaron {{size}}.",
+    "clearCacheFailedTitle": "No se pudo limpiar la caché",
+    "clearCacheFailedDesc": "Inténtalo de nuevo más tarde."
   },
   "skills": {
     "title": "Habilidades",
