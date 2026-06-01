@@ -480,8 +480,10 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     goToCfi: (cfi) => foliateRef.current?.goToCFI(cfi),
   });
 
-  // Track which highlights have been rendered (id -> {cfi, note}) to detect changes
-  const renderedHighlightsRef = useRef<Map<string, { cfi: string; hasNote: boolean }>>(new Map());
+  // Track which highlights have been rendered (id -> {cfi, note, color}) to detect changes
+  const renderedHighlightsRef = useRef<
+    Map<string, { cfi: string; hasNote: boolean; color?: HighlightColor }>
+  >(new Map());
 
   // Reset rendered highlights tracking when book changes
   useEffect(() => {
@@ -599,15 +601,16 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
         }
       }
 
-      // Add new highlights or update existing ones if note status changed
+      // Add new highlights or update existing ones if note status or color changed
       for (const h of bookHighlights) {
         if (!h.cfi) continue;
 
         const existing = renderedHighlightsRef.current.get(h.id);
         const hasNote = !!h.note;
+        const color = h.color || "yellow";
 
-        // Check if we need to re-render (new highlight or note status changed)
-        const needsRender = !existing || existing.hasNote !== hasNote;
+        // Check if we need to re-render (new highlight, note status changed, or color changed)
+        const needsRender = !existing || existing.hasNote !== hasNote || existing.color !== color;
 
         if (needsRender) {
           // Remove old annotation if exists
@@ -619,10 +622,10 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
           foliateRef.current.addAnnotation({
             value: h.cfi,
             type: "highlight",
-            color: h.color || "yellow",
+            color,
             note: h.note, // Pass note for wavy underline + tooltip
           });
-          renderedHighlightsRef.current.set(h.id, { cfi: h.cfi, hasNote });
+          renderedHighlightsRef.current.set(h.id, { cfi: h.cfi, hasNote, color });
         }
       }
     }, 100);
@@ -1212,7 +1215,11 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
               color: h.color || "yellow",
               note: h.note, // Pass note for wavy underline + tooltip
             });
-            renderedHighlightsRef.current.set(h.id, { cfi: h.cfi, hasNote: !!h.note });
+            renderedHighlightsRef.current.set(h.id, {
+              cfi: h.cfi,
+              hasNote: !!h.note,
+              color: h.color || "yellow",
+            });
           }
         }
 
@@ -1367,8 +1374,29 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
   // --- Selection actions ---
   const handleHighlight = useCallback(
-    (color: HighlightColor = "yellow") => {
+    (color: HighlightColor = viewSettings.defaultHighlightColor ?? "yellow") => {
       if (selection && selection.cfi) {
+        updateReadSettings({ defaultHighlightColor: color });
+        const existingHighlight = selection.highlightId
+          ? highlights.find((h) => h.id === selection.highlightId)
+          : highlights.find((h) => h.bookId === bookId && h.cfi === selection.cfi);
+
+        if (existingHighlight) {
+          useAnnotationStore.getState().updateHighlight(existingHighlight.id, {
+            color,
+            updatedAt: Date.now(),
+          });
+          foliateRef.current?.deleteAnnotation({ value: existingHighlight.cfi });
+          foliateRef.current?.addAnnotation({
+            value: existingHighlight.cfi,
+            type: "highlight",
+            color,
+            note: existingHighlight.note,
+          });
+          setSelection(null);
+          return;
+        }
+
         const highlightId = crypto.randomUUID();
 
         // Add to store (for persistence)
@@ -1391,11 +1419,22 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
         });
 
         // Track as rendered
-        renderedHighlightsRef.current.set(highlightId, { cfi: selection.cfi, hasNote: false });
+        renderedHighlightsRef.current.set(highlightId, {
+          cfi: selection.cfi,
+          hasNote: false,
+          color,
+        });
       }
       setSelection(null);
     },
-    [selection, bookId, readerTab?.chapterTitle],
+    [
+      selection,
+      bookId,
+      readerTab?.chapterTitle,
+      highlights,
+      updateReadSettings,
+      viewSettings.defaultHighlightColor,
+    ],
   );
 
   // Handle note button - open notebook panel with pending note
@@ -2728,6 +2767,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
                 selectedText={selection.text}
                 annotated={selection.annotated}
                 currentColor={selection.color as HighlightColor | undefined}
+                defaultColor={viewSettings.defaultHighlightColor ?? "yellow"}
                 isPdf={bookFormat === "PDF"}
                 onHighlight={handleHighlight}
                 onRemoveHighlight={handleRemoveHighlight}
