@@ -19,6 +19,7 @@ import { runSerializedDbTask } from "../db/write-retry";
 import { getPlatformService } from "../services/platform";
 import type { ISyncBackend } from "./sync-backend";
 import type { SyncFilesOptions } from "./sync-files";
+import type { SyncProgress } from "./sync-types";
 
 interface SyncTableConfig {
   name: string;
@@ -494,7 +495,7 @@ async function listRemoteDeviceFiles(
       .filter((f) => !f.isDirectory && f.name.startsWith("device-") && f.name.endsWith(".json"))
       .map((f) => ({
         deviceId: f.name.replace(/^device-/, "").replace(/\.json$/, ""),
-        path: `${SYNC_DIR}/${f.name}`,
+        path: f.path || `${SYNC_DIR}/${f.name}`,
       }));
   } catch {
     return [];
@@ -507,11 +508,7 @@ async function listRemoteDeviceFiles(
 
 export async function runSimpleSync(
   backend: ISyncBackend,
-  onProgress?: (progress: {
-    phase: "database" | "files";
-    operation: "upload" | "download";
-    message: string;
-  }) => void,
+  onProgress?: (progress: SyncProgress) => void,
   options: SimpleSyncOptions = {},
 ): Promise<{
   success: boolean;
@@ -527,6 +524,8 @@ export async function runSimpleSync(
     onProgress?.({
       phase: "database",
       operation: receiveOnly ? "download" : "upload",
+      completedFiles: 0,
+      totalFiles: 0,
       message: "准备同步...",
     });
 
@@ -538,6 +537,8 @@ export async function runSimpleSync(
     onProgress?.({
       phase: "database",
       operation: receiveOnly ? "download" : "upload",
+      completedFiles: 0,
+      totalFiles: 0,
       message: "检查远程目录...",
     });
     try {
@@ -548,20 +549,36 @@ export async function runSimpleSync(
     }
 
     // 2. Pull and apply all other devices' changesets
-    onProgress?.({ phase: "database", operation: "download", message: "获取其他设备的变更..." });
+    onProgress?.({
+      phase: "database",
+      operation: "download",
+      completedFiles: 0,
+      totalFiles: 0,
+      message: "获取其他设备的变更...",
+    });
     const remoteFiles = await listRemoteDeviceFiles(backend);
     console.log(`[SimpleSync] Found ${remoteFiles.length} remote device snapshot(s)`);
 
     let totalApplied = 0;
-    let remoteSyncError: string | null = null;
+    let skippedRemoteSnapshots = 0;
     for (const { deviceId, path } of remoteFiles) {
       // Skip our own file
       if (deviceId === localDeviceId) continue;
 
+      let payload: DeviceSyncPayload | null;
       try {
         console.log(`[SimpleSync] Downloading changes from device ${deviceId}...`);
-        const payload = await backend.getJSON<DeviceSyncPayload>(path);
-        if (!payload) continue;
+        payload = await backend.getJSON<DeviceSyncPayload>(path);
+      } catch (e) {
+        skippedRemoteSnapshots++;
+        console.warn(
+          `[SimpleSync] Skipping unreadable remote snapshot from device ${deviceId}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        continue;
+      }
+
+      if (!payload) continue;
+      try {
         console.log(
           `[SimpleSync] Downloaded device ${deviceId}: ${Object.keys(payload.tables).length} table(s)`,
         );
@@ -569,6 +586,8 @@ export async function runSimpleSync(
         onProgress?.({
           phase: "database",
           operation: "download",
+          completedFiles: 0,
+          totalFiles: 0,
           message: `应用设备 ${deviceId.slice(0, 8)} 的变更...`,
         });
         const result = await applyChanges(payload, { forceApply });
@@ -578,35 +597,33 @@ export async function runSimpleSync(
         totalApplied += result.applied;
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e);
-        remoteSyncError = `Failed to apply changes from device ${deviceId}: ${error}`;
-        console.warn(`[SimpleSync] ${remoteSyncError}`);
-        break;
+        console.warn(`[SimpleSync] Failed to apply changes from device ${deviceId}: ${error}`);
+        throw e;
       }
     }
 
-    if (remoteSyncError) {
-      onProgress?.({
-        phase: "database",
-        operation: "download",
-        message: "同步中止：远端数据读取失败",
-      });
-      return {
-        success: false,
-        changes: totalApplied,
-        filesUploaded: 0,
-        filesDownloaded: 0,
-        filesUploadFailed: 0,
-        filesDownloadFailed: 0,
-        error: remoteSyncError,
-      };
+    if (skippedRemoteSnapshots > 0) {
+      console.warn(
+        `[SimpleSync] Skipped ${skippedRemoteSnapshots} unreadable remote device snapshot(s)`,
+      );
     }
 
     // 3. Collect and push local changes
     let changeCount = 0;
     if (!receiveOnly) {
-      onProgress?.({ phase: "database", operation: "upload", message: "收集本地变更..." });
+      onProgress?.({
+        phase: "database",
+        operation: "upload",
+        completedFiles: 0,
+        totalFiles: 0,
+        message: "收集本地变更...",
+      });
       const localDelta = await collectChanges(lastSync);
-      const snapshotPayload = await collectChanges(0);
+      let snapshotPayload: DeviceSyncPayload | null = null;
+      const getSnapshotPayload = async () => {
+        snapshotPayload ??= await collectChanges(0);
+        return snapshotPayload;
+      };
 
       changeCount = Object.values(localDelta.tables).reduce(
         (sum, t) => sum + t.records.length + t.deletedIds.length,
@@ -618,9 +635,11 @@ export async function runSimpleSync(
           onProgress?.({
             phase: "database",
             operation: "upload",
+            completedFiles: 0,
+            totalFiles: 0,
             message: `上传 ${changeCount + totalApplied} 条变更...`,
           });
-          await backend.putJSON(deviceSyncPath(localDeviceId), snapshotPayload);
+          await backend.putJSON(deviceSyncPath(localDeviceId), await getSnapshotPayload());
         } else {
           // Keep a full snapshot on the server so devices that sync later can still
           // bootstrap from this device even when there are no new local changes.
@@ -628,7 +647,7 @@ export async function runSimpleSync(
             .getJSON<DeviceSyncPayload>(deviceSyncPath(localDeviceId))
             .catch(() => null);
           if (!existing || now - existing.timestamp > 5 * 60 * 1000) {
-            await backend.putJSON(deviceSyncPath(localDeviceId), snapshotPayload);
+            await backend.putJSON(deviceSyncPath(localDeviceId), await getSnapshotPayload());
           }
         }
       } catch (e) {
@@ -637,7 +656,13 @@ export async function runSimpleSync(
       }
     } else if (totalApplied > 0) {
       // receiveOnly mode: still upload merged snapshot so other devices see the result
-      onProgress?.({ phase: "database", operation: "upload", message: "上传合并后的快照..." });
+      onProgress?.({
+        phase: "database",
+        operation: "upload",
+        completedFiles: 0,
+        totalFiles: 0,
+        message: "上传合并后的快照...",
+      });
       try {
         const snapshotPayload = await collectChanges(0);
         await backend.putJSON(deviceSyncPath(localDeviceId), snapshotPayload);
@@ -655,6 +680,8 @@ export async function runSimpleSync(
     onProgress?.({
       phase: "files",
       operation: receiveOnly ? "download" : "upload",
+      completedFiles: 0,
+      totalFiles: 0,
       message: "同步书籍和封面文件...",
     });
     try {
@@ -669,11 +696,7 @@ export async function runSimpleSync(
       const fileResult = await syncFiles(
         backend,
         (progress) => {
-          onProgress?.({
-            phase: "files",
-            operation: progress.operation,
-            message: progress.message || "同步文件...",
-          });
+          onProgress?.(progress);
         },
         { ...defaultFileOptions, ...options.fileSyncOptions },
       );
@@ -698,6 +721,8 @@ export async function runSimpleSync(
     onProgress?.({
       phase: "database",
       operation: receiveOnly ? "download" : "upload",
+      completedFiles: 0,
+      totalFiles: 0,
       message: "同步完成",
     });
     return {

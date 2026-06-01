@@ -10,7 +10,13 @@ export type {
 export { DEFAULT_TTS_CONFIG, DASHSCOPE_VOICES, normalizeTTSConfig, normalizeTTSEngine } from "./types";
 
 // Text utilities
-export { cleanText, countChars, splitIntoChunks } from "./text-utils";
+export {
+  cleanText,
+  countChars,
+  isTTSFootnoteMarker,
+  shouldSkipTTSNode,
+  splitIntoChunks,
+} from "./text-utils";
 export { buildNarrationPreview, getTTSVoiceLabel, splitNarrationText } from "./display";
 export { compareVoiceLanguage, getLocaleDisplayLabel, groupEdgeTTSVoices } from "./voice-groups";
 

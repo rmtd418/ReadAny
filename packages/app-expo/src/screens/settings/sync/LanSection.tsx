@@ -1,13 +1,13 @@
 import { type LANQRData, createLANServer } from "@readany/core/sync/lan-server";
 import type { ISyncBackend } from "@readany/core/sync/sync-backend";
-import QRCode from "react-native-qrcode-svg";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import Constants from "expo-constants";
+import { Scan } from "lucide-react-native";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Constants from "expo-constants";
-import { CameraView, useCameraPermissions } from "expo-camera";
 import {
-  Animated,
   Alert,
+  Animated,
   Modal,
   StyleSheet,
   Text,
@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Scan } from "lucide-react-native";
+import QRCode from "react-native-qrcode-svg";
 import { useColors } from "../../../styles/theme";
 import { makeStyles } from "./sync-styles";
 
@@ -25,11 +25,17 @@ interface LanSectionProps {
     phase: string;
     completedFiles: number;
     totalFiles: number;
+    currentBytes?: number;
+    totalBytes?: number;
+    totalCurrentBytes?: number;
+    totalTransferBytes?: number;
     message?: string;
   } | null;
   pulseAnim: Animated.Value;
   progressLabel: () => string | null;
-  onSyncWithBackend: (backend: ISyncBackend) => Promise<{ success: boolean; error?: string } | null>;
+  onSyncWithBackend: (
+    backend: ISyncBackend,
+  ) => Promise<{ success: boolean; error?: string } | null>;
 }
 
 export function LanSection({
@@ -58,6 +64,23 @@ export function LanSection({
   const [permission, requestPermission] = useCameraPermissions();
   const scannerHandledRef = useRef(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+
+  const progressPercent = () => {
+    if (!progress || progress.phase === "database") return null;
+    if (progress.totalTransferBytes && progress.totalTransferBytes > 0) {
+      const ratio = (progress.totalCurrentBytes ?? 0) / progress.totalTransferBytes;
+      return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+    }
+    const totalFiles = Math.max(progress.totalFiles, 1);
+    if (progress.totalBytes && progress.totalBytes > 0) {
+      const currentBytes = progress.currentBytes ?? 0;
+      const fileRatio = Math.max(0, Math.min(1, currentBytes / progress.totalBytes));
+      return Math.round(((progress.completedFiles + fileRatio) / totalFiles) * 100);
+    }
+    return progress.totalFiles > 0
+      ? Math.round((progress.completedFiles / progress.totalFiles) * 100)
+      : 0;
+  };
 
   const handleStartLanServer = useCallback(async () => {
     setLanError("");
@@ -133,37 +156,33 @@ export function LanSection({
       return;
     }
     setLanError("");
-    Alert.alert(
-      t("settings.syncLANImportWarningTitle"),
-      t("settings.syncLANImportWarning"),
-      [
-        { text: t("common.cancel"), style: "cancel" },
-        {
-          text: t("common.confirm"),
-          style: "destructive",
-          onPress: async () => {
-            setLanConnectionState("connecting");
-            try {
-              const { createLANBackend } = require("@readany/core/sync/lan-backend");
-              const serverUrl = `http://${lanManualIP}:${lanManualPort}`;
-              const deviceName = Constants.deviceName || "Mobile";
-              const backend = createLANBackend(serverUrl, lanManualPairCode, deviceName);
-              const connected = await backend.testConnection();
-              if (!connected) throw new Error(t("settings.syncLANConnectionFailed"));
-              setLanConnectionState("connected");
-              const result = await onSyncWithBackend(backend);
-              if (!result || !result.success) {
-                throw new Error(result?.error || t("settings.syncLANConnectionFailed"));
-              }
-              setLanConnectionState("idle");
-            } catch (e) {
-              setLanError(e instanceof Error ? e.message : String(e));
-              setLanConnectionState("error");
+    Alert.alert(t("settings.syncLANImportWarningTitle"), t("settings.syncLANImportWarning"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.confirm"),
+        style: "destructive",
+        onPress: async () => {
+          setLanConnectionState("connecting");
+          try {
+            const { createLANBackend } = require("@readany/core/sync/lan-backend");
+            const serverUrl = `http://${lanManualIP}:${lanManualPort}`;
+            const deviceName = Constants.deviceName || "Mobile";
+            const backend = createLANBackend(serverUrl, lanManualPairCode, deviceName);
+            const connected = await backend.testConnection();
+            if (!connected) throw new Error(t("settings.syncLANConnectionFailed"));
+            setLanConnectionState("connected");
+            const result = await onSyncWithBackend(backend);
+            if (!result || !result.success) {
+              throw new Error(result?.error || t("settings.syncLANConnectionFailed"));
             }
-          },
+            setLanConnectionState("idle");
+          } catch (e) {
+            setLanError(e instanceof Error ? e.message : String(e));
+            setLanConnectionState("error");
+          }
         },
-      ],
-    );
+      },
+    ]);
   }, [lanManualIP, lanManualPort, lanManualPairCode, onSyncWithBackend, t]);
 
   const handleScanQRCode = useCallback(async () => {
@@ -187,16 +206,13 @@ export function LanSection({
       setScannerLocked(true);
       setShowScanner(false);
       try {
-      const { parseLANQRData, createLANBackend } = require("@readany/core/sync/lan-backend");
-      const qrData = parseLANQRData(data);
-      if (qrData) {
-        setLanManualIP(qrData.ip);
-        setLanManualPort(qrData.port.toString());
-        setLanManualPairCode(qrData.pairCode);
-        Alert.alert(
-          t("settings.syncLANImportWarningTitle"),
-          t("settings.syncLANImportWarning"),
-          [
+        const { parseLANQRData, createLANBackend } = require("@readany/core/sync/lan-backend");
+        const qrData = parseLANQRData(data);
+        if (qrData) {
+          setLanManualIP(qrData.ip);
+          setLanManualPort(qrData.port.toString());
+          setLanManualPairCode(qrData.pairCode);
+          Alert.alert(t("settings.syncLANImportWarningTitle"), t("settings.syncLANImportWarning"), [
             { text: t("common.cancel"), style: "cancel" },
             {
               text: t("common.confirm"),
@@ -224,11 +240,10 @@ export function LanSection({
                 }, 500);
               },
             },
-          ],
-        );
-      } else {
-        setLanError(t("settings.syncLANInvalidQR"));
-      }
+          ]);
+        } else {
+          setLanError(t("settings.syncLANInvalidQR"));
+        }
       } catch (e) {
         setLanError(e instanceof Error ? e.message : String(e));
       }
@@ -250,10 +265,7 @@ export function LanSection({
               onPress={() => setLanMode("server")}
             >
               <Text
-                style={[
-                  styles.lanModeBtnText,
-                  lanMode === "server" && styles.lanModeBtnTextActive,
-                ]}
+                style={[styles.lanModeBtnText, lanMode === "server" && styles.lanModeBtnTextActive]}
               >
                 {t("settings.syncLANServer")}
               </Text>
@@ -263,10 +275,7 @@ export function LanSection({
               onPress={() => setLanMode("client")}
             >
               <Text
-                style={[
-                  styles.lanModeBtnText,
-                  lanMode === "client" && styles.lanModeBtnTextActive,
-                ]}
+                style={[styles.lanModeBtnText, lanMode === "client" && styles.lanModeBtnTextActive]}
               >
                 {t("settings.syncLANClient")}
               </Text>
@@ -308,9 +317,7 @@ export function LanSection({
                       onPress={handleStartWithManualIP}
                       disabled={!lanManualServerIP}
                     >
-                      <Text style={styles.primaryBtnText}>
-                        {t("settings.syncLANServerStart")}
-                      </Text>
+                      <Text style={styles.primaryBtnText}>{t("settings.syncLANServerStart")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -344,9 +351,7 @@ export function LanSection({
                 </View>
               )}
 
-              {lanError && !showManualIPInput && (
-                <Text style={styles.errorText}>{lanError}</Text>
-              )}
+              {lanError && !showManualIPInput && <Text style={styles.errorText}>{lanError}</Text>}
 
               {!showManualIPInput && (
                 <View style={styles.btnRow}>
@@ -367,9 +372,7 @@ export function LanSection({
                       style={[styles.outlineBtn, styles.lanBtn]}
                       onPress={handleStopLanServer}
                     >
-                      <Text style={styles.outlineBtnText}>
-                        {t("settings.syncLANServerStop")}
-                      </Text>
+                      <Text style={styles.outlineBtnText}>{t("settings.syncLANServerStop")}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -476,15 +479,13 @@ export function LanSection({
                         style={[
                           styles.progressFill,
                           {
-                            width: `${progress.totalFiles > 0 ? Math.round((progress.completedFiles / progress.totalFiles) * 100) : 0}%`,
+                            width: `${progressPercent() ?? 0}%`,
                           },
                         ]}
                       />
                     )}
                   </View>
-                  <Text style={styles.progressText}>
-                    {progress.message || progressLabel()}
-                  </Text>
+                  <Text style={styles.progressText}>{progressLabel() || progress.message}</Text>
                 </View>
               )}
             </View>
@@ -514,9 +515,7 @@ export function LanSection({
                 setShowScanner(false);
               }}
             >
-              <Text style={styles.scannerCloseText}>
-                {t("settings.syncClose") || "Close"}
-              </Text>
+              <Text style={styles.scannerCloseText}>{t("settings.syncClose") || "Close"}</Text>
             </TouchableOpacity>
           </View>
         </View>

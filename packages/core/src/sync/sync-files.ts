@@ -26,6 +26,7 @@ import {
   REMOTE_BOOKS_ROOT,
   REMOTE_COVERS,
   REMOTE_FILES,
+  REMOTE_FILE_MANIFEST,
   type SyncProgress,
 } from "./sync-types";
 
@@ -67,6 +68,86 @@ function getExt(name: string): string {
   return idx >= 0 ? name.slice(idx + 1) : "";
 }
 
+function isDirectFileTransferUnsupported(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /does not support direct file|Platform does not support direct file/i.test(message);
+}
+
+async function makeTempTransferPath(finalPath: string): Promise<string> {
+  const adapter = getSyncAdapter();
+  const tempDir = await adapter.getTempDir();
+  await adapter.ensureDir(tempDir);
+  const ext = getExt(finalPath) || "tmp";
+  return adapter.joinPath(
+    tempDir,
+    `readany-transfer-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`,
+  );
+}
+
+async function uploadFileToRemote(
+  backend: ISyncBackend,
+  remotePath: string,
+  localPath: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<number | null> {
+  if (backend.putFile) {
+    try {
+      await backend.putFile(remotePath, localPath, onProgress);
+      return null;
+    } catch (e) {
+      if (!isDirectFileTransferUnsupported(e)) throw e;
+      console.warn(
+        `[Sync] Direct upload unsupported for ${remotePath}; falling back to buffered upload`,
+      );
+    }
+  }
+
+  const adapter = getSyncAdapter();
+  const data = await adapter.readFileBytes(localPath);
+  onProgress?.(0, data.length);
+  await backend.put(remotePath, data);
+  onProgress?.(data.length, data.length);
+  return data.length;
+}
+
+async function downloadRemoteFileToPath(
+  backend: ISyncBackend,
+  remotePath: string,
+  localPath: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<number | null> {
+  const adapter = getSyncAdapter();
+
+  if (backend.getFileToPath) {
+    const tempPath = await makeTempTransferPath(localPath);
+    try {
+      await backend.getFileToPath(remotePath, tempPath, onProgress);
+      const dir = getDirName(localPath);
+      if (dir) await adapter.ensureDir(dir);
+      await adapter.copyFile(tempPath, localPath);
+      return null;
+    } catch (e) {
+      if (!isDirectFileTransferUnsupported(e)) throw e;
+      console.warn(
+        `[Sync] Direct download unsupported for ${remotePath}; falling back to buffered download`,
+      );
+    } finally {
+      try {
+        await adapter.deleteFile(tempPath);
+      } catch {}
+    }
+  }
+
+  const data = backend.getWithProgress
+    ? await backend.getWithProgress(remotePath, onProgress)
+    : await backend.get(remotePath);
+  const dir = getDirName(localPath);
+  if (dir) await adapter.ensureDir(dir);
+  await adapter.writeFileBytes(localPath, data);
+  onProgress?.(data.length, data.length);
+  return data.length;
+}
+
 type BookRow = {
   id: string;
   file_path: string;
@@ -83,18 +164,26 @@ type BookInfo = {
   localCoverPath: string;
   remoteDir: string;
   expectedFolderName: string;
-  remoteFilePath: string;        // {books root}/{folder}/{title}.{file ext}
-  remoteCoverPath: string;       // {books root}/{folder}/{title}.{cover ext}
-  legacyRemoteFileName: string;  // {id}.{file ext}, lives in REMOTE_FILES
+  remoteFilePath: string; // {books root}/{folder}/{title}.{file ext}
+  remoteCoverPath: string; // {books root}/{folder}/{title}.{cover ext}
+  legacyRemoteFileName: string; // {id}.{file ext}, lives in REMOTE_FILES
   legacyRemoteCoverName: string; // {id}.{cover ext}, lives in REMOTE_COVERS
   hasFile: boolean;
   hasCover: boolean;
 };
 
 type RemoteListings = {
-  bookDirByBookId: Map<string, string>;        // book.id -> existing folder name on remote
-  legacyFileNames: Set<string>;                // names inside REMOTE_FILES
-  legacyCoverNames: Set<string>;               // names inside REMOTE_COVERS
+  source: "manifest" | "scan";
+  manifest: RemoteFileManifest | null;
+  bookDirByBookId: Map<string, string>; // book.id -> existing folder name on remote
+  filePathByBookId: Map<string, string>;
+  coverPathByBookId: Map<string, string>;
+  fileSizeByBookId: Map<string, number>;
+  coverSizeByBookId: Map<string, number>;
+  legacyFileNames: Set<string>; // names inside REMOTE_FILES
+  legacyCoverNames: Set<string>; // names inside REMOTE_COVERS
+  legacyFileSizeByName: Map<string, number>;
+  legacyCoverSizeByName: Map<string, number>;
   /** Folders under REMOTE_BOOKS_ROOT shaped like {title}-{uuid} whose uuid is not in the DB. */
   orphanBookDirs: { folderName: string; bookId: string }[];
   /** Folders under REMOTE_BOOKS_ROOT with no valid uuid suffix and not matched to any book. */
@@ -104,7 +193,120 @@ type RemoteListings = {
 type MigrationResult = {
   fileAtNew: boolean;
   coverAtNew: boolean;
+  fileSize?: number;
+  coverSize?: number;
 };
+
+type RemoteFileManifestEntry = {
+  folderName: string;
+  filePath?: string;
+  coverPath?: string;
+  fileSize?: number;
+  coverSize?: number;
+  updatedAt?: number;
+};
+
+type RemoteFileManifest = {
+  version: 1;
+  generatedAt: number;
+  books: Record<string, RemoteFileManifestEntry>;
+};
+
+type FileTask = {
+  label: string;
+  sizeBytes?: number | null;
+  run: (onProgress?: (loaded: number, total: number) => void) => Promise<boolean>;
+};
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+async function runFileTasks(
+  tasks: FileTask[],
+  operation: "upload" | "download",
+  concurrency: number,
+  onProgress?: (progress: SyncProgress) => void,
+): Promise<boolean[]> {
+  let completed = 0;
+  const total = tasks.length;
+  const operationLabel = operation === "upload" ? "Uploading" : "Downloading";
+  const taskLoadedBytes = new Map<number, number>();
+  const taskTotalBytes = new Map<number, number>();
+  for (let i = 0; i < tasks.length; i++) {
+    const size = tasks[i].sizeBytes;
+    if (isPositiveFiniteNumber(size)) {
+      taskTotalBytes.set(i, size);
+      taskLoadedBytes.set(i, 0);
+    }
+  }
+
+  const getTotalTransferBytes = () => {
+    if (taskTotalBytes.size !== tasks.length) return undefined;
+    const totalBytes = Array.from(taskTotalBytes.values()).reduce((sum, bytes) => sum + bytes, 0);
+    return totalBytes > 0 ? totalBytes : undefined;
+  };
+
+  const getTotalCurrentBytes = () =>
+    Array.from(taskLoadedBytes.values()).reduce((sum, bytes) => sum + bytes, 0);
+
+  const tasksWithProgress = tasks.map((task, index) => async () => {
+    const fileNumber = index + 1;
+    const emitProgress = (currentBytes?: number, totalBytes?: number) => {
+      if (isPositiveFiniteNumber(totalBytes)) {
+        taskTotalBytes.set(index, totalBytes);
+      }
+      if (currentBytes !== undefined) {
+        const knownTotal = taskTotalBytes.get(index);
+        const boundedBytes = knownTotal
+          ? Math.max(0, Math.min(currentBytes, knownTotal))
+          : Math.max(0, currentBytes);
+        taskLoadedBytes.set(index, boundedBytes);
+      }
+      const totalTransferBytes = getTotalTransferBytes();
+      onProgress?.({
+        phase: "files",
+        operation,
+        currentFile: task.label,
+        completedFiles: completed,
+        totalFiles: total,
+        ...(currentBytes !== undefined ? { currentBytes } : {}),
+        ...(totalBytes !== undefined ? { totalBytes } : {}),
+        ...(taskLoadedBytes.size > 0 ? { totalCurrentBytes: getTotalCurrentBytes() } : {}),
+        ...(totalTransferBytes !== undefined ? { totalTransferBytes } : {}),
+        message: `${operationLabel} file ${fileNumber}/${total}...`,
+      });
+    };
+
+    emitProgress();
+    const result = await task.run((loaded, taskTotal) => {
+      if (taskTotal > 0) emitProgress(loaded, taskTotal);
+    });
+    completed++;
+    const finalTotal =
+      taskTotalBytes.get(index) ??
+      (isPositiveFiniteNumber(task.sizeBytes) ? task.sizeBytes : undefined);
+    if (result && finalTotal) {
+      taskTotalBytes.set(index, finalTotal);
+      taskLoadedBytes.set(index, finalTotal);
+    }
+    const totalTransferBytes = getTotalTransferBytes();
+    onProgress?.({
+      phase: "files",
+      operation,
+      currentFile: task.label,
+      completedFiles: completed,
+      totalFiles: total,
+      ...(finalTotal !== undefined ? { currentBytes: finalTotal, totalBytes: finalTotal } : {}),
+      ...(taskLoadedBytes.size > 0 ? { totalCurrentBytes: getTotalCurrentBytes() } : {}),
+      ...(totalTransferBytes !== undefined ? { totalTransferBytes } : {}),
+      message: `${operationLabel} file ${Math.min(completed + 1, total)}/${total}...`,
+    });
+    return result;
+  });
+
+  return parallelLimit(tasksWithProgress, concurrency);
+}
 
 /**
  * Sync book files and covers between local and remote.
@@ -147,17 +349,17 @@ export async function syncFiles(
 
   // --- Compute per-book info ---
   const bookInfos: BookInfo[] = books.map((book) => {
-    const fileExt = book.file_path ? (getExt(book.file_path) || "epub") : "";
-    const coverExt = book.cover_url ? (getExt(book.cover_url) || "jpg") : "";
+    const fileExt = book.file_path ? getExt(book.file_path) || "epub" : "";
+    const coverExt = book.cover_url ? getExt(book.cover_url) || "jpg" : "";
     const localFilePath = book.file_path
-      ? (isAbsoluteOrProtocolPath(book.file_path)
+      ? isAbsoluteOrProtocolPath(book.file_path)
         ? book.file_path
-        : adapter.joinPath(appDataDir, book.file_path))
+        : adapter.joinPath(appDataDir, book.file_path)
       : "";
     const localCoverPath = book.cover_url
-      ? (isAbsoluteOrProtocolPath(book.cover_url)
+      ? isAbsoluteOrProtocolPath(book.cover_url)
         ? book.cover_url
-        : adapter.joinPath(appDataDir, book.cover_url))
+        : adapter.joinPath(appDataDir, book.cover_url)
       : "";
     return {
       book,
@@ -184,28 +386,50 @@ export async function syncFiles(
   const localExistsResults = await Promise.all(allLocalPaths.map((p) => adapter.fileExists(p)));
   const localExistsMap = new Map<string, boolean>();
   allLocalPaths.forEach((p, i) => localExistsMap.set(p, localExistsResults[i]));
+  const localSizeResults = await Promise.all(
+    allLocalPaths.map((p) =>
+      localExistsMap.get(p) ? adapter.getFileSize(p) : Promise.resolve(null),
+    ),
+  );
+  const localSizeMap = new Map<string, number | null>();
+  allLocalPaths.forEach((p, i) => localSizeMap.set(p, localSizeResults[i]));
 
   // --- List remote directories (tolerant of failures) ---
-  const listings = await loadRemoteListings(backend, currentBookIds);
+  const listings = await loadRemoteListings(backend, bookInfos, localExistsMap, {
+    forceDownloadAll,
+    downloadRemoteBooks,
+  });
 
   // --- Phase 1: migrate per-book remote state (folder rename + legacy → new) ---
   console.log(
     `[Sync] Pre-migration: ${listings.bookDirByBookId.size} book dirs on remote, ` +
-    `${listings.legacyFileNames.size} legacy files, ${listings.legacyCoverNames.size} legacy covers`,
+      `${listings.legacyFileNames.size} legacy files, ${listings.legacyCoverNames.size} legacy covers`,
   );
 
   const migrationResults = new Map<string, MigrationResult>();
+  const remoteFileAtNew = new Map<string, boolean>();
+  const remoteCoverAtNew = new Map<string, boolean>();
+  const remoteFileSizeAtNew = new Map<string, number>();
+  const remoteCoverSizeAtNew = new Map<string, number>();
   const migrationTasks = bookInfos.map((info) => async () => {
     const result = await migrateBookRemoteState(backend, info, listings);
     migrationResults.set(info.book.id, result);
+    remoteFileAtNew.set(info.book.id, result.fileAtNew);
+    remoteCoverAtNew.set(info.book.id, result.coverAtNew);
+    if (isPositiveFiniteNumber(result.fileSize)) {
+      remoteFileSizeAtNew.set(info.book.id, result.fileSize);
+    }
+    if (isPositiveFiniteNumber(result.coverSize)) {
+      remoteCoverSizeAtNew.set(info.book.id, result.coverSize);
+    }
   });
   if (migrationTasks.length > 0) {
     await parallelLimit(migrationTasks, MIGRATION_CONCURRENCY);
   }
 
   // --- Phase 2: build upload/download task lists based on post-migration state ---
-  const uploadTasks: (() => Promise<boolean>)[] = [];
-  const downloadTasks: (() => Promise<boolean>)[] = [];
+  const uploadTasks: FileTask[] = [];
+  const downloadTasks: FileTask[] = [];
 
   for (const info of bookInfos) {
     const { book } = info;
@@ -217,11 +441,26 @@ export async function syncFiles(
       const remoteExists = migration.fileAtNew;
 
       if (!disableUploads && localExists && (forceUploadAll || !remoteExists)) {
-        uploadTasks.push(buildUploadFileTask(backend, info));
+        const task = buildUploadFileTask(backend, info);
+        const sizeBytes = localSizeMap.get(info.localFilePath) ?? null;
+        uploadTasks.push({
+          label: task.label,
+          sizeBytes,
+          run: async (onProgress) => {
+            const ok = await task.run(onProgress);
+            if (ok) remoteFileAtNew.set(book.id, true);
+            if (ok && isPositiveFiniteNumber(sizeBytes))
+              remoteFileSizeAtNew.set(book.id, sizeBytes);
+            return ok;
+          },
+        });
       }
 
       if (remoteExists && (forceDownloadAll || (downloadRemoteBooks && !localExists))) {
-        downloadTasks.push(buildDownloadFileTask(backend, info, setBookSyncStatus));
+        downloadTasks.push({
+          ...buildDownloadFileTask(backend, info, setBookSyncStatus),
+          sizeBytes: migration.fileSize,
+        });
       } else if (!localExists && remoteExists) {
         try {
           await setBookSyncStatus(book.id, "remote");
@@ -246,18 +485,34 @@ export async function syncFiles(
       const remoteExists = migration.coverAtNew;
 
       if (!disableUploads && localExists && (forceUploadAll || !remoteExists)) {
-        uploadTasks.push(buildUploadCoverTask(backend, info));
+        const task = buildUploadCoverTask(backend, info);
+        const sizeBytes = localSizeMap.get(info.localCoverPath) ?? null;
+        uploadTasks.push({
+          label: task.label,
+          sizeBytes,
+          run: async (onProgress) => {
+            const ok = await task.run(onProgress);
+            if (ok) remoteCoverAtNew.set(book.id, true);
+            if (ok && isPositiveFiniteNumber(sizeBytes)) {
+              remoteCoverSizeAtNew.set(book.id, sizeBytes);
+            }
+            return ok;
+          },
+        });
       }
 
       if (remoteExists && (forceDownloadAll || !localExists)) {
-        downloadTasks.push(buildDownloadCoverTask(backend, info));
+        downloadTasks.push({
+          ...buildDownloadCoverTask(backend, info),
+          sizeBytes: migration.coverSize,
+        });
       }
     }
   }
 
   console.log(
     `[Sync] Task summary: ${bookInfos.length} books, ` +
-    `upload: ${uploadTasks.length}, download: ${downloadTasks.length}`,
+      `upload: ${uploadTasks.length}, download: ${downloadTasks.length}`,
   );
 
   if (uploadTasks.length > 0) {
@@ -265,22 +520,7 @@ export async function syncFiles(
       `[Sync] 📤 Starting upload of ${uploadTasks.length} files (${UPLOAD_CONCURRENCY} concurrent)...`,
     );
     const uploadStart = Date.now();
-    let completed = 0;
-    const total = uploadTasks.length;
-    const tasksWithProgress = uploadTasks.map((task, index) => async () => {
-      onProgress?.({
-        phase: "files",
-        operation: "upload",
-        currentFile: `File ${index + 1}`,
-        completedFiles: completed,
-        totalFiles: total,
-        message: `Uploading file ${completed + 1}/${total}...`,
-      });
-      const result = await task();
-      completed++;
-      return result;
-    });
-    const uploadResults = await parallelLimit(tasksWithProgress, UPLOAD_CONCURRENCY);
+    const uploadResults = await runFileTasks(uploadTasks, "upload", UPLOAD_CONCURRENCY, onProgress);
     filesUploaded = uploadResults.filter((r) => r).length;
     filesUploadFailed = uploadResults.length - filesUploaded;
     console.log(
@@ -293,22 +533,12 @@ export async function syncFiles(
       `[Sync] 📥 Starting download of ${downloadTasks.length} files (${DOWNLOAD_CONCURRENCY} concurrent)...`,
     );
     const downloadStart = Date.now();
-    let completed = 0;
-    const total = downloadTasks.length;
-    const tasksWithProgress = downloadTasks.map((task, index) => async () => {
-      onProgress?.({
-        phase: "files",
-        operation: "download",
-        currentFile: `File ${index + 1}`,
-        completedFiles: completed,
-        totalFiles: total,
-        message: `Downloading file ${completed + 1}/${total}...`,
-      });
-      const result = await task();
-      completed++;
-      return result;
-    });
-    const downloadResults = await parallelLimit(tasksWithProgress, DOWNLOAD_CONCURRENCY);
+    const downloadResults = await runFileTasks(
+      downloadTasks,
+      "download",
+      DOWNLOAD_CONCURRENCY,
+      onProgress,
+    );
     filesDownloaded = downloadResults.filter((r) => r).length;
     filesDownloadFailed = downloadResults.length - filesDownloaded;
     console.log(
@@ -322,6 +552,16 @@ export async function syncFiles(
   }
   await cleanupLocalOrphans(adapter, appDataDir, currentBookIds);
 
+  await saveRemoteFileManifest(
+    backend,
+    bookInfos,
+    remoteFileAtNew,
+    remoteCoverAtNew,
+    remoteFileSizeAtNew,
+    remoteCoverSizeAtNew,
+    listings.manifest,
+  );
+
   console.log(`[Sync] ✅ File sync completed in ${Date.now() - syncFilesStart}ms`);
   return { filesUploaded, filesDownloaded, filesUploadFailed, filesDownloadFailed };
 }
@@ -330,8 +570,19 @@ export async function syncFiles(
 
 async function loadRemoteListings(
   backend: ISyncBackend,
-  currentBookIds: Set<string>,
+  bookInfos: BookInfo[],
+  localExistsMap: Map<string, boolean>,
+  options: Pick<SyncFilesOptions, "forceDownloadAll" | "downloadRemoteBooks">,
 ): Promise<RemoteListings> {
+  const currentBookIds = new Set(bookInfos.map((i) => i.book.id));
+  const manifest = await loadRemoteFileManifest(backend);
+  if (manifest && canUseRemoteFileManifest(manifest, bookInfos, localExistsMap, options)) {
+    console.log(
+      `[Sync] Using remote file manifest with ${Object.keys(manifest.books).length} entries`,
+    );
+    return buildListingsFromManifest(manifest, currentBookIds);
+  }
+
   const settled = await Promise.allSettled([
     backend.listDir(REMOTE_BOOKS_ROOT),
     backend.listDir(REMOTE_FILES),
@@ -366,6 +617,8 @@ async function loadRemoteListings(
       matched.add(match);
     }
   }
+  const fileSizeByBookId = new Map<string, number>();
+  const coverSizeByBookId = new Map<string, number>();
 
   const orphanBookDirs: { folderName: string; bookId: string }[] = [];
   const unknownBookDirs: { folderName: string }[] = [];
@@ -380,12 +633,179 @@ async function loadRemoteListings(
   }
 
   return {
+    source: "scan",
+    manifest,
     bookDirByBookId,
+    filePathByBookId: new Map(),
+    coverPathByBookId: new Map(),
+    fileSizeByBookId,
+    coverSizeByBookId,
     legacyFileNames: new Set(legacyFiles.filter((f) => !f.isDirectory).map((f) => f.name)),
     legacyCoverNames: new Set(legacyCovers.filter((f) => !f.isDirectory).map((f) => f.name)),
+    legacyFileSizeByName: new Map(
+      legacyFiles
+        .filter((f) => !f.isDirectory && isPositiveFiniteNumber(f.size))
+        .map((f) => [f.name, f.size]),
+    ),
+    legacyCoverSizeByName: new Map(
+      legacyCovers
+        .filter((f) => !f.isDirectory && isPositiveFiniteNumber(f.size))
+        .map((f) => [f.name, f.size]),
+    ),
     orphanBookDirs,
     unknownBookDirs,
   };
+}
+
+async function loadRemoteFileManifest(backend: ISyncBackend): Promise<RemoteFileManifest | null> {
+  try {
+    const manifest = await backend.getJSON<RemoteFileManifest>(REMOTE_FILE_MANIFEST);
+    if (
+      !manifest ||
+      manifest.version !== 1 ||
+      !manifest.books ||
+      typeof manifest.books !== "object"
+    ) {
+      return null;
+    }
+    return manifest;
+  } catch (e) {
+    console.warn("[Sync] Failed to load remote file manifest; falling back to directory scan:", e);
+    return null;
+  }
+}
+
+function canUseRemoteFileManifest(
+  manifest: RemoteFileManifest,
+  bookInfos: BookInfo[],
+  localExistsMap: Map<string, boolean>,
+  options: Pick<SyncFilesOptions, "forceDownloadAll" | "downloadRemoteBooks">,
+): boolean {
+  for (const info of bookInfos) {
+    const entry = manifest.books[info.book.id];
+    const localFileExists = localExistsMap.get(info.localFilePath) ?? false;
+    const localCoverExists = localExistsMap.get(info.localCoverPath) ?? false;
+    const needsRemoteBook =
+      info.hasFile &&
+      (options.forceDownloadAll || (options.downloadRemoteBooks && !localFileExists));
+    const needsRemoteCover = info.hasCover && (options.forceDownloadAll || !localCoverExists);
+
+    if (!entry && (needsRemoteBook || needsRemoteCover)) return false;
+    if (entry && needsRemoteBook && !entry.filePath) return false;
+    if (entry && needsRemoteCover && !entry.coverPath) return false;
+  }
+  return true;
+}
+
+function buildListingsFromManifest(
+  manifest: RemoteFileManifest,
+  currentBookIds: Set<string>,
+): RemoteListings {
+  const bookDirByBookId = new Map<string, string>();
+  const filePathByBookId = new Map<string, string>();
+  const coverPathByBookId = new Map<string, string>();
+  const fileSizeByBookId = new Map<string, number>();
+  const coverSizeByBookId = new Map<string, number>();
+
+  for (const [bookId, entry] of Object.entries(manifest.books)) {
+    if (!currentBookIds.has(bookId)) continue;
+    bookDirByBookId.set(bookId, entry.folderName);
+    if (entry.filePath) filePathByBookId.set(bookId, entry.filePath);
+    if (entry.coverPath) coverPathByBookId.set(bookId, entry.coverPath);
+    if (isPositiveFiniteNumber(entry.fileSize)) fileSizeByBookId.set(bookId, entry.fileSize);
+    if (isPositiveFiniteNumber(entry.coverSize)) coverSizeByBookId.set(bookId, entry.coverSize);
+  }
+
+  return {
+    source: "manifest",
+    manifest,
+    bookDirByBookId,
+    filePathByBookId,
+    coverPathByBookId,
+    fileSizeByBookId,
+    coverSizeByBookId,
+    legacyFileNames: new Set(),
+    legacyCoverNames: new Set(),
+    legacyFileSizeByName: new Map(),
+    legacyCoverSizeByName: new Map(),
+    orphanBookDirs: [],
+    unknownBookDirs: [],
+  };
+}
+
+async function saveRemoteFileManifest(
+  backend: ISyncBackend,
+  bookInfos: BookInfo[],
+  remoteFileAtNew: Map<string, boolean>,
+  remoteCoverAtNew: Map<string, boolean>,
+  remoteFileSizeAtNew: Map<string, number>,
+  remoteCoverSizeAtNew: Map<string, number>,
+  previousManifest: RemoteFileManifest | null,
+): Promise<void> {
+  const books: RemoteFileManifest["books"] = {};
+  for (const info of bookInfos) {
+    const hasRemoteFile = remoteFileAtNew.get(info.book.id) ?? false;
+    const hasRemoteCover = remoteCoverAtNew.get(info.book.id) ?? false;
+    if (!hasRemoteFile && !hasRemoteCover) continue;
+    books[info.book.id] = {
+      folderName: info.expectedFolderName,
+      ...(hasRemoteFile ? { filePath: info.remoteFilePath } : {}),
+      ...(hasRemoteCover ? { coverPath: info.remoteCoverPath } : {}),
+      ...(hasRemoteFile && remoteFileSizeAtNew.has(info.book.id)
+        ? { fileSize: remoteFileSizeAtNew.get(info.book.id) }
+        : {}),
+      ...(hasRemoteCover && remoteCoverSizeAtNew.has(info.book.id)
+        ? { coverSize: remoteCoverSizeAtNew.get(info.book.id) }
+        : {}),
+      updatedAt: Date.now(),
+    };
+  }
+
+  if (manifestBooksEqual(previousManifest?.books ?? {}, books)) {
+    return;
+  }
+
+  if (!previousManifest && Object.keys(books).length === 0) {
+    return;
+  }
+
+  try {
+    await backend.putJSON<RemoteFileManifest>(REMOTE_FILE_MANIFEST, {
+      version: 1,
+      generatedAt: Date.now(),
+      books,
+    });
+  } catch (e) {
+    console.warn("[Sync] Failed to save remote file manifest:", e);
+  }
+}
+
+function manifestBooksEqual(
+  previous: RemoteFileManifest["books"],
+  next: RemoteFileManifest["books"],
+): boolean {
+  const previousIds = Object.keys(previous).sort();
+  const nextIds = Object.keys(next).sort();
+  if (previousIds.length !== nextIds.length) return false;
+
+  for (let i = 0; i < previousIds.length; i++) {
+    const id = previousIds[i];
+    if (id !== nextIds[i]) return false;
+
+    const previousEntry = previous[id];
+    const nextEntry = next[id];
+    if (
+      previousEntry.folderName !== nextEntry.folderName ||
+      previousEntry.filePath !== nextEntry.filePath ||
+      previousEntry.coverPath !== nextEntry.coverPath ||
+      previousEntry.fileSize !== nextEntry.fileSize ||
+      previousEntry.coverSize !== nextEntry.coverSize
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -405,6 +825,8 @@ async function migrateBookRemoteState(
   const existingFolderName = listings.bookDirByBookId.get(book.id);
   let fileAtNew = false;
   let coverAtNew = false;
+  let fileSize = listings.fileSizeByBookId.get(book.id);
+  let coverSize = listings.coverSizeByBookId.get(book.id);
 
   if (existingFolderName) {
     if (existingFolderName !== info.expectedFolderName) {
@@ -421,27 +843,45 @@ async function migrateBookRemoteState(
         const ext = getExt(f.name);
         if (!ext) continue;
         const cover = isCoverFileName(f.name);
-        const target = cover
-          ? buildBookRemoteCover(book, ext)
-          : buildBookRemoteFile(book, ext);
+        const target = cover ? buildBookRemoteCover(book, ext) : buildBookRemoteFile(book, ext);
         try {
           await backend.move(`${oldDir}/${f.name}`, target);
-          if (cover) coverAtNew = true;
-          else fileAtNew = true;
+          if (cover) {
+            coverAtNew = true;
+            if (isPositiveFiniteNumber(f.size)) coverSize = f.size;
+          } else {
+            fileAtNew = true;
+            if (isPositiveFiniteNumber(f.size)) fileSize = f.size;
+          }
         } catch (e) {
           console.warn(`[Sync] Folder-rename MOVE failed for ${book.id} (${f.name}):`, e);
           if (await backend.exists(target)) {
-            try { await backend.delete(`${oldDir}/${f.name}`); } catch {}
-            if (cover) coverAtNew = true;
-            else fileAtNew = true;
+            try {
+              await backend.delete(`${oldDir}/${f.name}`);
+            } catch {}
+            if (cover) {
+              coverAtNew = true;
+              if (isPositiveFiniteNumber(f.size)) coverSize = f.size;
+            } else {
+              fileAtNew = true;
+              if (isPositiveFiniteNumber(f.size)) fileSize = f.size;
+            }
           }
         }
       }
-      try { await backend.delete(oldDir); } catch {}
+      try {
+        await backend.delete(oldDir);
+      } catch {}
       // Update in-memory map so orphan cleanup downstream doesn't see this as unknown.
       listings.bookDirByBookId.delete(book.id);
       listings.bookDirByBookId.set(book.id, info.expectedFolderName);
     } else {
+      if (listings.source === "manifest") {
+        fileAtNew = listings.filePathByBookId.get(book.id) === info.remoteFilePath;
+        coverAtNew = listings.coverPathByBookId.get(book.id) === info.remoteCoverPath;
+        return { fileAtNew, coverAtNew, fileSize, coverSize };
+      }
+
       // Folder name matches. Peek inside to verify which files are present.
       const dir = `${REMOTE_BOOKS_ROOT}/${existingFolderName}`;
       let current: RemoteFile[] = [];
@@ -455,8 +895,14 @@ async function migrateBookRemoteState(
       const expectedCoverName = info.coverExt ? `${sanitized}.${info.coverExt}` : "";
       for (const f of current) {
         if (f.isDirectory) continue;
-        if (expectedFileName && f.name === expectedFileName) fileAtNew = true;
-        if (expectedCoverName && f.name === expectedCoverName) coverAtNew = true;
+        if (expectedFileName && f.name === expectedFileName) {
+          fileAtNew = true;
+          if (isPositiveFiniteNumber(f.size)) fileSize = f.size;
+        }
+        if (expectedCoverName && f.name === expectedCoverName) {
+          coverAtNew = true;
+          if (isPositiveFiniteNumber(f.size)) coverSize = f.size;
+        }
       }
     }
   }
@@ -467,6 +913,7 @@ async function migrateBookRemoteState(
     try {
       await backend.move(legacy, info.remoteFilePath);
       fileAtNew = true;
+      fileSize = listings.legacyFileSizeByName.get(info.legacyRemoteFileName) ?? fileSize;
       console.log(`[Sync] 🔁 Migrated legacy file → ${info.remoteFilePath}`);
     } catch (e) {
       console.warn(`[Sync] Legacy file MOVE failed for ${book.id}:`, e);
@@ -474,6 +921,7 @@ async function migrateBookRemoteState(
         try {
           await backend.delete(legacy);
           fileAtNew = true;
+          fileSize = listings.legacyFileSizeByName.get(info.legacyRemoteFileName) ?? fileSize;
           console.log(`[Sync] 🧹 Deleted redundant legacy file ${info.legacyRemoteFileName}`);
         } catch {}
       }
@@ -485,6 +933,7 @@ async function migrateBookRemoteState(
     try {
       await backend.move(legacy, info.remoteCoverPath);
       coverAtNew = true;
+      coverSize = listings.legacyCoverSizeByName.get(info.legacyRemoteCoverName) ?? coverSize;
       console.log(`[Sync] 🔁 Migrated legacy cover → ${info.remoteCoverPath}`);
     } catch (e) {
       console.warn(`[Sync] Legacy cover MOVE failed for ${book.id}:`, e);
@@ -492,31 +941,38 @@ async function migrateBookRemoteState(
         try {
           await backend.delete(legacy);
           coverAtNew = true;
+          coverSize = listings.legacyCoverSizeByName.get(info.legacyRemoteCoverName) ?? coverSize;
           console.log(`[Sync] 🧹 Deleted redundant legacy cover ${info.legacyRemoteCoverName}`);
         } catch {}
       }
     }
   }
 
-  return { fileAtNew, coverAtNew };
+  return { fileAtNew, coverAtNew, fileSize, coverSize };
 }
 
-function buildUploadFileTask(backend: ISyncBackend, info: BookInfo): () => Promise<boolean> {
-  return async () => {
-    const adapter = getSyncAdapter();
-    const taskStart = Date.now();
-    const bookTitle = info.book.title || "未知书籍";
-    try {
-      console.log(`[Sync] 📤 Uploading book: ${bookTitle} → ${info.remoteFilePath}`);
-      const data = await adapter.readFileBytes(info.localFilePath);
-      const sizeMB = (data.length / 1024 / 1024).toFixed(2);
-      await backend.put(info.remoteFilePath, data);
-      console.log(`[Sync] ✓ Uploaded "${bookTitle}" (${sizeMB} MB) in ${Date.now() - taskStart}ms`);
-      return true;
-    } catch (e) {
-      console.log(`[Sync] ✗ Failed to upload "${bookTitle}": ${e}`);
-      return false;
-    }
+function buildUploadFileTask(backend: ISyncBackend, info: BookInfo): FileTask {
+  const bookTitle = info.book.title || "未知书籍";
+  return {
+    label: bookTitle,
+    run: async (onProgress) => {
+      const taskStart = Date.now();
+      try {
+        console.log(`[Sync] 📤 Uploading book: ${bookTitle} → ${info.remoteFilePath}`);
+        const bytes = await uploadFileToRemote(
+          backend,
+          info.remoteFilePath,
+          info.localFilePath,
+          onProgress,
+        );
+        const size = bytes === null ? "" : ` (${(bytes / 1024 / 1024).toFixed(2)} MB)`;
+        console.log(`[Sync] ✓ Uploaded "${bookTitle}"${size} in ${Date.now() - taskStart}ms`);
+        return true;
+      } catch (e) {
+        console.log(`[Sync] ✗ Failed to upload "${bookTitle}": ${e}`);
+        return false;
+      }
+    },
   };
 }
 
@@ -524,65 +980,81 @@ function buildDownloadFileTask(
   backend: ISyncBackend,
   info: BookInfo,
   setBookSyncStatus: (id: string, status: "local" | "remote") => Promise<void>,
-): () => Promise<boolean> {
-  return async () => {
-    const adapter = getSyncAdapter();
-    const taskStart = Date.now();
-    const bookTitle = info.book.title || "未知书籍";
-    try {
-      console.log(`[Sync] 📥 Downloading book: ${bookTitle} ← ${info.remoteFilePath}`);
-      const data = await backend.get(info.remoteFilePath);
-      const sizeMB = (data.length / 1024 / 1024).toFixed(2);
-      const dir = getDirName(info.localFilePath);
-      if (dir) await adapter.ensureDir(dir);
-      await adapter.writeFileBytes(info.localFilePath, data);
-      await setBookSyncStatus(info.book.id, "local");
-      console.log(`[Sync] ✓ Downloaded "${bookTitle}" (${sizeMB} MB) in ${Date.now() - taskStart}ms`);
-      return true;
-    } catch (e) {
-      console.log(`[Sync] ✗ Failed to download "${bookTitle}": ${e}`);
-      return false;
-    }
+): FileTask {
+  const bookTitle = info.book.title || "未知书籍";
+  return {
+    label: bookTitle,
+    run: async (onProgress) => {
+      const taskStart = Date.now();
+      try {
+        console.log(`[Sync] 📥 Downloading book: ${bookTitle} ← ${info.remoteFilePath}`);
+        const bytes = await downloadRemoteFileToPath(
+          backend,
+          info.remoteFilePath,
+          info.localFilePath,
+          onProgress,
+        );
+        await setBookSyncStatus(info.book.id, "local");
+        const size = bytes === null ? "" : ` (${(bytes / 1024 / 1024).toFixed(2)} MB)`;
+        console.log(`[Sync] ✓ Downloaded "${bookTitle}"${size} in ${Date.now() - taskStart}ms`);
+        return true;
+      } catch (e) {
+        console.log(`[Sync] ✗ Failed to download "${bookTitle}": ${e}`);
+        return false;
+      }
+    },
   };
 }
 
-function buildUploadCoverTask(backend: ISyncBackend, info: BookInfo): () => Promise<boolean> {
-  return async () => {
-    const adapter = getSyncAdapter();
-    const taskStart = Date.now();
-    const bookTitle = info.book.title || "未知书籍";
-    try {
-      console.log(`[Sync] 📤 Uploading cover: ${bookTitle} → ${info.remoteCoverPath}`);
-      const data = await adapter.readFileBytes(info.localCoverPath);
-      const sizeKB = (data.length / 1024).toFixed(2);
-      await backend.put(info.remoteCoverPath, data);
-      console.log(`[Sync] ✓ Uploaded cover "${bookTitle}" (${sizeKB} KB) in ${Date.now() - taskStart}ms`);
-      return true;
-    } catch (e) {
-      console.log(`[Sync] ✗ Failed to upload cover "${bookTitle}": ${e}`);
-      return false;
-    }
+function buildUploadCoverTask(backend: ISyncBackend, info: BookInfo): FileTask {
+  const bookTitle = info.book.title || "未知书籍";
+  return {
+    label: `${bookTitle} cover`,
+    run: async (onProgress) => {
+      const taskStart = Date.now();
+      try {
+        console.log(`[Sync] 📤 Uploading cover: ${bookTitle} → ${info.remoteCoverPath}`);
+        const bytes = await uploadFileToRemote(
+          backend,
+          info.remoteCoverPath,
+          info.localCoverPath,
+          onProgress,
+        );
+        const size = bytes === null ? "" : ` (${(bytes / 1024).toFixed(2)} KB)`;
+        console.log(`[Sync] ✓ Uploaded cover "${bookTitle}"${size} in ${Date.now() - taskStart}ms`);
+        return true;
+      } catch (e) {
+        console.log(`[Sync] ✗ Failed to upload cover "${bookTitle}": ${e}`);
+        return false;
+      }
+    },
   };
 }
 
-function buildDownloadCoverTask(backend: ISyncBackend, info: BookInfo): () => Promise<boolean> {
-  return async () => {
-    const adapter = getSyncAdapter();
-    const taskStart = Date.now();
-    const bookTitle = info.book.title || "未知书籍";
-    try {
-      console.log(`[Sync] 📥 Downloading cover: ${bookTitle} ← ${info.remoteCoverPath}`);
-      const data = await backend.get(info.remoteCoverPath);
-      const sizeKB = (data.length / 1024).toFixed(2);
-      const dir = getDirName(info.localCoverPath);
-      if (dir) await adapter.ensureDir(dir);
-      await adapter.writeFileBytes(info.localCoverPath, data);
-      console.log(`[Sync] ✓ Downloaded cover "${bookTitle}" (${sizeKB} KB) in ${Date.now() - taskStart}ms`);
-      return true;
-    } catch (e) {
-      console.log(`[Sync] ✗ Failed to download cover "${bookTitle}": ${e}`);
-      return false;
-    }
+function buildDownloadCoverTask(backend: ISyncBackend, info: BookInfo): FileTask {
+  const bookTitle = info.book.title || "未知书籍";
+  return {
+    label: `${bookTitle} cover`,
+    run: async (onProgress) => {
+      const taskStart = Date.now();
+      try {
+        console.log(`[Sync] 📥 Downloading cover: ${bookTitle} ← ${info.remoteCoverPath}`);
+        const bytes = await downloadRemoteFileToPath(
+          backend,
+          info.remoteCoverPath,
+          info.localCoverPath,
+          onProgress,
+        );
+        const size = bytes === null ? "" : ` (${(bytes / 1024).toFixed(2)} KB)`;
+        console.log(
+          `[Sync] ✓ Downloaded cover "${bookTitle}"${size} in ${Date.now() - taskStart}ms`,
+        );
+        return true;
+      } catch (e) {
+        console.log(`[Sync] ✗ Failed to download cover "${bookTitle}": ${e}`);
+        return false;
+      }
+    },
   };
 }
 
@@ -600,12 +1072,18 @@ async function cleanupRemoteOrphans(
     tasks.push(async () => {
       try {
         let children: RemoteFile[] = [];
-        try { children = await backend.listDir(dir); } catch {}
+        try {
+          children = await backend.listDir(dir);
+        } catch {}
         for (const c of children) {
           if (c.isDirectory) continue;
-          try { await backend.delete(`${dir}/${c.name}`); } catch {}
+          try {
+            await backend.delete(`${dir}/${c.name}`);
+          } catch {}
         }
-        try { await backend.delete(dir); } catch {}
+        try {
+          await backend.delete(dir);
+        } catch {}
         console.log(`[Sync] 🗑️ Deleted remote orphan book folder: ${orphan.folderName}`);
         return true;
       } catch (e) {
@@ -760,16 +1238,6 @@ export async function downloadBookFile(
 
     onProgress?.({ downloaded: 0, total: 100 });
 
-    // Use progress-aware download if backend supports it
-    const getWithProgress = (p: string) => {
-      if (backend.getWithProgress) {
-        return backend.getWithProgress(p, (loaded, total) => {
-          if (total > 0) onProgress?.({ downloaded: loaded, total });
-        });
-      }
-      return backend.get(p);
-    };
-
     // Track whether *every* failure we saw was a 404. If so, the remote
     // genuinely doesn't have the file. If at least one attempt failed with
     // some other error, it's an "error" outcome — the caller can retry.
@@ -779,10 +1247,18 @@ export async function downloadBookFile(
       if (!/404|not found/i.test(msg)) sawNon404Error = true;
     };
 
-    let data: Uint8Array | null = null;
+    const appDataDir = await adapter.getAppDataDir();
+    const localPath = isAbsoluteOrProtocolPath(filePath)
+      ? filePath
+      : adapter.joinPath(appDataDir, filePath);
+    const reportDownloadProgress = (loaded: number, total: number) => {
+      if (total > 0) onProgress?.({ downloaded: loaded, total });
+    };
+    let downloaded = false;
     if (newPath) {
       try {
-        data = await getWithProgress(newPath);
+        await downloadRemoteFileToPath(backend, newPath, localPath, reportDownloadProgress);
+        downloaded = true;
         console.log(`[Sync] Downloaded ${newPath} (new layout)`);
       } catch (e) {
         noteFailure(e);
@@ -792,9 +1268,10 @@ export async function downloadBookFile(
         }
       }
     }
-    if (!data) {
+    if (!downloaded) {
       try {
-        data = await getWithProgress(legacyPath);
+        await downloadRemoteFileToPath(backend, legacyPath, localPath, reportDownloadProgress);
+        downloaded = true;
         console.log(`[Sync] Downloaded ${legacyPath} (legacy layout)`);
       } catch (e) {
         noteFailure(e);
@@ -806,7 +1283,7 @@ export async function downloadBookFile(
     }
     // Title-based fallback: same book imported separately on each device gets different UUIDs.
     // The DB sync brings both rows over, but the file is only on one id. Match by sanitized title.
-    if (!data && book?.title) {
+    if (!downloaded && book?.title) {
       try {
         const sanitizedTitle = sanitizeBookTitleForFs(book.title);
         const entries = await backend.listDir(REMOTE_BOOKS_ROOT);
@@ -820,7 +1297,8 @@ export async function downloadBookFile(
           const folderPath = `${REMOTE_BOOKS_ROOT}/${folder.name}`;
           const guess = `${folderPath}/${sanitizedTitle}.${ext}`;
           try {
-            data = await getWithProgress(guess);
+            await downloadRemoteFileToPath(backend, guess, localPath, reportDownloadProgress);
+            downloaded = true;
             console.log(`[Sync] Downloaded via title match: ${guess}`);
             break;
           } catch {
@@ -832,7 +1310,8 @@ export async function downloadBookFile(
               );
               if (hit) {
                 const hitPath = `${folderPath}/${hit.name}`;
-                data = await getWithProgress(hitPath);
+                await downloadRemoteFileToPath(backend, hitPath, localPath, reportDownloadProgress);
+                downloaded = true;
                 console.log(`[Sync] Downloaded via folder scan: ${hitPath}`);
                 break;
               }
@@ -841,10 +1320,10 @@ export async function downloadBookFile(
         }
       } catch (e) {
         noteFailure(e);
-        console.warn(`[Sync] Title-based fallback failed:`, e);
+        console.warn("[Sync] Title-based fallback failed:", e);
       }
     }
-    if (!data) {
+    if (!downloaded) {
       console.log(
         `[Sync] Book file not found on remote (new=${newPath}, legacy=${legacyPath}, title=${book?.title ?? "?"})`,
       );
@@ -852,16 +1331,12 @@ export async function downloadBookFile(
       return sawNon404Error ? "error" : "not-found";
     }
 
-    const sizeMB = (data.length / 1024 / 1024).toFixed(2);
-    console.log(`[Sync] Book ${bookId} fetched (${sizeMB} MB)`);
-
-    const appDataDir = await adapter.getAppDataDir();
-    const localPath = isAbsoluteOrProtocolPath(filePath)
-      ? filePath
-      : adapter.joinPath(appDataDir, filePath);
-    const dir = getDirName(localPath);
-    if (dir) await adapter.ensureDir(dir);
-    await adapter.writeFileBytes(localPath, data);
+    const localSize = await adapter.getFileSize(localPath);
+    if (localSize === 0) {
+      console.warn(`[Sync] Downloaded empty book file for ${bookId}; keeping it remote`);
+      await setBookSyncStatus(bookId, "remote");
+      return "error";
+    }
 
     onProgress?.({ downloaded: 100, total: 100 });
     await setBookSyncStatus(bookId, "local");

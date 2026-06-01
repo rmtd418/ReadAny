@@ -281,6 +281,7 @@ class FakeSyncDb {
 class MemoryBackend implements ISyncBackend {
   readonly type = "webdav";
   readonly jsonFiles = new Map<string, unknown>();
+  readonly unreadableJsonPaths = new Set<string>();
 
   async testConnection(): Promise<boolean> {
     return true;
@@ -295,6 +296,9 @@ class MemoryBackend implements ISyncBackend {
   }
 
   async getJSON<T>(path: string): Promise<T | null> {
+    if (this.unreadableJsonPaths.has(path)) {
+      throw new Error(`WebDAV GET failed for ${path}: 403 Forbidden`);
+    }
     return this.jsonFiles.has(path) ? clone(this.jsonFiles.get(path) as T) : null;
   }
 
@@ -328,7 +332,9 @@ class MemoryBackend implements ISyncBackend {
   async move(fromPath: string, toPath: string): Promise<void> {
     const data = this.jsonFiles.get(fromPath);
     if (data === undefined) throw new Error(`MemoryBackend MOVE: source not found ${fromPath}`);
-    if (this.jsonFiles.has(toPath)) throw new Error(`MemoryBackend MOVE: destination exists ${toPath}`);
+    if (this.jsonFiles.has(toPath)) {
+      throw new Error(`MemoryBackend MOVE: destination exists ${toPath}`);
+    }
     this.jsonFiles.set(toPath, data);
     this.jsonFiles.delete(fromPath);
   }
@@ -562,5 +568,73 @@ describe("simple sync convergence", () => {
         }
       ).tables,
     ).toHaveProperty("books");
+  });
+
+  it("downloads remote snapshots using the listed path", async () => {
+    class AliasPathBackend extends MemoryBackend {
+      async listDir(path: string): Promise<RemoteFile[]> {
+        const files = await super.listDir(path);
+        return files.map((file) =>
+          file.name === "device-a.json" ? { ...file, path: "/logical/device-a.json" } : file,
+        );
+      }
+
+      async getJSON<T>(path: string): Promise<T | null> {
+        if (path === "/logical/device-a.json") {
+          return super.getJSON<T>("/readany/sync/device-a.json");
+        }
+        if (path === "/readany/sync/device-a.json") {
+          throw new Error("should use listed path");
+        }
+        return super.getJSON<T>(path);
+      }
+    }
+
+    const backend = new AliasPathBackend();
+    const deviceB = new FakeSyncDb();
+
+    backend.jsonFiles.set("/readany/sync/device-a.json", {
+      deviceId: "device-a",
+      timestamp: 1000,
+      since: 0,
+      tables: {
+        books: {
+          records: [bookRow({ updated_at: 1000 })],
+          deletedIds: [],
+        },
+      },
+    });
+
+    now = 3000;
+    const result = await syncDevice("device-b", deviceB, backend);
+
+    expect(result.success).toBe(true);
+    expect(deviceB.get("books", "book-1")).toBeTruthy();
+  });
+
+  it("skips unreadable remote device snapshots and continues syncing", async () => {
+    const backend = new MemoryBackend();
+    const local = new FakeSyncDb();
+    local.insert("books", bookRow({ title: "Local", updated_at: 3000 }));
+
+    backend.jsonFiles.set("/readany/sync/device-locked.json", {
+      deviceId: "locked",
+      timestamp: 1000,
+      since: 0,
+      tables: {
+        books: {
+          records: [bookRow({ id: "remote-book", title: "Locked remote", updated_at: 1000 })],
+          deletedIds: [],
+        },
+      },
+    });
+    backend.unreadableJsonPaths.add("/readany/sync/device-locked.json");
+
+    now = 4000;
+    const result = await syncDevice("device-local", local, backend);
+
+    expect(result.success).toBe(true);
+    expect(local.get("books", "remote-book")).toBeUndefined();
+    expect(backend.jsonFiles.has("/readany/sync/device-device-local.json")).toBe(true);
   });
 });

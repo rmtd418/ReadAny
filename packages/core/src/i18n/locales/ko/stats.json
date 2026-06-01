@@ -318,11 +318,11 @@
       "zeroMinutesLong": "0분",
       "nMinutesLong": "{{n}}분",
       "nHoursLong": "{{n}}시간",
-      "nHoursMinutesLong": "{{n}}시간 {{m}}분",
+      "nHoursMinutesLong": "{{h}}시간 {{m}}분",
       "zeroMinutesCompact": "0분",
       "nMinutesCompact": "{{n}}분",
       "nHoursCompact": "{{n}}시",
-      "nHoursMinutesCompact": "{{n}}시{{m}}분",
+      "nHoursMinutesCompact": "{{h}}시{{m}}분",
       "thousandChars": "{{n}}천 자"
     }
   }

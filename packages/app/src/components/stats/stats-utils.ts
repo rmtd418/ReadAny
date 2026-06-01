@@ -1,16 +1,16 @@
+import i18n from "@readany/core/i18n";
 /**
  * stats-utils.ts — Pure formatters, date helpers, and metric builders for the Stats page.
  * No React, no side-effects — only deterministic functions.
  */
 import {
-  fromLocalDateKey,
   type StatsCalendarCell,
   type StatsChartBlock,
   type StatsDimension,
   type StatsInsight,
   type StatsReport,
+  fromLocalDateKey,
 } from "@readany/core/stats";
-import i18n from "@readany/core/i18n";
 import { cn } from "@readany/core/utils";
 import type { ReactNode } from "react";
 import type { StatsCopy } from "./stats-copy";
@@ -34,29 +34,32 @@ export const DIMENSIONS: StatsDimension[] = ["day", "week", "month", "year", "li
 /* ─── Time formatters ─── */
 
 export function formatMinutes(minutes: number, _isZh?: boolean): string {
-  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesLong");
-  if (minutes < 60) return i18n.t("stats.format.nMinutesLong", { n: Math.round(minutes) });
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
+  const totalMinutes = Math.max(0, Math.round(minutes));
+  if (totalMinutes <= 0) return i18n.t("stats.format.zeroMinutesLong");
+  if (totalMinutes < 60) return i18n.t("stats.format.nMinutesLong", { n: totalMinutes });
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
   if (mins <= 0) return i18n.t("stats.format.nHoursLong", { n: hours });
-  return i18n.t("stats.format.nHoursMinutesLong", { h: hours, m: mins });
+  return i18n.t("stats.format.nHoursMinutesLong", { n: hours, h: hours, m: mins });
 }
 
 export function formatCompactMinutes(minutes: number, _isZh = false): string {
-  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
-  if (minutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: Math.round(minutes) });
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { h: hours, m: mins });
+  const totalMinutes = Math.max(0, Math.round(minutes));
+  if (totalMinutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
+  if (totalMinutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: totalMinutes });
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { n: hours, h: hours, m: mins });
   return i18n.t("stats.format.nHoursCompact", { n: hours });
 }
 
 export function formatChartMinutes(minutes: number, _isZh?: boolean): string {
-  if (minutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
-  if (minutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: Math.round(minutes) });
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { h: hours, m: mins });
+  const totalMinutes = Math.max(0, Math.round(minutes));
+  if (totalMinutes <= 0) return i18n.t("stats.format.zeroMinutesCompact");
+  if (totalMinutes < 60) return i18n.t("stats.format.nMinutesCompact", { n: totalMinutes });
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (mins > 0) return i18n.t("stats.format.nHoursMinutesCompact", { n: hours, h: hours, m: mins });
   return i18n.t("stats.format.nHoursCompact", { n: hours });
 }
 
@@ -68,7 +71,9 @@ export function formatCharacterCount(value: number, _isZh?: boolean): string {
     if (rounded >= 10000) {
       const wan = rounded / 10000;
       const digits = wan >= 100 ? 0 : 1;
-      return i18n.t("stats.format.tenThousandChars", { n: wan.toFixed(digits).replace(/\.0$/, "") });
+      return i18n.t("stats.format.tenThousandChars", {
+        n: wan.toFixed(digits).replace(/\.0$/, ""),
+      });
     }
     return i18n.t("stats.format.chars", { n: rounded.toLocaleString() });
   }
@@ -76,7 +81,9 @@ export function formatCharacterCount(value: number, _isZh?: boolean): string {
   if (rounded >= 1000) {
     const thousands = rounded / 1000;
     const digits = thousands >= 100 ? 0 : 1;
-    return i18n.t("stats.format.thousandChars", { n: thousands.toFixed(digits).replace(/\.0$/, "") });
+    return i18n.t("stats.format.thousandChars", {
+      n: thousands.toFixed(digits).replace(/\.0$/, ""),
+    });
   }
 
   return i18n.t("stats.format.chars", { n: rounded.toLocaleString() });
@@ -174,7 +181,10 @@ export function shiftAnchorDate(date: Date, dimension: StatsDimension, delta: -1
 
 /* ─── Calendar intensity ─── */
 
-export function intensityClass(level: StatsCalendarCell["intensity"], inCurrentMonth: boolean): string {
+export function intensityClass(
+  level: StatsCalendarCell["intensity"],
+  inCurrentMonth: boolean,
+): string {
   if (!inCurrentMonth && level === 0) {
     return "border-transparent bg-muted/15 text-muted-foreground/30";
   }

@@ -30,6 +30,9 @@ export interface ISyncAdapter {
   /** Read a file as Uint8Array */
   readFileBytes(filePath: string): Promise<Uint8Array>;
 
+  /** Get file size in bytes, or null when unavailable. */
+  getFileSize(filePath: string): Promise<number | null>;
+
   /** Write Uint8Array to a file */
   writeFileBytes(filePath: string, data: Uint8Array): Promise<void>;
 

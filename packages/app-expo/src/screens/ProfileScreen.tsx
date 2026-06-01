@@ -13,22 +13,21 @@ import {
   MessageSquareIcon,
   PaletteIcon,
   PuzzleIcon,
+  Trash2Icon,
   TypeIcon,
   Volume2Icon,
 } from "@/components/ui/Icon";
 import { SyncButton } from "@/components/ui/SyncButton";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
+import { clearMobileRuntimeCache, formatCacheSize } from "@/lib/platform/mobile-cache";
+import { stopTTSPreview } from "@/lib/platform/tts-preview";
 import {
   mergeCurrentSessionIntoDailyStats,
   mergeCurrentSessionIntoOverallStats,
 } from "@/lib/stats/live-reading-stats";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
-import {
-  formatCharacterCount,
-  formatCharactersPerMinute,
-  formatTimeLocalized,
-} from "@/screens/stats/stats-utils";
-import { useReadingSessionStore } from "@/stores";
+import { formatCharacterCount, formatTimeLocalized } from "@/screens/stats/stats-utils";
+import { useReadingSessionStore, useTTSStore } from "@/stores";
 import {
   type ThemeColors,
   fontSize,
@@ -53,6 +52,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   ScrollView,
   type StyleProp,
@@ -65,6 +65,42 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type ProfileMenuIcon = (props: {
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}) => React.ReactNode;
+type ProfileMenuRoute = Extract<
+  keyof RootStackParamList,
+  | "AppearanceSettings"
+  | "FontSettings"
+  | "SyncSettings"
+  | "AISettings"
+  | "TTSSettings"
+  | "TranslationSettings"
+  | "Skills"
+  | "VectorModelSettings"
+  | "Feedback"
+  | "About"
+>;
+type ProfileMenuItem =
+  | {
+      icon: ProfileMenuIcon;
+      label: string;
+      route: ProfileMenuRoute;
+      showDot?: boolean;
+    }
+  | {
+      icon: ProfileMenuIcon;
+      label: string;
+      url: string;
+    }
+  | {
+      icon: ProfileMenuIcon;
+      label: string;
+      action: () => void;
+      disabled?: boolean;
+    };
 
 const ICP_NUMBER = "粤ICP备2025444251号-2A";
 const ICP_URL = "https://beian.miit.gov.cn/";
@@ -289,8 +325,10 @@ export function ProfileScreen() {
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [unreadFeedback, setUnreadFeedback] = useState(0);
+  const [clearingCache, setClearingCache] = useState(false);
   const saveCurrentSession = useReadingSessionStore((s) => s.saveCurrentSession);
   const currentSession = useReadingSessionStore((s) => s.currentSession);
+  const stopTTS = useTTSStore((s) => s.stop);
 
   const loadStats = useCallback(async () => {
     try {
@@ -338,9 +376,50 @@ export function ProfileScreen() {
     [overall, dailyStats, currentSession],
   );
   const isZh = i18n.language.startsWith("zh");
+  const handleClearCache = useCallback(() => {
+    Alert.alert(
+      t("profile.clearCacheTitle", "清除缓存"),
+      t(
+        "profile.clearCacheConfirm",
+        "将清除临时导入文件、TTS 音频缓存和其他运行缓存。书籍、笔记、设置和同步数据不会被删除。",
+      ),
+      [
+        { text: t("common.cancel", "取消"), style: "cancel" },
+        {
+          text: t("profile.clearCacheAction", "清除缓存"),
+          style: "destructive",
+          onPress: async () => {
+            setClearingCache(true);
+            try {
+              stopTTS();
+              stopTTSPreview();
+              const result = await clearMobileRuntimeCache();
+              Alert.alert(
+                t("profile.clearCacheDoneTitle", "缓存已清除"),
+                t("profile.clearCacheDoneDesc", {
+                  count: result.deletedFiles,
+                  size: formatCacheSize(result.deletedBytes),
+                }),
+              );
+            } catch (error) {
+              console.error("[ProfileScreen] Failed to clear cache:", error);
+              Alert.alert(
+                t("profile.clearCacheFailedTitle", "清除失败"),
+                error instanceof Error
+                  ? error.message
+                  : t("profile.clearCacheFailedDesc", "请稍后重试。"),
+              );
+            } finally {
+              setClearingCache(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [stopTTS, t]);
 
   // Settings menu — matching Tauri ProfilePage exactly
-  const menuSections = useMemo(
+  const menuSections = useMemo<{ title: string; items: ProfileMenuItem[] }[]>(
     () => [
       {
         title: t("settings.general", "通用"),
@@ -356,6 +435,19 @@ export function ProfileScreen() {
             route: "FontSettings" as const,
           },
           { icon: CloudIcon, label: t("settings.sync", "同步"), route: "SyncSettings" as const },
+        ],
+      },
+      {
+        title: t("profile.storage", "存储"),
+        items: [
+          {
+            icon: Trash2Icon,
+            label: clearingCache
+              ? t("profile.clearingCache", "清除中...")
+              : t("profile.clearCache", "清除缓存"),
+            action: handleClearCache,
+            disabled: clearingCache,
+          },
         ],
       },
       {
@@ -398,7 +490,7 @@ export function ProfileScreen() {
         ],
       },
     ],
-    [t, i18n.language, unreadFeedback],
+    [t, i18n.language, unreadFeedback, clearingCache, handleClearCache],
   );
 
   const booksRead = liveOverall?.totalBooks ?? 0;
@@ -409,12 +501,6 @@ export function ProfileScreen() {
     ? formatCharacterCount(liveOverall.totalCharactersRead ?? 0, isZh)
     : formatCharacterCount(0, isZh);
   const streak = liveOverall?.currentStreak ?? 0;
-  const activeDays = liveOverall?.totalReadingDays ?? 0;
-  const totalSessions = liveOverall?.totalSessions ?? 0;
-  const avgSpeed = liveOverall
-    ? formatCharactersPerMinute(liveOverall.avgCharactersPerMinute ?? 0, isZh)
-    : formatCharactersPerMinute(0, isZh);
-  const longestStreak = liveOverall?.longestStreak ?? 0;
   const overviewCards = [
     {
       key: "time",
@@ -516,12 +602,18 @@ export function ProfileScreen() {
             <View style={s.menuCard}>
               {section.items.map((item, idx) => {
                 const Icon = item.icon;
-                const itemKey = "route" in item ? item.route : item.url;
+                const itemKey =
+                  "route" in item ? item.route : "url" in item ? item.url : item.label;
                 const handlePress = () => {
-                  if ("url" in item && item.url) {
+                  if ("disabled" in item && item.disabled) {
+                    return;
+                  }
+                  if ("action" in item && item.action) {
+                    item.action();
+                  } else if ("url" in item && item.url) {
                     Linking.openURL(item.url);
                   } else if ("route" in item) {
-                    nav.navigate(item.route as any);
+                    nav.navigate(item.route);
                   }
                 };
                 return (
@@ -529,6 +621,7 @@ export function ProfileScreen() {
                     key={itemKey}
                     style={[s.menuItem, idx < section.items.length - 1 && s.menuItemBorder]}
                     onPress={handlePress}
+                    disabled={"disabled" in item && item.disabled}
                     activeOpacity={0.7}
                   >
                     <Icon size={20} color={colors.mutedForeground} />

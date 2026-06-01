@@ -15,6 +15,7 @@ import {
   readDir,
   readFile,
   remove,
+  stat,
   writeFile,
 } from "@tauri-apps/plugin-fs";
 
@@ -79,6 +80,16 @@ export class DesktopSyncAdapter implements ISyncAdapter {
   async readFileBytes(filePath: string): Promise<Uint8Array> {
     const resolved = await this.resolveToAbsolute(filePath);
     return readFile(resolved);
+  }
+
+  async getFileSize(filePath: string): Promise<number | null> {
+    try {
+      const resolved = await this.resolveToAbsolute(filePath);
+      const info = await stat(resolved);
+      return Number.isFinite(info.size) ? info.size : null;
+    } catch {
+      return null;
+    }
   }
 
   async writeFileBytes(filePath: string, data: Uint8Array): Promise<void> {

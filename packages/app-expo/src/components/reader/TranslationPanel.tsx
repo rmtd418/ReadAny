@@ -1,11 +1,12 @@
 import { CheckIcon, ChevronDownIcon, XIcon } from "@/components/ui/Icon";
 import { useSettingsStore } from "@/stores";
 import { type ThemeColors, fontSize, fontWeight, radius, useColors } from "@/styles/theme";
+import { buildAITranslationPrompt } from "@readany/core/translation/providers";
 import { TRANSLATOR_LANGS, type TranslationTargetLang } from "@readany/core/types/translation";
 import { providerRequiresApiKey } from "@readany/core/utils";
+import { buildOpenAICompatibleUrl } from "@readany/core/utils/api";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { buildOpenAICompatibleUrl } from "@readany/core/utils/api";
 import {
   ActivityIndicator,
   Modal,
@@ -82,7 +83,7 @@ export function TranslationPanel({ text, onClose }: TranslationPanelProps) {
           messages: [
             {
               role: "system",
-              content: `You are a translator. Translate the following text to ${TRANSLATOR_LANGS[targetLang]}. Only output the translation, no explanations.`,
+              content: buildAITranslationPrompt("AUTO", targetLang),
             },
             {
               role: "user",
@@ -106,9 +107,9 @@ export function TranslationPanel({ text, onClose }: TranslationPanelProps) {
       } else {
         throw new Error(t("translation.noResult", "翻译失败，请重试"));
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("[TranslationPanel] Error:", err);
-      setError(err.message || t("translation.error", "翻译出错"));
+      setError(err instanceof Error ? err.message : t("translation.error", "翻译出错"));
     } finally {
       setLoading(false);
     }
@@ -116,7 +117,7 @@ export function TranslationPanel({ text, onClose }: TranslationPanelProps) {
 
   useEffect(() => {
     translate();
-  }, [targetLang]);
+  }, [translate]);
 
   const handleLangChange = useCallback(
     (lang: TranslationTargetLang) => {

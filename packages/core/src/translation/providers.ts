@@ -33,17 +33,40 @@ function getLanguageName(code: string): string {
   return langMap[code] || code;
 }
 
+function isChineseLanguage(code: string): boolean {
+  return code === "zh-CN" || code === "zh-TW" || code === "zh";
+}
+
+export function buildAITranslationPrompt(
+  sourceLang: string,
+  targetLang: string,
+  options: { numbered?: boolean } = {},
+): string {
+  const targetLangName = getLanguageName(targetLang);
+  const outputRule = options.numbered
+    ? 'Output translations only, keep the same numbering format "N. translation". Do not add any explanation.'
+    : "Only output the translation, no explanations or additional text.";
+  const chineseRule = isChineseLanguage(targetLang)
+    ? ` When translating to ${targetLangName}, if the source text is Classical/Literary Chinese or archaic Chinese, translate it into modern vernacular ${targetLangName}; for example, "学而不思则罔，思而不学则殆" should become a modern-language rendering of the meaning, not the original sentence. If a same-language literal translation would be identical, output a concise modern paraphrase. Do not mention source, author, title, background, citations, commentary, or analysis. For short Chinese words or single characters, output the most likely modern meaning in context instead of copying the source text.`
+    : "";
+  const conversionRule =
+    isChineseLanguage(sourceLang) || isChineseLanguage(targetLang)
+      ? " Important: Even if the source text appears similar to the target language (e.g. Traditional Chinese to Simplified Chinese), you must still perform the conversion."
+      : "";
+
+  return `You are a professional translator. Translate the following text to ${targetLangName}. ${outputRule}${chineseRule}${conversionRule}`;
+}
+
 /** AI Translation - uses OpenAI-compatible API */
 export async function aiTranslate(
   texts: string[],
-  _sourceLang: string,
+  sourceLang: string,
   targetLang: string,
   apiKey: string,
   baseUrl: string,
   model: string,
   useExactRequestUrl = false,
 ): Promise<string[]> {
-  const targetLangName = getLanguageName(targetLang);
   const requestUrl = buildOpenAICompatibleUrl(
     baseUrl,
     "chat/completions",
@@ -67,7 +90,7 @@ export async function aiTranslate(
         messages: [
           {
             role: "system",
-            content: `You are a professional translator. Translate the following text to ${targetLangName}. Only output the translation, no explanations or additional text. Important: Even if the source text appears similar to the target language (e.g. Traditional Chinese to Simplified Chinese), you must still perform the conversion.`,
+            content: buildAITranslationPrompt(sourceLang, targetLang),
           },
           { role: "user", content: texts[0] },
         ],
@@ -97,7 +120,7 @@ export async function aiTranslate(
             messages: [
               {
                 role: "system",
-                content: `You are a professional translator. Translate the following text to ${targetLangName}. Only output the translation.`,
+                content: buildAITranslationPrompt(sourceLang, targetLang),
               },
               { role: "user", content: text },
             ],
@@ -127,7 +150,7 @@ export async function aiTranslate(
  */
 export async function aiTranslateBatch(
   texts: string[],
-  _sourceLang: string,
+  sourceLang: string,
   targetLang: string,
   apiKey: string,
   baseUrl: string,
@@ -138,7 +161,7 @@ export async function aiTranslateBatch(
   if (texts.length <= 1) {
     return aiTranslate(
       texts,
-      _sourceLang,
+      sourceLang,
       targetLang,
       apiKey,
       baseUrl,
@@ -147,7 +170,6 @@ export async function aiTranslateBatch(
     );
   }
 
-  const targetLangName = getLanguageName(targetLang);
   const requestUrl = buildOpenAICompatibleUrl(
     baseUrl,
     "chat/completions",
@@ -173,7 +195,7 @@ export async function aiTranslateBatch(
         messages: [
           {
             role: "system",
-            content: `You are a professional translator. Translate each numbered paragraph to ${targetLangName}. Output translations only, keep the same numbering format "N. translation". Do not add any explanation. Important: Even if the source text appears similar to the target language (e.g. Traditional Chinese to Simplified Chinese), you must still perform the full conversion.`,
+            content: buildAITranslationPrompt(sourceLang, targetLang, { numbered: true }),
           },
           { role: "user", content: numberedInput },
         ],
@@ -203,7 +225,7 @@ export async function aiTranslateBatch(
   // Fallback to individual
   return aiTranslate(
     texts,
-    _sourceLang,
+    sourceLang,
     targetLang,
     apiKey,
     baseUrl,

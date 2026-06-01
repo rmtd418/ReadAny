@@ -33,7 +33,24 @@ export interface ISyncBackend {
   get(path: string): Promise<Uint8Array>;
 
   /** Download data with progress reporting (optional — falls back to get() if not implemented) */
-  getWithProgress?(path: string, onProgress?: (loaded: number, total: number) => void): Promise<Uint8Array>;
+  getWithProgress?(
+    path: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<Uint8Array>;
+
+  /** Upload a local file directly when the platform/backend supports native file transfer. */
+  putFile?(
+    path: string,
+    localFilePath: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<void>;
+
+  /** Download directly into a local file when the platform/backend supports native file transfer. */
+  getFileToPath?(
+    path: string,
+    localFilePath: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<void>;
 
   /** Get JSON data from a path, returns null if not found */
   getJSON<T>(path: string): Promise<T | null>;

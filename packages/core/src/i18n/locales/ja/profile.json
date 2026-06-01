@@ -14,7 +14,17 @@
     "avgDaily": "日平均",
     "readingActivity": "読書アクティビティ",
     "viewDetails": "詳細を見る",
-    "version": "ReadAny Mobile v{{version}}"
+    "version": "ReadAny Mobile v{{version}}",
+    "storage": "ストレージ",
+    "clearCache": "キャッシュを削除",
+    "clearingCache": "削除中...",
+    "clearCacheTitle": "キャッシュを削除",
+    "clearCacheConfirm": "一時インポートファイル、TTS音声キャッシュ、その他の実行時キャッシュを削除します。書籍、ノート、設定、同期データは削除されません。",
+    "clearCacheAction": "キャッシュを削除",
+    "clearCacheDoneTitle": "キャッシュを削除しました",
+    "clearCacheDoneDesc": "{{count}}件のキャッシュファイルを削除し、{{size}}を解放しました。",
+    "clearCacheFailedTitle": "キャッシュの削除に失敗しました",
+    "clearCacheFailedDesc": "後でもう一度お試しください。"
   },
   "skills": {
     "title": "スキル",

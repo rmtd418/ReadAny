@@ -14,7 +14,17 @@
     "avgDaily": "Daily Avg",
     "readingActivity": "Reading Activity",
     "viewDetails": "View Details",
-    "version": "ReadAny Mobile v{{version}}"
+    "version": "ReadAny Mobile v{{version}}",
+    "storage": "Storage",
+    "clearCache": "Clear Cache",
+    "clearingCache": "Clearing...",
+    "clearCacheTitle": "Clear Cache",
+    "clearCacheConfirm": "This will remove temporary import files, TTS audio cache, and other runtime cache. Books, notes, settings, and sync data will not be deleted.",
+    "clearCacheAction": "Clear Cache",
+    "clearCacheDoneTitle": "Cache Cleared",
+    "clearCacheDoneDesc": "Removed {{count}} cached file(s), freeing {{size}}.",
+    "clearCacheFailedTitle": "Failed to Clear Cache",
+    "clearCacheFailedDesc": "Please try again later."
   },
   "skills": {
     "title": "Skills",

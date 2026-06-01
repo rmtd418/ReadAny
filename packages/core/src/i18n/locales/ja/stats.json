@@ -318,11 +318,11 @@
       "zeroMinutesLong": "0分",
       "nMinutesLong": "{{n}}分",
       "nHoursLong": "{{n}}時間",
-      "nHoursMinutesLong": "{{n}}時間{{m}}分",
+      "nHoursMinutesLong": "{{h}}時間{{m}}分",
       "zeroMinutesCompact": "0分",
       "nMinutesCompact": "{{n}}分",
       "nHoursCompact": "{{n}}時",
-      "nHoursMinutesCompact": "{{n}}時{{m}}分",
+      "nHoursMinutesCompact": "{{h}}時{{m}}分",
       "thousandChars": "{{n}}千字"
     }
   }

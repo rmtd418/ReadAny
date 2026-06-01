@@ -22,6 +22,7 @@ interface SelectionPopoverProps {
   selectedText: string;
   annotated?: boolean; // true if this is an existing annotation
   currentColor?: HighlightColor; // current highlight color (for existing annotations)
+  defaultColor?: HighlightColor;
   isPdf?: boolean; // true if viewing a PDF (highlight disabled)
   onHighlight: (color: HighlightColor) => void;
   onRemoveHighlight: () => void;
@@ -38,6 +39,7 @@ export function SelectionPopover({
   selectedText: _selectedText,
   annotated = false,
   currentColor,
+  defaultColor = "yellow",
   isPdf = false,
   onHighlight,
   onRemoveHighlight,
@@ -49,21 +51,21 @@ export function SelectionPopover({
   onClose: _onClose,
 }: SelectionPopoverProps) {
   const { t } = useTranslation();
-  const [showColors, setShowColors] = useState(annotated); // Show colors immediately for existing annotations
-  const [selectedColor, setSelectedColor] = useState<HighlightColor>(currentColor || "yellow");
+  const [showColors, setShowColors] = useState(!isPdf);
+  const [selectedColor, setSelectedColor] = useState<HighlightColor>(currentColor || defaultColor);
 
   const handleHighlightClick = () => {
     // PDF doesn't support highlighting
     if (isPdf) return;
 
     if (annotated) {
-      // For existing annotation, toggle color picker
       setShowColors(!showColors);
-    } else if (showColors) {
-      // If colors are already shown, apply highlight with selected color
+      return;
+    }
+
+    if (showColors) {
       onHighlight(selectedColor);
     } else {
-      // Show color picker
       setShowColors(true);
     }
   };
@@ -109,6 +111,7 @@ export function SelectionPopover({
         <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1.5 shadow-lg">
           {HIGHLIGHT_COLORS.map((color) => (
             <button
+              type="button"
               key={color}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full transition-transform hover:scale-110",
@@ -129,6 +132,7 @@ export function SelectionPopover({
       <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-1 shadow-lg">
         {buttons.map((btn) => (
           <button
+            type="button"
             key={btn.label}
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-md transition-colors",

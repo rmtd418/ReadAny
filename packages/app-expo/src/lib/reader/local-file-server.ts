@@ -254,6 +254,10 @@ const EXT_MIME: Record<string, string> = {
   ".cbz": "application/vnd.comicbook+zip",
   ".fb2": "application/x-fictionbook+xml",
   ".txt": "text/plain",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
 };
 
 function _guessMime(filePath: string): string {

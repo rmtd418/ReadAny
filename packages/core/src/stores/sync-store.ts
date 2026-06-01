@@ -16,13 +16,8 @@ import {
 } from "../sync/sync-backend";
 import type { ISyncBackend } from "../sync/sync-backend";
 import { createSyncBackend, getSecretKeyForBackend } from "../sync/sync-backend-factory";
+import type { SyncDirection, SyncProgress, SyncResult, SyncStatusType } from "../sync/sync-types";
 import { sanitizeWebDavRemoteRoot, sanitizeWebDavUrl } from "../sync/webdav-client";
-import type {
-  SyncDirection,
-  SyncProgress,
-  SyncResult,
-  SyncStatusType,
-} from "../sync/sync-types";
 import { eventBus } from "../utils/event-bus";
 
 let activeSyncPromise: Promise<SyncResult | null> | null = null;
@@ -177,8 +172,8 @@ function normalizeSyncConfig(config: SyncConfig): SyncConfig {
       url: sanitizeWebDavUrl(config.url),
       username: config.username.trim(),
       remoteRoot:
-        sanitizeWebDavRemoteRoot(config.remoteRoot ?? DEFAULT_WEBDAV_REMOTE_ROOT)
-        || DEFAULT_WEBDAV_REMOTE_ROOT,
+        sanitizeWebDavRemoteRoot(config.remoteRoot ?? DEFAULT_WEBDAV_REMOTE_ROOT) ||
+        DEFAULT_WEBDAV_REMOTE_ROOT,
     };
   }
   return config;
@@ -212,9 +207,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
             : normalizedConfig;
         const secretKey = config.type !== "lan" ? getSecretKeyForBackend(config.type) : null;
         const secret = secretKey ? await platform.kvGetItem(secretKey) : null;
-        console.log(
-          `[SyncStore] loadConfig: secret = ${secret ? "found" : "not found"}`,
-        );
+        console.log(`[SyncStore] loadConfig: secret = ${secret ? "found" : "not found"}`);
 
         const isConfigured =
           config.type === "lan"
@@ -267,7 +260,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       notifyOnComplete:
         (existing as WebDavConfig)?.notifyOnComplete ?? DEFAULT_SYNC_CONFIG.notifyOnComplete,
     };
-    console.log(`[SyncStore] saveWebDavConfig: saving config...`);
+    console.log("[SyncStore] saveWebDavConfig: saving config...");
     await platform.kvSetItem(SYNC_CONFIG_KEY, JSON.stringify(config));
     await platform.kvSetItem(SYNC_SECRET_KEYS.webdav, password);
 
@@ -287,8 +280,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         url: sanitizeWebDavUrl(url),
         username: username.trim(),
         remoteRoot:
-          sanitizeWebDavRemoteRoot(remoteRoot ?? DEFAULT_WEBDAV_REMOTE_ROOT)
-          || DEFAULT_WEBDAV_REMOTE_ROOT,
+          sanitizeWebDavRemoteRoot(remoteRoot ?? DEFAULT_WEBDAV_REMOTE_ROOT) ||
+          DEFAULT_WEBDAV_REMOTE_ROOT,
         allowInsecure: allowInsecure ?? false,
         autoSync: false,
         syncIntervalMins: DEFAULT_SYNC_CONFIG.syncIntervalMins,
@@ -492,15 +485,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       const result = await runSimpleSync(
         backend,
         (progress) => {
-          set({
-            progress: {
-              phase: progress.phase,
-              operation: progress.operation,
-              completedFiles: 0,
-              totalFiles: 1,
-              message: progress.message,
-            },
-          });
+          set({ progress });
         },
         receiveOnly ? { receiveOnly: true } : undefined,
       );
@@ -697,13 +682,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
           (progress) => {
             set({
               status: "syncing-files",
-              progress: {
-                phase: progress.phase,
-                operation: progress.operation,
-                completedFiles: 0,
-                totalFiles: 1,
-                message: progress.message,
-              },
+              progress,
             });
           },
           {
@@ -805,7 +784,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     const state = get();
     if (!state.config || state.config.type === "lan") return;
 
-    const clampedMinutes = Math.max(5, Math.min(720, Math.round(minutes || DEFAULT_SYNC_CONFIG.syncIntervalMins)));
+    const clampedMinutes = Math.max(
+      5,
+      Math.min(720, Math.round(minutes || DEFAULT_SYNC_CONFIG.syncIntervalMins)),
+    );
     const config = { ...state.config, syncIntervalMins: clampedMinutes };
     const platform = getPlatformService();
     await platform.kvSetItem(SYNC_CONFIG_KEY, JSON.stringify(config));

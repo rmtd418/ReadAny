@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 import {
   type ThemeColors,
   fontSize,
@@ -6,7 +7,6 @@ import {
   spacing,
   withOpacity,
 } from "../../../styles/theme";
-import { StyleSheet } from "react-native";
 
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -135,8 +135,13 @@ export const makeStyles = (colors: ThemeColors) =>
     errorText: { fontSize: fontSize.sm, color: colors.destructive },
     syncRow: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
       justifyContent: "space-between",
+      gap: 12,
+    },
+    syncInfo: {
+      flex: 1,
+      minWidth: 0,
     },
     syncLabel: {
       fontSize: fontSize.sm,
@@ -157,6 +162,7 @@ export const makeStyles = (colors: ThemeColors) =>
     syncBtn: {
       flexDirection: "row",
       alignItems: "center",
+      alignSelf: "flex-start",
       gap: 6,
       borderRadius: radius.lg,
       backgroundColor: colors.primary,

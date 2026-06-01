@@ -13,6 +13,7 @@ import type {
   ChapterTranslationResult,
 } from "@readany/core/translation/chapter-translator";
 import type { ViewSettings } from "@readany/core/types";
+import { cleanText, isTTSFootnoteMarker, shouldSkipTTSNode } from "@readany/core/tts";
 import { Overlayer } from "foliate-js/overlayer.js";
 import { marked } from "marked";
 /**
@@ -111,6 +112,20 @@ function getSelectionRange(selection?: Selection | null): Range | null {
   return range.collapsed ? null : range;
 }
 
+function getRangeTextWithoutRuby(range: Range, fallback = ""): string {
+  try {
+    const fragment = range.cloneContents();
+    for (const node of fragment.querySelectorAll("rt, rp")) {
+      node.remove();
+    }
+    const text = fragment.textContent?.trim();
+    if (text) return text;
+  } catch {
+    // Fall back to the browser selection text if cloning fails.
+  }
+  return fallback.trim();
+}
+
 function getSelectionEndRect(range: Range | null): DOMRect | null {
   if (!range) return null;
 
@@ -201,13 +216,34 @@ function getSelectionAdvanceIntent(
 const REMOTE_FONT_LINK_ATTR = "data-readany-remote-font-link";
 
 function normalizeTTSSegmentText(text?: string | null) {
-  return String(text || "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return cleanText(String(text || ""));
+}
+
+function acceptTTSNode(node: Node) {
+  if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
+  if (isTTSFootnoteMarker(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+  const parent = (node as Text).parentElement;
+  return shouldSkipTTSNode(parent) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
 }
 
 function getTTSSegmentIdentity(cfi?: string | null, text?: string | null) {
   return `${cfi || ""}::${normalizeTTSSegmentText(text)}`;
+}
+
+function getIframePointInContainerFraction(
+  doc: Document,
+  container: HTMLElement | null,
+  clientX: number,
+) {
+  const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+  if (!iframe || !container) return null;
+
+  const iframeRect = iframe.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const scaleX = iframe.clientWidth > 0 ? iframeRect.width / iframe.clientWidth : 1;
+  const x = iframeRect.left + clientX * scaleX - containerRect.left;
+  if (containerRect.width <= 0) return null;
+  return Math.max(0, Math.min(1, x / containerRect.width));
 }
 
 // Polyfills required by foliate-js
@@ -556,7 +592,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
 
           let visibleBlocks = Array.from(doc.querySelectorAll(blockSelector)).filter((block) => {
             if (!block.textContent?.trim()) return false;
-            if (block.closest(".readany-translation")) return false;
+            if (shouldSkipTTSNode(block)) return false;
             return isRectVisibleInReader(block.getBoundingClientRect());
           });
 
@@ -566,7 +602,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             visibleBlocks = Array.from(doc.querySelectorAll("div, section, article, span")).filter(
               (el) => {
                 if (!el.textContent?.trim()) return false;
-                if (el.closest(".readany-translation")) return false;
+                if (shouldSkipTTSNode(el)) return false;
                 // Only leaf-level elements with direct text content
                 if (el.querySelector("div, section, article, p")) return false;
                 return isRectVisibleInReader(el.getBoundingClientRect());
@@ -581,16 +617,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
 
           for (const block of visibleBlocks) {
             const walker = doc.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-              acceptNode: (node) => {
-                if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
-                const parent = (node as Text).parentElement;
-                if (!parent) return NodeFilter.FILTER_ACCEPT;
-                const tag = parent.tagName.toLowerCase();
-                if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
-                if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
-                if (parent.closest(".readany-translation")) return NodeFilter.FILTER_REJECT;
-                return NodeFilter.FILTER_ACCEPT;
-              },
+              acceptNode: acceptTTSNode,
             });
 
             const positionedNodes: Array<{ node: Text; start: number; end: number }> = [];
@@ -657,7 +684,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
               range.setEnd(endPos.node, endPos.offset);
               if (!isRangeStartVisibleInReader(range)) continue;
 
-              const text = absoluteText.slice(start, end).replace(/\s+/g, " ").trim();
+              const text = normalizeTTSSegmentText(absoluteText.slice(start, end));
               if (!text) continue;
 
               try {
@@ -991,15 +1018,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
               const visibleRight = pStart; // end - size = (start + size) - size = start
 
               const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
-                acceptNode: (node: Node) => {
-                  if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
-                  const parent = (node as Text).parentElement;
-                  const tag = parent?.tagName?.toLowerCase();
-                  if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
-                  if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
-                  if (parent?.closest?.(".readany-translation")) return NodeFilter.FILTER_REJECT;
-                  return NodeFilter.FILTER_ACCEPT;
-                },
+                acceptNode: acceptTTSNode,
               });
 
               const visibleTexts: string[] = [];
@@ -1009,7 +1028,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                 range.selectNodeContents(textNode);
                 const rect = range.getBoundingClientRect();
                 if (rect.right > visibleLeft && rect.left < visibleRight && rect.width > 0) {
-                  const text = textNode.nodeValue?.trim();
+                  const text = normalizeTTSSegmentText(textNode.nodeValue);
                   if (text) visibleTexts.push(text);
                 }
                 textNode = walker.nextNode();
@@ -1024,14 +1043,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                 const vh = win.innerHeight;
 
                 const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
-                  acceptNode: (node: Node) => {
-                    if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
-                    const parent = (node as Text).parentElement;
-                    const tag = parent?.tagName?.toLowerCase();
-                    if (tag === "script" || tag === "style") return NodeFilter.FILTER_REJECT;
-                    if (tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
-                    return NodeFilter.FILTER_ACCEPT;
-                  },
+                  acceptNode: acceptTTSNode,
                 });
 
                 const visibleTexts: string[] = [];
@@ -1047,7 +1059,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     rect.top < vh &&
                     rect.width > 0
                   ) {
-                    const text = textNode.nodeValue?.trim();
+                    const text = normalizeTTSSegmentText(textNode.nodeValue);
                     if (text) visibleTexts.push(text);
                   }
                   textNode = walker.nextNode();
@@ -1058,7 +1070,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             }
 
             // Fallback: return full section text
-            return doc.body?.innerText?.trim() || "";
+            return normalizeTTSSegmentText(doc.body?.innerText);
           } catch {
             return "";
           }
@@ -1436,14 +1448,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                 const visibleLeft = pStart - pSize;
                 const visibleRight = pStart;
                 const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
-                  acceptNode: (node: Node) => {
-                    if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
-                    const parent = (node as Text).parentElement;
-                    const tag = parent?.tagName?.toLowerCase();
-                    if (tag === "script" || tag === "style" || tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
-                    if (parent?.closest?.(".readany-translation")) return NodeFilter.FILTER_REJECT;
-                    return NodeFilter.FILTER_ACCEPT;
-                  },
+                  acceptNode: acceptTTSNode,
                 });
                 const visibleTexts: string[] = [];
                 let textNode = walker.nextNode();
@@ -1452,7 +1457,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                   range.selectNodeContents(textNode);
                   const rect = range.getBoundingClientRect();
                   if (rect.right > visibleLeft && rect.left < visibleRight && rect.width > 0) {
-                    const text = textNode.nodeValue?.trim();
+                    const text = normalizeTTSSegmentText(textNode.nodeValue);
                     if (text) visibleTexts.push(text);
                   }
                   textNode = walker.nextNode();
@@ -1464,13 +1469,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                   const vw = win.innerWidth;
                   const vh = win.innerHeight;
                   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
-                    acceptNode: (node: Node) => {
-                      if (!node.nodeValue?.trim()) return NodeFilter.FILTER_SKIP;
-                      const parent = (node as Text).parentElement;
-                      const tag = parent?.tagName?.toLowerCase();
-                      if (tag === "script" || tag === "style" || tag === "rt" || tag === "rp") return NodeFilter.FILTER_REJECT;
-                      return NodeFilter.FILTER_ACCEPT;
-                    },
+                    acceptNode: acceptTTSNode,
                   });
                   const visibleTexts: string[] = [];
                   let textNode = walker.nextNode();
@@ -1479,7 +1478,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     range.selectNodeContents(textNode);
                     const rect = range.getBoundingClientRect();
                     if (rect.right > 0 && rect.left < vw && rect.bottom > 0 && rect.top < vh && rect.width > 0) {
-                      const text = textNode.nodeValue?.trim();
+                      const text = normalizeTTSSegmentText(textNode.nodeValue);
                       if (text) visibleTexts.push(text);
                     }
                     textNode = walker.nextNode();
@@ -1491,7 +1490,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
               // Fallback: if no visible text detected, use section text
               if (!surroundingText) {
                 const rawText = doc.body?.textContent || "";
-                surroundingText = rawText.replace(/\s+/g, " ").trim().slice(0, 2000);
+                surroundingText = normalizeTTSSegmentText(rawText).slice(0, 2000);
               }
             }
           } catch {
@@ -1543,6 +1542,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         green: "rgba(74, 222, 128, 0.4)", // green-400
         blue: "rgba(96, 165, 250, 0.4)", // blue-400
         pink: "rgba(236, 72, 153, 0.4)", // pink-400 - ADDED
+        purple: "rgba(192, 132, 252, 0.4)", // purple-400
         violet: "rgba(167, 139, 250, 0.4)", // violet-400
       };
 
@@ -1824,7 +1824,10 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           // Visible range in document coords: [scrollStart - pageWidth, scrollStart]
           // Position within visible page: clientX - (scrollStart - pageWidth)
           const visibleX = pageWidth > 0 ? clientX - (scrollStart - pageWidth) : clientX;
-          const xFraction = pageWidth > 0 ? visibleX / pageWidth : 0;
+          const xFraction =
+            pageWidth > 0
+              ? visibleX / pageWidth
+              : getIframePointInContainerFraction(doc, containerRef.current, clientX);
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip
@@ -1869,7 +1872,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     clientY,
                     screenX,
                     screenY,
-                    xFraction,
+                    ...(typeof xFraction === "number" ? { xFraction } : {}),
                   },
                   "*",
                 );
@@ -2000,7 +2003,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       const sel = doc.getSelection();
       const range = getSelectionRange(sel);
       if (!range) return null;
-      const text = (sel?.toString() || "").trim();
+      const text = getRangeTextWithoutRuby(range, sel?.toString() || "");
       if (!text) return null;
 
       // Get CFI for the selection

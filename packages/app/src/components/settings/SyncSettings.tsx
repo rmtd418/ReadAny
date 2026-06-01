@@ -15,6 +15,19 @@ import { LANSyncDialog } from "./LANSyncDialog";
 
 type BackendType = "webdav" | "s3" | "lan";
 
+function formatSyncBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  const precision = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
 export function SyncSettings() {
   const { t } = useTranslation();
   const {
@@ -305,16 +318,39 @@ export function SyncSettings() {
     }
   };
 
+  const progressPercent = () => {
+    if (!progress || progress.phase === "database") return null;
+    if (progress.totalTransferBytes && progress.totalTransferBytes > 0) {
+      const ratio = (progress.totalCurrentBytes ?? 0) / progress.totalTransferBytes;
+      return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+    }
+    const totalFiles = Math.max(progress.totalFiles, 1);
+    if (progress.totalBytes && progress.totalBytes > 0) {
+      const currentBytes = progress.currentBytes ?? 0;
+      const fileRatio = Math.max(0, Math.min(1, currentBytes / progress.totalBytes));
+      return Math.round(((progress.completedFiles + fileRatio) / totalFiles) * 100);
+    }
+    return progress.totalFiles > 0
+      ? Math.round((progress.completedFiles / progress.totalFiles) * 100)
+      : 0;
+  };
+
   const progressLabel = () => {
     if (!progress) return null;
+    const byteProgress =
+      progress.phase === "files" && progress.totalTransferBytes && progress.totalTransferBytes > 0
+        ? ` - ${formatSyncBytes(progress.totalCurrentBytes ?? 0)} / ${formatSyncBytes(progress.totalTransferBytes)}`
+        : progress.phase === "files" && progress.totalBytes && progress.totalBytes > 0
+          ? ` - ${formatSyncBytes(progress.currentBytes ?? 0)} / ${formatSyncBytes(progress.totalBytes)}`
+          : "";
 
     if (isLanContext) {
       return progress.phase === "database"
         ? t("settings.syncLANImportProgressDatabase")
-        : t("settings.syncLANImportProgressFiles", {
+        : `${t("settings.syncLANImportProgressFiles", {
             completed: progress.completedFiles,
             total: progress.totalFiles,
-          });
+          })}${byteProgress}`;
     }
 
     return progress.phase === "database"
@@ -324,14 +360,14 @@ export function SyncSettings() {
               ? t("settings.syncUploading")
               : t("settings.syncDownloading"),
         })
-      : t("settings.syncProgressFiles", {
+      : `${t("settings.syncProgressFiles", {
           operation:
             progress.operation === "upload"
               ? t("settings.syncUploading")
               : t("settings.syncDownloading"),
           completed: progress.completedFiles,
           total: progress.totalFiles,
-        });
+        })}${byteProgress}`;
   };
 
   const renderBackendSelector = () => (
@@ -416,7 +452,9 @@ export function SyncSettings() {
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm text-foreground">{t("settings.syncRemoteRoot")}</label>
+          <label className="mb-1 block text-sm text-foreground">
+            {t("settings.syncRemoteRoot")}
+          </label>
           <input
             type="text"
             value={webdavRemoteRoot}
@@ -429,7 +467,9 @@ export function SyncSettings() {
         <div className="flex items-center justify-between pt-1">
           <div>
             <span className="text-sm text-foreground">{t("settings.syncAllowInsecure")}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.syncAllowInsecureDesc")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.syncAllowInsecureDesc")}
+            </p>
           </div>
           <Switch
             checked={webdavAllowInsecure}
@@ -628,7 +668,7 @@ export function SyncSettings() {
                     <div
                       className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
                       style={{
-                        width: `${progress.totalFiles > 0 ? Math.round((progress.completedFiles / progress.totalFiles) * 100) : 0}%`,
+                        width: `${progressPercent() ?? 0}%`,
                       }}
                     />
                   )}
@@ -698,17 +738,23 @@ export function SyncSettings() {
             <div className="flex items-center justify-between pt-1">
               <div>
                 <span className="text-sm text-foreground">{t("settings.syncAutoSync")}</span>
-                <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.syncAutoSyncDesc")}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("settings.syncAutoSyncDesc")}
+                </p>
               </div>
               <Switch
-                checked={config?.type === "webdav" || config?.type === "s3" ? config.autoSync : false}
+                checked={
+                  config?.type === "webdav" || config?.type === "s3" ? config.autoSync : false
+                }
                 onCheckedChange={(checked) => setAutoSync(checked)}
               />
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3">
               <div>
                 <span className="text-sm text-foreground">{t("settings.syncInterval")}</span>
-                <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.syncIntervalDesc")}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("settings.syncIntervalDesc")}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -726,7 +772,11 @@ export function SyncSettings() {
                   }}
                   className="w-20 rounded-md border border-input bg-background px-3 py-1.5 text-right text-sm text-foreground outline-none focus:border-primary"
                 />
-                <span className="text-xs text-muted-foreground">{t("settings.syncIntervalMinutes", { count: Number.parseInt(syncIntervalInput || "30", 10) || 30 })}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("settings.syncIntervalMinutes", {
+                    count: Number.parseInt(syncIntervalInput || "30", 10) || 30,
+                  })}
+                </span>
               </div>
             </div>
           </>
@@ -860,9 +910,7 @@ export function SyncSettings() {
               saveS3Config(d.config as never, (d.secretAccessKey as string) || "");
             }
           }}
-          validate={(d) =>
-            typeof d === "object" && d !== null && "backendType" in d
-          }
+          validate={(d) => typeof d === "object" && d !== null && "backendType" in d}
         />
       </section>
 

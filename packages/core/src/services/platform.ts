@@ -29,6 +29,12 @@ export interface FetchOptions extends RequestInit {
   onDownloadProgress?: (loaded: number, total: number) => void;
 }
 
+export interface FileTransferOptions {
+  headers?: Record<string, string>;
+  allowInsecure?: boolean;
+  onProgress?: (loaded: number, total: number) => void;
+}
+
 export interface UpdateInfo {
   version: string;
   notes?: string;
@@ -85,6 +91,8 @@ export interface IPlatformService {
 
   // ---- Network (for scenarios requiring custom headers) ----
   fetch(url: string, options?: FetchOptions): Promise<Response>;
+  downloadFile?(url: string, filePath: string, options?: FileTransferOptions): Promise<void>;
+  uploadFile?(url: string, filePath: string, options?: FileTransferOptions): Promise<void>;
   createWebSocket(url: string, options?: WebSocketOptions): Promise<IWebSocket>;
 
   // ---- App info ----

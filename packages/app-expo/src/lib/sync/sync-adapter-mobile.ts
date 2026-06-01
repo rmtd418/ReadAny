@@ -95,6 +95,15 @@ export class MobileSyncAdapter implements ISyncAdapter {
     return file.bytes();
   }
 
+  async getFileSize(filePath: string): Promise<number | null> {
+    try {
+      const file = new File(filePath);
+      return file.exists && Number.isFinite(file.size) ? file.size : null;
+    } catch {
+      return null;
+    }
+  }
+
   async writeFileBytes(filePath: string, data: Uint8Array): Promise<void> {
     const file = new File(filePath);
     file.write(data);

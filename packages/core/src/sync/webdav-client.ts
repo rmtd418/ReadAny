@@ -150,12 +150,9 @@ function createRequestWebDavError(
 ): WebDavError {
   const err = error as { name?: string; message?: string; cause?: { code?: string } };
   const lowerMessage = err.message?.toLowerCase() ?? "";
-  const connectionMessage = i18n.t(
-    "settings.syncWebdavNetworkError",
-    {
-      defaultValue: "无法连接到 WebDAV 服务器，请检查网络、地址、端口或证书配置。",
-    },
-  );
+  const connectionMessage = i18n.t("settings.syncWebdavNetworkError", {
+    defaultValue: "无法连接到 WebDAV 服务器，请检查网络、地址、端口或证书配置。",
+  });
 
   if (
     err.name === "AbortError" ||
@@ -263,6 +260,10 @@ export class WebDavClient {
       .map((segment) => encodeURIComponent(segment))
       .join("/");
     return `${this.baseUrl}${encoded}`;
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    return { Authorization: this.authHeader };
   }
 
   /** True if the status code indicates a transient, retry-worthy failure. */
@@ -432,6 +433,32 @@ export class WebDavClient {
     }
   }
 
+  async putFile(
+    path: string,
+    localFilePath: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<void> {
+    const platform = getPlatformService();
+    if (!platform.uploadFile) {
+      throw new Error("Platform does not support direct file upload");
+    }
+
+    const url = this.buildUrl(path);
+    const logPath = path.startsWith("/") ? path : `/${path}`;
+    console.log(`[WebDAV] PUT ${logPath} (file upload)`);
+    const startTime = Date.now();
+    await platform.uploadFile(url, localFilePath, {
+      headers: {
+        ...this.getAuthHeaders(),
+        "Content-Type": "application/octet-stream",
+      },
+      allowInsecure: this.allowInsecure,
+      onProgress,
+    });
+    this.hadAuthSuccess = true;
+    console.log(`[WebDAV] PUT ${logPath} completed in ${Date.now() - startTime}ms`);
+  }
+
   /** Upload a JSON object */
   async putJSON(path: string, data: unknown): Promise<void> {
     await this.put(path, JSON.stringify(data), "application/json");
@@ -497,6 +524,29 @@ export class WebDavClient {
       }
       throw error;
     }
+  }
+
+  async getFileToPath(
+    path: string,
+    localFilePath: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<void> {
+    const platform = getPlatformService();
+    if (!platform.downloadFile) {
+      throw new Error("Platform does not support direct file download");
+    }
+
+    const url = this.buildUrl(path);
+    const logPath = path.startsWith("/") ? path : `/${path}`;
+    console.log(`[WebDAV] GET ${logPath} (file download)`);
+    const startTime = Date.now();
+    await platform.downloadFile(url, localFilePath, {
+      headers: this.getAuthHeaders(),
+      allowInsecure: this.allowInsecure,
+      onProgress,
+    });
+    this.hadAuthSuccess = true;
+    console.log(`[WebDAV] GET ${logPath} completed in ${Date.now() - startTime}ms`);
   }
 
   /** Download text content from a path (GET) */
@@ -589,10 +639,12 @@ export class WebDavClient {
     });
     if (!resp.ok && resp.status !== 207) {
       if (resp.status === 404 || resp.status === 409) return [];
-      throw new Error(`WebDAV PROPFIND failed for ${path}: ${resp.status} ${resp.statusText || ""}`);
+      throw new Error(
+        `WebDAV PROPFIND failed for ${path}: ${resp.status} ${resp.statusText || ""}`,
+      );
     }
     const xml = await resp.text();
-    return parsePropfindResponse(xml, path);
+    return parsePropfindResponse(xml, path, this.buildUrl(path));
   }
 
   /** Safely list directory, create if not exists */
@@ -614,28 +666,48 @@ export class WebDavClient {
  * Parse a PROPFIND multistatus XML response.
  * Uses regex-based parsing — no DOM parser needed since the XML structure is predictable.
  */
-function parsePropfindResponse(xml: string, basePath: string): DavResource[] {
+function parsePropfindResponse(xml: string, basePath: string, requestUrl: string): DavResource[] {
+  const blocks: string[] = [];
+
+  // Split by WebDAV response boundaries regardless of namespace prefix.
+  const responseRegex = /<(?:[\w-]+:)?response\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?response>/gi;
+  let match = responseRegex.exec(xml);
+  while (match !== null) {
+    blocks.push(match[1]);
+    match = responseRegex.exec(xml);
+  }
+
+  const strictBasePath = normalizeWebDavPath(new URL(requestUrl).pathname);
+  const fallbackBasePath = normalizeWebDavPath(basePath);
+  let resources = parsePropfindBlocks(blocks, strictBasePath, requestUrl);
+
+  if (resources.length === 0 && fallbackBasePath !== strictBasePath) {
+    resources = parsePropfindBlocks(blocks, fallbackBasePath, requestUrl);
+  }
+
+  return resources;
+}
+
+function parsePropfindBlocks(
+  blocks: string[],
+  basePath: string,
+  requestUrl: string,
+): DavResource[] {
   const resources: DavResource[] = [];
 
-  // Split by <D:response> or <d:response> boundaries (case-insensitive)
-  const responseRegex = /<(?:D|d):response[^>]*>([\s\S]*?)<\/(?:D|d):response>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = responseRegex.exec(xml)) !== null) {
-    const block = match[1];
-
+  for (const block of blocks) {
     const href = extractTagContent(block, "href") || "";
-    const isCollection =
-      block.includes("<D:collection") ||
-      block.includes("<d:collection") ||
-      block.includes("<D:collection/") ||
-      block.includes("<d:collection/");
+    const hrefPath = normalizeWebDavPath(getPathnameFromHref(href, requestUrl));
+    if (!isDirectChildPath(basePath, hrefPath)) continue;
+
+    const isCollection = /<(?:(?:\w+):)?collection\b[^>]*\/?>/i.test(block);
     const contentLengthStr = extractTagContent(block, "getcontentlength");
     const lastModified = extractTagContent(block, "getlastmodified");
     const etag = extractTagContent(block, "getetag")?.replace(/"/g, "");
 
     resources.push({
-      href: decodeURIComponent(href),
-      name: filenameFromHref(href),
+      href: hrefPath,
+      name: filenameFromPath(hrefPath),
       isCollection,
       contentLength: contentLengthStr ? Number.parseInt(contentLengthStr, 10) : undefined,
       lastModified: lastModified || undefined,
@@ -643,23 +715,50 @@ function parsePropfindResponse(xml: string, basePath: string): DavResource[] {
     });
   }
 
-  // Filter out the parent directory itself (first result is usually the queried path)
-  const baseNormalized = basePath.replace(/\/+$/, "").replace(/^\/+/, "");
-  return resources.filter((r) => {
-    const hrefNormalized = r.href.replace(/\/+$/, "").replace(/^\/+/, "");
-    return hrefNormalized !== baseNormalized;
-  });
+  return resources;
 }
 
-/** Extract text content of an XML tag (case-insensitive, supports D: and d: namespace prefix) */
+function safeDecodeWebDavPath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+function getPathnameFromHref(href: string, requestUrl: string): string {
+  try {
+    return new URL(href, requestUrl).pathname;
+  } catch {
+    return href;
+  }
+}
+
+function normalizeWebDavPath(path: string): string {
+  const decoded = safeDecodeWebDavPath(path).replace(/\/{2,}/g, "/");
+  const trimmed = decoded.replace(/\/+$/, "");
+  return trimmed.startsWith("/") ? trimmed || "/" : `/${trimmed}`;
+}
+
+function isDirectChildPath(basePath: string, hrefPath: string): boolean {
+  if (hrefPath === basePath) return false;
+  const prefix = basePath === "/" ? "/" : `${basePath}/`;
+  if (!hrefPath.startsWith(prefix)) return false;
+  const relative = hrefPath.slice(prefix.length).replace(/\/+$/, "");
+  return relative.length > 0 && !relative.includes("/");
+}
+
+/** Extract text content of an XML tag (case-insensitive, supports arbitrary namespace prefix) */
 function extractTagContent(xml: string, localName: string): string | null {
-  const regex = new RegExp(`<(?:D|d):${localName}[^>]*>([^<]*)<\\/(?:D|d):${localName}>`, "i");
+  const regex = new RegExp(
+    `<(?:[\\w-]+:)?${localName}\\b[^>]*>([^<]*)<\\/(?:[\\w-]+:)?${localName}>`,
+    "i",
+  );
   const match = regex.exec(xml);
   return match ? match[1].trim() : null;
 }
 
-/** Extract filename from a WebDAV href */
-function filenameFromHref(href: string): string {
-  const decoded = decodeURIComponent(href);
-  return decoded.replace(/\/+$/, "").split("/").pop() || "";
+/** Extract filename from a normalized WebDAV path */
+function filenameFromPath(path: string): string {
+  return path.replace(/\/+$/, "").split("/").pop() || "";
 }
