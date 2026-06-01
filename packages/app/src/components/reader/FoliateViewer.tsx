@@ -112,6 +112,20 @@ function getSelectionRange(selection?: Selection | null): Range | null {
   return range.collapsed ? null : range;
 }
 
+function getRangeTextWithoutRuby(range: Range, fallback = ""): string {
+  try {
+    const fragment = range.cloneContents();
+    for (const node of fragment.querySelectorAll("rt, rp")) {
+      node.remove();
+    }
+    const text = fragment.textContent?.trim();
+    if (text) return text;
+  } catch {
+    // Fall back to the browser selection text if cloning fails.
+  }
+  return fallback.trim();
+}
+
 function getSelectionEndRect(range: Range | null): DOMRect | null {
   if (!range) return null;
 
@@ -1969,7 +1983,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       const sel = doc.getSelection();
       const range = getSelectionRange(sel);
       if (!range) return null;
-      const text = (sel?.toString() || "").trim();
+      const text = getRangeTextWithoutRuby(range, sel?.toString() || "");
       if (!text) return null;
 
       // Get CFI for the selection
