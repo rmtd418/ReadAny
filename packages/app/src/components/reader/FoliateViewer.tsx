@@ -230,6 +230,22 @@ function getTTSSegmentIdentity(cfi?: string | null, text?: string | null) {
   return `${cfi || ""}::${normalizeTTSSegmentText(text)}`;
 }
 
+function getIframePointInContainerFraction(
+  doc: Document,
+  container: HTMLElement | null,
+  clientX: number,
+) {
+  const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+  if (!iframe || !container) return null;
+
+  const iframeRect = iframe.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const scaleX = iframe.clientWidth > 0 ? iframeRect.width / iframe.clientWidth : 1;
+  const x = iframeRect.left + clientX * scaleX - containerRect.left;
+  if (containerRect.width <= 0) return null;
+  return Math.max(0, Math.min(1, x / containerRect.width));
+}
+
 // Polyfills required by foliate-js
 // biome-ignore lint: polyfill for foliate-js
 (Object as any).groupBy ??= (
@@ -1808,7 +1824,10 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           // Visible range in document coords: [scrollStart - pageWidth, scrollStart]
           // Position within visible page: clientX - (scrollStart - pageWidth)
           const visibleX = pageWidth > 0 ? clientX - (scrollStart - pageWidth) : clientX;
-          const xFraction = pageWidth > 0 ? visibleX / pageWidth : 0;
+          const xFraction =
+            pageWidth > 0
+              ? visibleX / pageWidth
+              : getIframePointInContainerFraction(doc, containerRef.current, clientX);
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip
@@ -1853,7 +1872,7 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     clientY,
                     screenX,
                     screenY,
-                    xFraction,
+                    ...(typeof xFraction === "number" ? { xFraction } : {}),
                   },
                   "*",
                 );

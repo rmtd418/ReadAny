@@ -270,6 +270,7 @@ export class FixedLayout extends HTMLElement {
   }
   get index() {
     const spread = this.#spreads[this.#index];
+    if (!spread) return -1;
     const section =
       spread?.center ??
       (this.#side === "left" ? (spread.left ?? spread.right) : (spread.right ?? spread.left));
