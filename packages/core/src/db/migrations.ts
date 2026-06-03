@@ -107,6 +107,11 @@ const migrations: Migration[] = [
       "ALTER TABLE feedback ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0",
     ],
   },
+  {
+    version: 12,
+    description: "Add user rating and reviews to books",
+    up: ["ALTER TABLE books ADD COLUMN rating REAL", "ALTER TABLE books ADD COLUMN reviews TEXT"],
+  },
 ];
 
 /** Run pending migrations */

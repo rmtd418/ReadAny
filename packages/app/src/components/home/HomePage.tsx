@@ -6,7 +6,7 @@ import { GroupPickerPopover } from "@/components/home/GroupPickerPopover";
 import { SyncButton } from "@/components/ui/SyncButton";
 import { triggerVectorizeBook } from "@/lib/rag/vectorize-trigger";
 import { useLibraryStore } from "@/stores/library-store";
-import type { BookGroup, SortField } from "@readany/core/types";
+import type { Book, BookGroup, SortField } from "@readany/core/types";
 import {
   ArrowDownAZ,
   ArrowLeft,
@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { BookCard } from "./BookCard";
+import { BookDetailsDialog } from "./BookDetailsDialog";
 import { BookGrid } from "./BookGrid";
 import { GroupCard } from "./GroupCard";
 import { ImportDropZone } from "./ImportDropZone";
@@ -39,6 +40,19 @@ const SORT_OPTIONS: { field: SortField; labelKey: string }[] = [
   { field: "author", labelKey: "library.sortAuthor" },
   { field: "progress", labelKey: "library.sortProgress" },
 ];
+
+const SUPPORTED_EXTS = new Set([
+  "epub",
+  "pdf",
+  "mobi",
+  "azw",
+  "azw3",
+  "fb2",
+  "fbz",
+  "txt",
+  "umd",
+  "cbz",
+]);
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -69,6 +83,7 @@ export function HomePage() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showBatchGroupPicker, setShowBatchGroupPicker] = useState(false);
   const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const [detailsBookId, setDetailsBookId] = useState<string | null>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const groupBtnRef = useRef<HTMLButtonElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -78,8 +93,6 @@ export function HomePage() {
   importBooksRef.current = importBooks;
   const tRef = useRef(t);
   tRef.current = t;
-
-  const SUPPORTED_EXTS = new Set(["epub", "pdf", "mobi", "azw", "azw3", "fb2", "fbz", "txt", "umd", "cbz"]);
 
   // Use Tauri's native drag-drop event (HTML5 dataTransfer.files doesn't have paths in Tauri v2)
   // Register ONCE — use refs to avoid re-subscribing on every render
@@ -124,7 +137,9 @@ export function HomePage() {
       }
     })();
 
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps — refs keep values fresh
 
   // HTML5 fallback for browser dev mode (Tauri provides paths via its own event)
@@ -202,6 +217,14 @@ export function HomePage() {
     () => groups.find((group) => group.id === activeGroupId) ?? null,
     [groups, activeGroupId],
   );
+  const detailsBook = useMemo(
+    () => books.find((book) => book.id === detailsBookId) ?? null,
+    [books, detailsBookId],
+  );
+
+  const handleShowDetails = useCallback((book: Book) => {
+    setDetailsBookId(book.id);
+  }, []);
 
   const hasSearch = filter.search.trim().length > 0;
 
@@ -257,7 +280,6 @@ export function HomePage() {
     },
     [filter, setFilter],
   );
-
 
   const handleDeleteGroup = useCallback(
     async (group: BookGroup) => {
@@ -525,6 +547,9 @@ export function HomePage() {
                       <div
                         className="fixed inset-0 z-40"
                         onClick={() => setShowGroupMenu(false)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setShowGroupMenu(false);
+                        }}
                       />
                       <div className="absolute left-0 top-full z-50 mt-1 min-w-32 rounded-lg border bg-popover p-1 shadow-lg">
                         <button
@@ -678,6 +703,7 @@ export function HomePage() {
                   isSelectionMode={selectionMode}
                   isSelected={selectedBookIds.has(item.book.id)}
                   onSelect={toggleBookSelection}
+                  onShowDetails={handleShowDetails}
                 />
               ),
             )}
@@ -688,6 +714,7 @@ export function HomePage() {
             selectionMode={selectionMode}
             selectedBookIds={selectedBookIds}
             onToggleSelect={toggleBookSelection}
+            onShowDetails={handleShowDetails}
           />
         )}
       </div>
@@ -701,6 +728,13 @@ export function HomePage() {
           anchorRef={groupBtnRef}
         />
       )}
+      <BookDetailsDialog
+        book={detailsBook}
+        open={detailsBook !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailsBookId(null);
+        }}
+      />
     </div>
   );
 }

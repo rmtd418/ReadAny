@@ -826,6 +826,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateBook: (bookId, updates) => {
     set((state) => ({
       books: state.books.map((b) => (b.id === bookId ? { ...b, ...updates } : b)),
+      allTags:
+        updates.tags !== undefined
+          ? Array.from(new Set([...state.allTags, ...updates.tags])).sort()
+          : state.allTags,
     }));
     db.updateBook(bookId, updates).catch((err) =>
       console.error("Failed to update book in database:", err),

@@ -482,11 +482,23 @@ export async function syncFiles(
     // --- Cover ---
     if (info.hasCover && info.coverExt) {
       const localExists = localExistsMap.get(info.localCoverPath) ?? false;
+      const localSize = localSizeMap.get(info.localCoverPath) ?? null;
       const remoteExists = migration.coverAtNew;
+      const remoteSize = migration.coverSize;
+      const coverFileName = info.book.cover_url.split(/[\\/]/).pop() ?? "";
+      const isCustomCover = coverFileName.startsWith(`${book.id}-custom-`);
+      const coverChanged =
+        remoteExists &&
+        localExists &&
+        ((isPositiveFiniteNumber(localSize) &&
+          isPositiveFiniteNumber(remoteSize) &&
+          localSize !== remoteSize) ||
+          (isCustomCover &&
+            (!isPositiveFiniteNumber(localSize) || !isPositiveFiniteNumber(remoteSize))));
 
-      if (!disableUploads && localExists && (forceUploadAll || !remoteExists)) {
+      if (!disableUploads && localExists && (forceUploadAll || !remoteExists || coverChanged)) {
         const task = buildUploadCoverTask(backend, info);
-        const sizeBytes = localSizeMap.get(info.localCoverPath) ?? null;
+        const sizeBytes = localSize;
         uploadTasks.push({
           label: task.label,
           sizeBytes,
@@ -501,7 +513,7 @@ export async function syncFiles(
         });
       }
 
-      if (remoteExists && (forceDownloadAll || !localExists)) {
+      if (remoteExists && (forceDownloadAll || !localExists || (disableUploads && coverChanged))) {
         downloadTasks.push({
           ...buildDownloadCoverTask(backend, info),
           sizeBytes: migration.coverSize,
@@ -550,7 +562,7 @@ export async function syncFiles(
   if (!disableRemoteDeletes) {
     await cleanupRemoteOrphans(backend, listings, currentBookIds);
   }
-  await cleanupLocalOrphans(adapter, appDataDir, currentBookIds);
+  await cleanupLocalOrphans(adapter, appDataDir, currentBookIds, books);
 
   await saveRemoteFileManifest(
     backend,
@@ -1143,6 +1155,7 @@ async function cleanupLocalOrphans(
   adapter: ReturnType<typeof getSyncAdapter>,
   appDataDir: string,
   currentBookIds: Set<string>,
+  books: BookRow[],
 ): Promise<void> {
   const tasks: (() => Promise<boolean>)[] = [];
   const [localManagedBookFiles, localManagedCovers] = await Promise.all([
@@ -1155,6 +1168,14 @@ async function cleanupLocalOrphans(
     if (dot <= 0) return null;
     return name.slice(0, dot);
   };
+  const currentCoverFileNames = new Set(
+    books
+      .map((book) => book.cover_url)
+      .filter((coverUrl): coverUrl is string => Boolean(coverUrl))
+      .filter((coverUrl) => !isAbsoluteOrProtocolPath(coverUrl))
+      .map((coverUrl) => coverUrl.split(/[\\/]/).pop())
+      .filter((fileName): fileName is string => Boolean(fileName)),
+  );
 
   for (const fileName of localManagedBookFiles) {
     const bookId = idFromLocalName(fileName);
@@ -1175,6 +1196,7 @@ async function cleanupLocalOrphans(
 
   for (const fileName of localManagedCovers) {
     const bookId = idFromLocalName(fileName);
+    if (currentCoverFileNames.has(fileName)) continue;
     if (bookId && !currentBookIds.has(bookId)) {
       const localPath = adapter.joinPath(appDataDir, "covers", fileName);
       tasks.push(async () => {

@@ -10,12 +10,31 @@ export interface BookMeta {
   description?: string;
   coverUrl?: string;
   publishDate?: string;
+  rating?: number;
+  reviews?: BookReview[];
   subjects?: string[];
   totalPages?: number;
   totalChapters?: number;
 }
 
-export type BookFormat = "epub" | "pdf" | "mobi" | "azw" | "azw3" | "cbz" | "fb2" | "fbz" | "txt" | "umd";
+export interface BookReview {
+  id: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type BookFormat =
+  | "epub"
+  | "pdf"
+  | "mobi"
+  | "azw"
+  | "azw3"
+  | "cbz"
+  | "fb2"
+  | "fbz"
+  | "txt"
+  | "umd";
 
 export interface Book {
   id: string;

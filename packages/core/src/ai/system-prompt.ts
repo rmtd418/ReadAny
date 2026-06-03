@@ -85,6 +85,12 @@ function buildToolsSection(skills: Skill[], isVectorized: boolean): string {
   tools.push(
     "- **mindmap**: Generate an interactive mindmap visualization (params: reasoning, title, markdown)",
   );
+  tools.push(
+    "- **updateBookMetadata**: Edit a book's library metadata when the user explicitly asks to modify it (params: reasoning, bookId, updates JSON)",
+  );
+  tools.push(
+    "- **manageBookGroups**: List/create/rename/delete groups or move books between groups (params: reasoning, action, groupId, name, bookIds)",
+  );
 
   // Context tools (always available when reading a book)
   tools.push("");

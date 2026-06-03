@@ -37,6 +37,11 @@ const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS idx_books_group ON books(group_id)",
     ],
   },
+  {
+    version: 4,
+    description: "Add user rating and reviews to books",
+    up: ["ALTER TABLE books ADD COLUMN rating REAL", "ALTER TABLE books ADD COLUMN reviews TEXT"],
+  },
 ];
 
 /** Run pending migrations */

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS books (
   description TEXT,
   cover_url TEXT,
   publish_date TEXT,
+  rating REAL,
+  reviews TEXT, -- JSON array
   subjects TEXT, -- JSON array
   total_pages INTEGER DEFAULT 0,
   total_chapters INTEGER DEFAULT 0,

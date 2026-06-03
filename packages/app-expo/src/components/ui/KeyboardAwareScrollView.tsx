@@ -1,13 +1,13 @@
+import { useKeyboardInsets } from "@/hooks/use-keyboard-insets";
 import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   type ScrollViewProps,
   type StyleProp,
+  StyleSheet,
   type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { spacing } from "../../styles/theme";
 
 interface KeyboardAwareScrollViewProps extends ScrollViewProps {
@@ -26,10 +26,12 @@ export function KeyboardAwareScrollView({
   keyboardDismissMode = "on-drag",
   ...props
 }: KeyboardAwareScrollViewProps) {
-  const insets = useSafeAreaInsets();
+  const keyboardInsets = useKeyboardInsets();
   const flattenedContent = StyleSheet.flatten(contentContainerStyle) as ViewStyle | undefined;
   const existingPaddingBottom =
     typeof flattenedContent?.paddingBottom === "number" ? flattenedContent.paddingBottom : 0;
+  const bottomInset =
+    keyboardInsets.safeAreaBottom + (keyboardInsets.isVisible ? keyboardInsets.bottomInset : 0);
 
   return (
     <KeyboardAvoidingView
@@ -39,10 +41,10 @@ export function KeyboardAwareScrollView({
     >
       <ScrollView
         {...props}
-        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        automaticallyAdjustKeyboardInsets={false}
         contentContainerStyle={[
           contentContainerStyle,
-          { paddingBottom: existingPaddingBottom + contentBottomInset + insets.bottom },
+          { paddingBottom: existingPaddingBottom + contentBottomInset + bottomInset },
         ]}
         keyboardDismissMode={keyboardDismissMode}
         keyboardShouldPersistTaps={keyboardShouldPersistTaps}

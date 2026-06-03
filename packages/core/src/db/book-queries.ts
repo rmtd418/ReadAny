@@ -22,6 +22,8 @@ interface BookRow {
   description: string | null;
   cover_url: string | null;
   publish_date: string | null;
+  rating: number | null;
+  reviews: string | null;
   subjects: string | null;
   total_pages: number;
   total_chapters: number;
@@ -53,6 +55,8 @@ function rowToBook(row: BookRow): Book {
       description: row.description || undefined,
       coverUrl: row.cover_url || undefined,
       publishDate: row.publish_date || undefined,
+      rating: row.rating || undefined,
+      reviews: parseJSON(row.reviews, undefined),
       subjects: parseJSON(row.subjects, undefined),
       totalPages: row.total_pages || undefined,
       totalChapters: row.total_chapters || undefined,
@@ -165,8 +169,8 @@ export async function insertBook(book: Book): Promise<void> {
   const syncVersion = await nextSyncVersion(database, "books");
   const now = Date.now();
   await database.execute(
-    `INSERT INTO books (id, file_path, format, title, author, publisher, language, isbn, description, cover_url, publish_date, subjects, total_pages, total_chapters, group_id, added_at, last_opened_at, updated_at, deleted_at, progress, current_cfi, is_vectorized, vectorize_progress, tags, file_hash, sync_status, sync_version, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (id, file_path, format, title, author, publisher, language, isbn, description, cover_url, publish_date, rating, reviews, subjects, total_pages, total_chapters, group_id, added_at, last_opened_at, updated_at, deleted_at, progress, current_cfi, is_vectorized, vectorize_progress, tags, file_hash, sync_status, sync_version, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       book.id,
       book.filePath,
@@ -179,6 +183,8 @@ export async function insertBook(book: Book): Promise<void> {
       book.meta.description || null,
       book.meta.coverUrl || null,
       book.meta.publishDate || null,
+      book.meta.rating || null,
+      book.meta.reviews?.length ? JSON.stringify(book.meta.reviews) : null,
       book.meta.subjects ? JSON.stringify(book.meta.subjects) : null,
       book.meta.totalPages || 0,
       book.meta.totalChapters || 0,
@@ -204,38 +210,65 @@ export async function updateBook(id: string, updates: Partial<Book>): Promise<vo
   const database = await getDB();
   const sets: string[] = [];
   const values: unknown[] = [];
+  const meta = updates.meta;
+  const hasMetaField = (field: keyof Book["meta"]) =>
+    !!meta && Object.prototype.hasOwnProperty.call(meta, field);
 
   if (updates.filePath !== undefined) {
     sets.push("file_path = ?");
     values.push(updates.filePath);
   }
-  if (updates.meta?.title !== undefined) {
+  if (hasMetaField("title")) {
     sets.push("title = ?");
-    values.push(updates.meta.title);
+    values.push(meta?.title);
   }
-  if (updates.meta?.author !== undefined) {
+  if (hasMetaField("author")) {
     sets.push("author = ?");
-    values.push(updates.meta.author);
+    values.push(meta?.author);
   }
-  if (updates.meta?.coverUrl !== undefined) {
+  if (hasMetaField("coverUrl")) {
     sets.push("cover_url = ?");
-    values.push(updates.meta.coverUrl || null);
+    values.push(meta?.coverUrl || null);
   }
-  if (updates.meta?.publisher !== undefined) {
+  if (hasMetaField("publisher")) {
     sets.push("publisher = ?");
-    values.push(updates.meta.publisher || null);
+    values.push(meta?.publisher || null);
   }
-  if (updates.meta?.description !== undefined) {
+  if (hasMetaField("description")) {
     sets.push("description = ?");
-    values.push(updates.meta.description || null);
+    values.push(meta?.description || null);
   }
-  if (updates.meta?.language !== undefined) {
+  if (hasMetaField("language")) {
     sets.push("language = ?");
-    values.push(updates.meta.language || null);
+    values.push(meta?.language || null);
   }
-  if (updates.meta?.totalPages !== undefined) {
+  if (hasMetaField("isbn")) {
+    sets.push("isbn = ?");
+    values.push(meta?.isbn || null);
+  }
+  if (hasMetaField("publishDate")) {
+    sets.push("publish_date = ?");
+    values.push(meta?.publishDate || null);
+  }
+  if (hasMetaField("rating")) {
+    sets.push("rating = ?");
+    values.push(meta?.rating || null);
+  }
+  if (hasMetaField("reviews")) {
+    sets.push("reviews = ?");
+    values.push(meta?.reviews?.length ? JSON.stringify(meta.reviews) : null);
+  }
+  if (hasMetaField("subjects")) {
+    sets.push("subjects = ?");
+    values.push(meta?.subjects?.length ? JSON.stringify(meta.subjects) : null);
+  }
+  if (hasMetaField("totalPages")) {
     sets.push("total_pages = ?");
-    values.push(updates.meta.totalPages);
+    values.push(meta?.totalPages);
+  }
+  if (hasMetaField("totalChapters")) {
+    sets.push("total_chapters = ?");
+    values.push(meta?.totalChapters);
   }
   if (updates.format !== undefined) {
     sets.push("format = ?");

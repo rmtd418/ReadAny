@@ -1,4 +1,10 @@
-import { CheckIcon, ClockIcon, DatabaseIcon, Loader2Icon, MoreVerticalIcon } from "@/components/ui/Icon";
+import {
+  CheckIcon,
+  ClockIcon,
+  DatabaseIcon,
+  Loader2Icon,
+  MoreVerticalIcon,
+} from "@/components/ui/Icon";
 import { useColors } from "@/styles/theme";
 import { getPlatformService } from "@readany/core/services";
 /**
@@ -50,6 +56,7 @@ interface BookCardProps {
   book: Book;
   onOpen: (book: Book) => void;
   onDelete: (bookId: string, options?: { preserveData?: boolean }) => void;
+  onShowDetails?: (book: Book) => void;
   onManageTags?: (book: Book) => void;
   onVectorize?: (book: Book) => void;
   isVectorizing?: boolean;
@@ -67,6 +74,7 @@ export const BookCard = memo(function BookCard({
   book,
   onOpen,
   onDelete,
+  onShowDetails,
   onManageTags,
   onVectorize,
   isVectorizing,
@@ -115,7 +123,6 @@ export const BookCard = memo(function BookCard({
   }, [book.meta.coverUrl]);
 
   const progressPct = Math.round(book.progress * 100);
-  const hasCover = resolvedCoverUrl && !imageError;
 
   const vecPct = vectorProgress
     ? vectorProgress.totalChunks > 0
@@ -150,7 +157,9 @@ export const BookCard = memo(function BookCard({
         });
       });
 
-    return (await measureNode(menuTriggerRef.current)) ?? (await measureNode(coverRef.current, true));
+    return (
+      (await measureNode(menuTriggerRef.current)) ?? (await measureNode(coverRef.current, true))
+    );
   }, []);
 
   const openActions = useCallback(async () => {
@@ -187,34 +196,38 @@ export const BookCard = memo(function BookCard({
         <View ref={coverRef} style={s.coverWrap}>
           {/* Selection checkbox overlay */}
           {isSelectionMode && (
-            <View style={{
-              position: "absolute",
-              top: 6,
-              left: 6,
-              zIndex: 20,
-              width: 24,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: isSelected ? colors.primary : "rgba(0,0,0,0.4)",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: isSelected ? 0 : 2,
-              borderColor: "#fff",
-            }}>
+            <View
+              style={{
+                position: "absolute",
+                top: 6,
+                left: 6,
+                zIndex: 20,
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: isSelected ? colors.primary : "rgba(0,0,0,0.4)",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: isSelected ? 0 : 2,
+                borderColor: "#fff",
+              }}
+            >
               {isSelected && <CheckIcon size={16} color="#fff" />}
             </View>
           )}
           {isSelectionMode && isSelected && (
-            <View style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 10,
-              backgroundColor: "rgba(0,0,0,0.15)",
-              borderRadius: 8,
-            }} />
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 10,
+                backgroundColor: "rgba(0,0,0,0.15)",
+                borderRadius: 8,
+              }}
+            />
           )}
           {resolvedCoverUrl && !imageError ? (
             <>
@@ -402,6 +415,7 @@ export const BookCard = memo(function BookCard({
           suppressOpenUntilRef.current = Date.now() + 300;
           setShowActions(false);
         }}
+        onShowDetails={onShowDetails}
         onManageTags={onManageTags}
         onVectorize={onVectorize}
         onDelete={onDelete}

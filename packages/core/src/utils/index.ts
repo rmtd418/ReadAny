@@ -42,3 +42,15 @@ export {
 } from "./api";
 export type { ProviderConfig } from "./api";
 export { encodeConfig, decodeConfig } from "./config-transfer";
+export {
+  buildBookMetadataUpdate,
+  createEmptyBookReview,
+  createBookMetadataFormValues,
+  hasMissingBookMetadataAutoFillTargets,
+  joinEditableList,
+  mergeMissingBookMetadataValues,
+  normalizeRating,
+  normalizeReviews,
+  splitEditableList,
+} from "./book-metadata";
+export type { BookMetadataFormValues, ExtractedBookMetadata } from "./book-metadata";

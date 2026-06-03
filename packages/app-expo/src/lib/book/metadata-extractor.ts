@@ -14,6 +14,12 @@ import pako from "pako";
 export interface ExtractedMeta {
   title: string;
   author: string;
+  publisher?: string;
+  language?: string;
+  isbn?: string;
+  publishDate?: string;
+  description?: string;
+  subjects?: string[];
   coverBytes: Uint8Array | null;
   coverMimeType: string | null;
 }
@@ -53,6 +59,18 @@ export async function extractEpubMetadata(fileBytes: Uint8Array): Promise<Extrac
   const title = extractTagContent(opfXml, "dc:title") || extractTagContent(opfXml, "title") || "";
   const author =
     extractTagContent(opfXml, "dc:creator") || extractTagContent(opfXml, "creator") || "";
+  const publisher =
+    extractTagContent(opfXml, "dc:publisher") || extractTagContent(opfXml, "publisher") || "";
+  const language =
+    extractTagContent(opfXml, "dc:language") || extractTagContent(opfXml, "language") || "";
+  const publishDate = extractOpfPublishDate(opfXml);
+  const description =
+    extractTagContent(opfXml, "dc:description") || extractTagContent(opfXml, "description") || "";
+  const subjects = [
+    ...extractAllTagContent(opfXml, "dc:subject"),
+    ...extractAllTagContent(opfXml, "subject"),
+  ];
+  const isbn = extractOpfIsbn(opfXml);
 
   // 3. Extract cover image (only decompress the cover entry)
   let coverBytes: Uint8Array | null = null;
@@ -76,7 +94,18 @@ export async function extractEpubMetadata(fileBytes: Uint8Array): Promise<Extrac
     console.warn("[extractEpubMetadata] cover extraction error:", err);
   }
 
-  return { title: title.trim(), author: author.trim(), coverBytes, coverMimeType };
+  return {
+    title: title.trim(),
+    author: author.trim(),
+    publisher: publisher.trim(),
+    language: language.trim(),
+    isbn,
+    publishDate,
+    description: description.trim(),
+    subjects,
+    coverBytes,
+    coverMimeType,
+  };
 }
 
 // ─── Generic metadata from file bytes ──────────────────────────────
@@ -166,7 +195,8 @@ async function extractMobiMetadata(file: BlobLikeFile, fileName: string): Promis
       const coverBuffer = await readPdbRecord(file, header.recordOffsets, coverRecordIndex);
       if (coverBuffer) {
         coverBytes = new Uint8Array(coverBuffer);
-        coverMimeType = guessMimeTypeFromBytes(coverBytes) || guessMimeType(fileName) || "image/jpeg";
+        coverMimeType =
+          guessMimeTypeFromBytes(coverBytes) || guessMimeType(fileName) || "image/jpeg";
       }
     }
   } catch (err) {
@@ -223,19 +253,25 @@ async function parseMobiHeader(file: BlobLikeFile): Promise<ParsedMobiHeader | n
   let mobiHeader = parseMobiRecordHeader(recordBuffer);
   if (!mobiHeader) return null;
 
-  if (mobiHeader.version < 8 && mobiHeader.boundary != null && mobiHeader.boundary < recordOffsets.length) {
+  if (
+    mobiHeader.version < 8 &&
+    mobiHeader.boundary != null &&
+    mobiHeader.boundary < recordOffsets.length
+  ) {
     const comboBuffer = await readPdbRecord(file, recordOffsets, mobiHeader.boundary);
     const comboHeader = comboBuffer ? parseMobiRecordHeader(comboBuffer) : null;
-    if (comboHeader) {
+    if (comboBuffer && comboHeader) {
       recordIndex = mobiHeader.boundary;
-      recordBuffer = comboBuffer!;
+      recordBuffer = comboBuffer;
       mobiHeader = comboHeader;
     }
   }
 
   const decoder = getMobiDecoder(mobiHeader.encoding);
   const title = decoder
-    .decode(recordBuffer.slice(mobiHeader.titleOffset, mobiHeader.titleOffset + mobiHeader.titleLength))
+    .decode(
+      recordBuffer.slice(mobiHeader.titleOffset, mobiHeader.titleOffset + mobiHeader.titleLength),
+    )
     .replace(/\0/g, "")
     .trim();
 
@@ -265,7 +301,10 @@ function extractPdbRecordOffsets(
       !Number.isFinite(offset) ||
       offset < 0 ||
       offset <= previous ||
-      (typeof fileSize === "number" && Number.isFinite(fileSize) && fileSize > 0 && offset >= fileSize)
+      (typeof fileSize === "number" &&
+        Number.isFinite(fileSize) &&
+        fileSize > 0 &&
+        offset >= fileSize)
     ) {
       break;
     }
@@ -395,7 +434,10 @@ function parseExth(
     } else if (type === 201 && data.byteLength >= 4) {
       coverOffset = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(0, false);
     } else if (type === 202 && data.byteLength >= 4) {
-      thumbnailOffset = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(0, false);
+      thumbnailOffset = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(
+        0,
+        false,
+      );
     }
 
     offset += length;
@@ -422,12 +464,7 @@ function guessMimeTypeFromBytes(bytes: Uint8Array): string | null {
     if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
       return "image/jpeg";
     }
-    if (
-      bytes[0] === 0x47 &&
-      bytes[1] === 0x49 &&
-      bytes[2] === 0x46 &&
-      bytes[3] === 0x38
-    ) {
+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
       return "image/gif";
     }
     if (
@@ -453,12 +490,14 @@ export async function createRangeReadableFile(
   const LegacyFileSystem = await import("expo-file-system/legacy");
   const { toByteArray } = await import("base64-js");
   const info =
-    typeof fileSize === "number" && fileSize >= 0 ? null : await LegacyFileSystem.getInfoAsync(fileUri);
+    typeof fileSize === "number" && fileSize >= 0
+      ? null
+      : await LegacyFileSystem.getInfoAsync(fileUri);
 
   const resolvedSize =
     typeof fileSize === "number" && fileSize >= 0
       ? fileSize
-      : info && info.exists
+      : info?.exists
         ? ((info as { size?: number }).size ?? 0)
         : 0;
 
@@ -645,6 +684,45 @@ function extractTagContent(xml: string, tagName: string): string {
   return match ? match[1].trim() : "";
 }
 
+function extractAllTagContent(xml: string, tagName: string): string[] {
+  const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`<${escapedTag}[^>]*>([^<]*)</${escapedTag}>`, "gi");
+  const values: string[] = [];
+  let match = regex.exec(xml);
+  while (match !== null) {
+    const value = match[1].trim();
+    if (value) values.push(value);
+    match = regex.exec(xml);
+  }
+  return values;
+}
+
+function extractOpfIsbn(opfXml: string): string {
+  const identifierRegex = /<[^>]*identifier\b([^>]*)>([^<]*)<\/[^>]*identifier>/gi;
+  let match = identifierRegex.exec(opfXml);
+  while (match !== null) {
+    const attrs = match[1] || "";
+    const value = (match[2] || "").trim();
+    const scheme = getAttr(attrs, "opf:scheme") || getAttr(attrs, "scheme");
+    if (
+      scheme.toLowerCase() === "isbn" ||
+      /(?:97[89][-\s]?)?(?:\d[-\s]?){9,12}[\dXx]/.test(value)
+    ) {
+      return value;
+    }
+    match = identifierRegex.exec(opfXml);
+  }
+  return "";
+}
+
+function extractOpfPublishDate(opfXml: string): string {
+  const issuedMetaRegex =
+    /<meta\b(?=[^>]*(?:property|name)\s*=\s*["']dcterms:issued["'])[^>]*>([^<]*)<\/meta>/i;
+  const issued = opfXml.match(issuedMetaRegex)?.[1]?.trim();
+  if (issued) return issued;
+  return extractTagContent(opfXml, "dc:date") || extractTagContent(opfXml, "date") || "";
+}
+
 function parseAttribute(xml: string, tagName: string, attrName: string): string | null {
   const tagRegex = new RegExp(`<${tagName}\\b([^>]*)/?>`, "i");
   const tagMatch = xml.match(tagRegex);
@@ -665,9 +743,9 @@ function parseAttribute(xml: string, tagName: string, attrName: string): string 
 function findCoverHref(opfXml: string): string | null {
   const itemRegex = /<item\b([^>]*)\/?>(?:<\/item>)?/gi;
   const items: Array<{ id: string; href: string; mediaType: string; properties: string }> = [];
-  let m: RegExpExecArray | null;
+  let m = itemRegex.exec(opfXml);
 
-  while ((m = itemRegex.exec(opfXml)) !== null) {
+  while (m !== null) {
     const attrs = m[1];
     items.push({
       id: getAttr(attrs, "id"),
@@ -675,6 +753,7 @@ function findCoverHref(opfXml: string): string | null {
       mediaType: getAttr(attrs, "media-type"),
       properties: getAttr(attrs, "properties"),
     });
+    m = itemRegex.exec(opfXml);
   }
 
   // Method 1: EPUB 3 cover-image property
@@ -686,7 +765,8 @@ function findCoverHref(opfXml: string): string | null {
 
   // Method 2: EPUB 2 <meta name="cover" content="coverId">
   const metaRegex = /<meta\b([^>]*)\/?>(?:<\/meta>)?/gi;
-  while ((m = metaRegex.exec(opfXml)) !== null) {
+  m = metaRegex.exec(opfXml);
+  while (m !== null) {
     const attrs = m[1];
     if (getAttr(attrs, "name").toLowerCase() === "cover") {
       const coverId = getAttr(attrs, "content");
@@ -695,6 +775,7 @@ function findCoverHref(opfXml: string): string | null {
         if (coverItem) return coverItem.href;
       }
     }
+    m = metaRegex.exec(opfXml);
   }
 
   // Method 3: image item with "cover" in id or href
@@ -717,7 +798,7 @@ function findCoverHref(opfXml: string): string | null {
 }
 
 function getAttr(attrsStr: string, name: string): string {
-  const regex = new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i");
+  const regex = new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, "i");
   const match = attrsStr.match(regex);
   return match ? match[1] : "";
 }

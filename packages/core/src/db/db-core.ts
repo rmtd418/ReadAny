@@ -347,6 +347,8 @@ export async function initDatabase(): Promise<void> {
       description TEXT,
       cover_url TEXT,
       publish_date TEXT,
+      rating REAL,
+      reviews TEXT,
       subjects TEXT,
       total_pages INTEGER DEFAULT 0,
       total_chapters INTEGER DEFAULT 0,
@@ -627,6 +629,17 @@ export async function initDatabase(): Promise<void> {
         await database.execute(
           "ALTER TABLE books ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'local'",
         );
+      } catch {
+        // Column already exists
+      }
+
+      try {
+        await database.execute("ALTER TABLE books ADD COLUMN rating REAL");
+      } catch {
+        // Column already exists
+      }
+      try {
+        await database.execute("ALTER TABLE books ADD COLUMN reviews TEXT");
       } catch {
         // Column already exists
       }

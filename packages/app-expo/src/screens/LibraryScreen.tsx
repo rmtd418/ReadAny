@@ -517,6 +517,19 @@ export function LibraryScreen() {
     setTagSheetOpen(true);
   }, []);
 
+  const handleShowDetails = useCallback(
+    (book: Book) => {
+      if (showSearch) {
+        searchAnim.setValue(0);
+        setShowSearch(false);
+        setFilter({ search: "" });
+        Keyboard.dismiss();
+      }
+      nav.navigate("BookDetails", { bookId: book.id });
+    },
+    [nav, searchAnim, setFilter, showSearch],
+  );
+
   const handleSortChange = useCallback(
     (field: SortField) => {
       if (filter.sortField === field) {
@@ -685,6 +698,7 @@ export function LibraryScreen() {
             cardWidth={gridItemWidth}
             onOpen={handleOpen}
             onDelete={removeBook}
+            onShowDetails={handleShowDetails}
             onManageTags={handleManageTags}
             onVectorize={handleVectorize}
             isVectorizing={vectorizingBookId === item.book.id}
@@ -704,6 +718,7 @@ export function LibraryScreen() {
       gridItemWidth,
       handleGroupLongPress,
       handleManageTags,
+      handleShowDetails,
       handleOpen,
       handleVectorize,
       removeBook,

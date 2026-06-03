@@ -658,6 +658,178 @@ describe("sync-files", () => {
       expect(backend.delete).toHaveBeenCalledWith(`${orphanPath}/Old.epub`);
       expect(backend.delete).toHaveBeenCalledWith(orphanPath);
     });
+
+    it("keeps the active custom cover during local orphan cleanup", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.txt",
+          file_hash: "h1",
+          cover_url: "covers/book-1-custom-123.jpg",
+          title: "Text Book",
+        },
+      ]);
+      mockAdapter.fileExists.mockResolvedValue(true);
+      mockAdapter.getFileSize.mockResolvedValue(100);
+      mockAdapter.listFiles.mockImplementation(async (path: string) => {
+        if (path === "/appdata/covers") return ["book-1-custom-123.jpg", "gone-book.jpg"];
+        return [];
+      });
+
+      const backend = createMockBackend({
+        listDir: vi.fn().mockResolvedValue([]),
+      });
+
+      await syncFiles(backend);
+
+      expect(mockAdapter.deleteFile).not.toHaveBeenCalledWith(
+        "/appdata/covers/book-1-custom-123.jpg",
+      );
+      expect(mockAdapter.deleteFile).toHaveBeenCalledWith("/appdata/covers/gone-book.jpg");
+    });
+
+    it("uploads the active custom cover when the remote manifest has no reliable cover size", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.txt",
+          file_hash: "h1",
+          cover_url: "covers/book-1-custom-123.jpg",
+          title: "Text Book",
+        },
+      ]);
+      mockAdapter.fileExists.mockResolvedValue(true);
+      mockAdapter.getFileSize.mockResolvedValue(100);
+
+      const manifest = {
+        version: 1 as const,
+        generatedAt: 1000,
+        books: {
+          "book-1": {
+            folderName: "Text Book-book-1",
+            filePath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.txt`,
+            coverPath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+            updatedAt: 1000,
+          },
+        },
+      };
+      const backend = createMockBackend({
+        getJSON: vi.fn().mockResolvedValue(manifest),
+        listDir: vi.fn().mockResolvedValue([]),
+      });
+
+      const result = await syncFiles(backend);
+
+      expect(result.filesUploaded).toBe(1);
+      expect(backend.put).toHaveBeenCalledWith(
+        `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+        expect.any(Uint8Array),
+      );
+    });
+
+    it("downloads a newly referenced custom cover when it is missing locally", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.txt",
+          file_hash: "h1",
+          cover_url: "covers/book-1-custom-123.jpg",
+          title: "Text Book",
+        },
+      ]);
+      mockAdapter.fileExists.mockImplementation(async (path: string) => {
+        if (path === "/appdata/books/book-1.txt") return true;
+        if (path === "/appdata/covers/book-1-custom-123.jpg") return false;
+        return false;
+      });
+      mockAdapter.getFileSize.mockImplementation(async (path: string) => {
+        if (path === "/appdata/books/book-1.txt") return 500;
+        return null;
+      });
+
+      const manifest = {
+        version: 1 as const,
+        generatedAt: 1000,
+        books: {
+          "book-1": {
+            folderName: "Text Book-book-1",
+            filePath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.txt`,
+            fileSize: 500,
+            coverPath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+            coverSize: 100,
+            updatedAt: 1000,
+          },
+        },
+      };
+      const backend = createMockBackend({
+        getJSON: vi.fn().mockResolvedValue(manifest),
+        listDir: vi.fn().mockResolvedValue([]),
+      });
+
+      const result = await syncFiles(backend);
+
+      expect(result.filesDownloaded).toBe(1);
+      expect(backend.get).toHaveBeenCalledWith(
+        `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+      );
+      expect(mockAdapter.writeFileBytes).toHaveBeenCalledWith(
+        "/appdata/covers/book-1-custom-123.jpg",
+        expect.any(Uint8Array),
+      );
+    });
+
+    it("downloads a changed custom cover in receive-only mode instead of uploading the stale local copy", async () => {
+      mockSelect.mockResolvedValue([
+        {
+          id: "book-1",
+          file_path: "books/book-1.txt",
+          file_hash: "h1",
+          cover_url: "covers/book-1-custom-123.jpg",
+          title: "Text Book",
+        },
+      ]);
+      mockAdapter.fileExists.mockResolvedValue(true);
+      mockAdapter.getFileSize.mockImplementation(async (path: string) => {
+        if (path === "/appdata/books/book-1.txt") return 500;
+        if (path === "/appdata/covers/book-1-custom-123.jpg") return 80;
+        return null;
+      });
+
+      const manifest = {
+        version: 1 as const,
+        generatedAt: 1000,
+        books: {
+          "book-1": {
+            folderName: "Text Book-book-1",
+            filePath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.txt`,
+            fileSize: 500,
+            coverPath: `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+            coverSize: 120,
+            updatedAt: 1000,
+          },
+        },
+      };
+      const backend = createMockBackend({
+        getJSON: vi.fn().mockResolvedValue(manifest),
+        listDir: vi.fn().mockResolvedValue([]),
+      });
+
+      const result = await syncFiles(backend, undefined, {
+        disableUploads: true,
+        disableRemoteDeletes: true,
+        downloadRemoteBooks: true,
+      });
+
+      expect(result.filesUploaded).toBe(0);
+      expect(result.filesDownloaded).toBe(1);
+      expect(backend.put).not.toHaveBeenCalledWith(
+        `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+        expect.any(Uint8Array),
+      );
+      expect(backend.get).toHaveBeenCalledWith(
+        `${REMOTE_BOOKS_ROOT}/Text Book-book-1/Text Book.jpg`,
+      );
+    });
   });
 
   describe("downloadBookFile", () => {

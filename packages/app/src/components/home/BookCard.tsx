@@ -1,3 +1,4 @@
+import { GroupPickerPopover } from "@/components/home/GroupPickerPopover";
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
 import {
   Dialog,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { GroupPickerPopover } from "@/components/home/GroupPickerPopover";
 import { useResolvedSrc, useSyncVersion } from "@/hooks/use-resolved-src";
 import { openDesktopBook } from "@/lib/library/open-book";
 /**
@@ -27,6 +27,7 @@ import {
   FolderInput,
   FolderMinus,
   Hash,
+  Info,
   Loader2,
   MoreVertical,
   Plus,
@@ -40,6 +41,7 @@ interface BookCardProps {
   isSelectionMode?: boolean;
   isSelected?: boolean;
   onSelect?: (bookId: string) => void;
+  onShowDetails?: (book: Book) => void;
 }
 
 export const BookCard = memo(function BookCard({
@@ -47,6 +49,7 @@ export const BookCard = memo(function BookCard({
   isSelectionMode,
   isSelected,
   onSelect,
+  onShowDetails,
 }: BookCardProps) {
   const { t } = useTranslation();
   const removeBook = useLibraryStore((s) => s.removeBook);
@@ -100,7 +103,12 @@ export const BookCard = memo(function BookCard({
       onSelect?.(book.id);
       return;
     }
-    if (showMenu || showDeleteDialog || showReindexConfirm || Date.now() < suppressOpenUntilRef.current) {
+    if (
+      showMenu ||
+      showDeleteDialog ||
+      showReindexConfirm ||
+      Date.now() < suppressOpenUntilRef.current
+    ) {
       return;
     }
     await openDesktopBook({ book, t });
@@ -153,15 +161,23 @@ export const BookCard = memo(function BookCard({
     [book.isVectorized, hasVectorCapability, vectorizing, doVectorize],
   );
 
-  const handleMoveGroup = useCallback(
+  const handleMoveGroup = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    suppressOpenUntilRef.current = Date.now() + 300;
+    setShowMenu(false);
+    setMenuPos(null);
+    setShowGroupPicker(true);
+  }, []);
+
+  const handleShowDetails = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      suppressOpenUntilRef.current = Date.now() + 300;
+      suppressOpenUntilRef.current = Date.now() + 400;
       setShowMenu(false);
       setMenuPos(null);
-      setShowGroupPicker(true);
+      onShowDetails?.(book);
     },
-    [],
+    [book, onShowDetails],
   );
 
   const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -364,6 +380,16 @@ export const BookCard = memo(function BookCard({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
+            {onShowDetails && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground hover:bg-muted"
+                onClick={handleShowDetails}
+              >
+                <Info className="h-3.5 w-3.5" />
+                {t("library.detailsAction", "书籍详情")}
+              </button>
+            )}
             {/* Vectorize button */}
             <button
               id="tour-vectorize"
@@ -623,15 +649,16 @@ export const BookCard = memo(function BookCard({
         <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>{t("home.vec_reindex")}</DialogTitle>
-            <DialogDescription>
-              {t("home.vec_reindexConfirm")}
-            </DialogDescription>
+            <DialogDescription>{t("home.vec_reindexConfirm")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-muted"
-              onClick={(e) => { e.stopPropagation(); setShowReindexConfirm(false); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReindexConfirm(false);
+              }}
             >
               {t("common.cancel")}
             </button>
