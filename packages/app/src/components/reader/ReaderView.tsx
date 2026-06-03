@@ -17,6 +17,7 @@ import { ReadSettingsPanel } from "@/components/settings/ReadSettings";
 import { useReadingSession } from "@/hooks/use-reading-session";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { useResolvedSrc } from "@/hooks/use-resolved-src";
+import { hasSeenReaderTour, startReaderTour } from "@/lib/reader-tour";
 import { DocumentLoader } from "@/lib/reader/document-loader";
 import type { BookDoc, BookFormat } from "@/lib/reader/document-loader";
 import { isFixedLayoutBook } from "@/lib/reader/document-loader";
@@ -32,14 +33,15 @@ import { useTTSStore } from "@/stores/tts-store";
 import { useChapterTranslation } from "@readany/core/hooks";
 import { getPlatformService } from "@readany/core/services";
 import { getCSSFontFace, useFontStore, useReadingSessionStore } from "@readany/core/stores";
+import { useRubyStore } from "@readany/core/stores/ruby-store";
 import { splitNarrationText } from "@readany/core/tts";
 import type { CitationPart, HighlightColor } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 import { throttle } from "@readany/core/utils/throttle";
-import { hasSeenReaderTour, startReaderTour } from "@/lib/reader-tour";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { BookmarkRibbon } from "./BookmarkRibbon";
 import type { BookSelection, FoliateViewerHandle, RelocateDetail, TOCItem } from "./FoliateViewer";
 import { FoliateViewer } from "./FoliateViewer";
@@ -52,8 +54,6 @@ import { SelectionPopover } from "./SelectionPopover";
 import { TOCPanel } from "./TOCPanel";
 import { TTSPage } from "./TTSPage";
 import { TranslationPopover } from "./TranslationPopover";
-import { toast } from "sonner";
-import { useRubyStore } from "@readany/core/stores/ruby-store";
 
 const REFLOWABLE_CHARACTERS_PER_LOCATION = 1500;
 const MAX_TRACKED_LOCATION_DELTA = 20;
@@ -192,6 +192,7 @@ function useAutoHideControls(
   delay = 2000,
   keepVisible = false,
   isDoublePage = false,
+  isScrollMode = false,
 ) {
   const [isVisible, setIsVisible] = useState(true);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -240,8 +241,7 @@ function useAutoHideControls(
         const leftNavEnd = isDoublePage ? 0.33 : 0.4;
         const rightNavStart = isDoublePage ? 0.67 : 0.6;
 
-        if (fraction > leftNavEnd && fraction < rightNavStart) {
-          // Middle zone: toggle toolbar
+        const toggleControls = () => {
           setIsVisible((prev) => {
             if (prev) {
               clearTimer();
@@ -250,6 +250,16 @@ function useAutoHideControls(
             showAndScheduleHide();
             return true;
           });
+        };
+
+        if (isScrollMode) {
+          toggleControls();
+          return;
+        }
+
+        if (fraction > leftNavEnd && fraction < rightNavStart) {
+          // Middle zone: toggle toolbar
+          toggleControls();
           return;
         }
 
@@ -266,7 +276,16 @@ function useAutoHideControls(
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [bookKey, clearTimer, containerRef, onNext, onPrev, showAndScheduleHide, isDoublePage]);
+  }, [
+    bookKey,
+    clearTimer,
+    containerRef,
+    onNext,
+    onPrev,
+    showAndScheduleHide,
+    isDoublePage,
+    isScrollMode,
+  ]);
 
   // Mouse enter/leave handlers for toolbar area
   const handleMouseEnter = useCallback(() => {
@@ -804,6 +823,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     2000,
     keepControlsVisible,
     (viewSettings.paginatedLayout ?? "double") === "double",
+    viewSettings.viewMode === "scroll",
   );
   const isDoublePage = (viewSettings.paginatedLayout ?? "double") === "double";
   const toolbarVisible = controlsVisible || isToolbarPinned;
@@ -860,12 +880,6 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       });
     }, 5000),
   ).current;
-
-  useEffect(() => {
-    if (viewSettings.viewMode === "scroll") {
-      updateReadSettings({ viewMode: "paginated" });
-    }
-  }, [viewSettings.viewMode, updateReadSettings]);
 
   // --- Load book on mount ---
   useEffect(() => {
@@ -2670,9 +2684,21 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
           {/* Reading area — FoliateViewer */}
           <div className="relative flex-1 overflow-hidden" ref={containerRef}>
             {/* Click zone indicators — visible only during reader tour (driver.js highlights them) */}
-            <div id="reader-zone-prev" className="pointer-events-none absolute left-0 top-0 bottom-0 z-[100]" style={{ width: isDoublePage ? "33%" : "40%" }} />
-            <div id="reader-zone-toolbar" className="pointer-events-none absolute top-0 bottom-0 z-[100]" style={{ left: isDoublePage ? "33%" : "40%", width: isDoublePage ? "34%" : "20%" }} />
-            <div id="reader-zone-next" className="pointer-events-none absolute right-0 top-0 bottom-0 z-[100]" style={{ width: isDoublePage ? "33%" : "40%" }} />
+            <div
+              id="reader-zone-prev"
+              className="pointer-events-none absolute left-0 top-0 bottom-0 z-[100]"
+              style={{ width: isDoublePage ? "33%" : "40%" }}
+            />
+            <div
+              id="reader-zone-toolbar"
+              className="pointer-events-none absolute top-0 bottom-0 z-[100]"
+              style={{ left: isDoublePage ? "33%" : "40%", width: isDoublePage ? "34%" : "20%" }}
+            />
+            <div
+              id="reader-zone-next"
+              className="pointer-events-none absolute right-0 top-0 bottom-0 z-[100]"
+              style={{ width: isDoublePage ? "33%" : "40%" }}
+            />
             {bookDoc ? (
               <FoliateViewer
                 ref={foliateRef}

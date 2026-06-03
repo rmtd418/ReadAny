@@ -816,10 +816,10 @@
           await openBook(msg);
           break;
         case 'goNext':
-          if (view) await view.next();
+          if (view) await goNextByMode();
           break;
         case 'goPrev':
-          if (view) await view.prev();
+          if (view) await goPrevByMode();
           break;
         case 'goToFraction':
           if (view && msg.fraction != null) await view.goToFraction(msg.fraction);
@@ -1206,8 +1206,7 @@
           renderer.setAttribute('max-column-count', '1');
           renderer.setAttribute('max-block-size', '100%');
           renderer.setAttribute('max-inline-size', '100%');
-          // Disable page turn animation for instant response
-          // renderer.setAttribute('animated', '');
+          renderer.setAttribute('animated', '');
           // Default gap/margin
           const margin = msg.pageMargin || 16;
           const gapPercent = Math.max(1, Math.round((margin / 393) * 100));
@@ -1409,6 +1408,31 @@
           renderer.removeAttribute('flow');
           renderer.setAttribute('max-inline-size', '100%');
         }
+      }
+    }
+
+    function getScrollNavigationDistance() {
+      if (!view || !view.renderer) return Math.max(1, window.innerHeight - 96);
+      const size = Number(view.renderer.size || 0);
+      const fallbackSize = window.innerHeight || document.documentElement.clientHeight || 720;
+      return Math.max(1, (Number.isFinite(size) && size > 0 ? size : fallbackSize) - 96);
+    }
+
+    async function goNextByMode(distance) {
+      if (!view) return;
+      if (view.renderer && view.renderer.scrolled) {
+        await view.next(Math.max(1, Number(distance || getScrollNavigationDistance())));
+      } else {
+        await view.next();
+      }
+    }
+
+    async function goPrevByMode(distance) {
+      if (!view) return;
+      if (view.renderer && view.renderer.scrolled) {
+        await view.prev(Math.max(1, Number(distance || getScrollNavigationDistance())));
+      } else {
+        await view.prev();
       }
     }
 
@@ -2155,23 +2179,42 @@ a { color: ${primary} !important; }
         const renderer = view.renderer;
         if (!renderer.scrolled) return;
 
-        if (e.changedTouches.length === 1) {
-          const touchEndY = e.changedTouches[0].clientY;
-          const touchEndX = e.changedTouches[0].clientX;
-          const deltaY = touchEndY - touchStartY;
-          const deltaX = touchEndX - touchStartX;
+        if (e.changedTouches.length !== 1) return;
 
-          if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 30) {
-            postToRN('continuous-scroll', {
-              deltaY,
-              start: renderer.start,
-              end: renderer.end,
-              viewSize: renderer.viewSize,
-              size: renderer.size,
-              currentSectionIndex,
-              totalSections,
-            });
-          }
+        const touchEndY = e.changedTouches[0].clientY;
+        const touchEndX = e.changedTouches[0].clientX;
+        const deltaY = touchEndY - touchStartY;
+        const deltaX = touchEndX - touchStartX;
+
+        if (Math.abs(deltaY) <= Math.abs(deltaX) || Math.abs(deltaY) <= 30) return;
+
+        const postContinuousScroll = () => {
+          const latestRenderer = view && view.renderer;
+          if (!latestRenderer || !latestRenderer.scrolled) return;
+          postToRN('continuous-scroll', {
+            deltaY,
+            start: latestRenderer.start,
+            end: latestRenderer.end,
+            viewSize: latestRenderer.viewSize,
+            size: latestRenderer.size,
+            currentSectionIndex,
+            totalSections,
+          });
+        };
+
+        if (renderer.size >= renderer.viewSize) {
+          postContinuousScroll();
+        } else {
+          let posted = false;
+          let fallbackTimer = null;
+          const postOnce = () => {
+            if (posted) return;
+            posted = true;
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+            postContinuousScroll();
+          };
+          renderer.addEventListener('relocate', postOnce, { once: true });
+          fallbackTimer = setTimeout(postOnce, 320);
         }
       }, { passive: true });
     }
@@ -3215,8 +3258,8 @@ a { color: ${primary} !important; }
     }
 
     // ─── Expose global functions for injectJavaScript ───
-    window.goNext = function () { if (view) view.next(); };
-    window.goPrev = function () { if (view) view.prev(); };
+    window.goNext = function (distance) { goNextByMode(distance); };
+    window.goPrev = function (distance) { goPrevByMode(distance); };
     window.goLeft = function () { if (view) view.goLeft(); };
     window.goRight = function () { if (view) view.goRight(); };
     window.goToHref = function (href) { if (view) view.goTo(href); };

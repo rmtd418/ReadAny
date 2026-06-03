@@ -12,8 +12,8 @@ import type {
   ChapterParagraph,
   ChapterTranslationResult,
 } from "@readany/core/translation/chapter-translator";
-import type { ViewSettings } from "@readany/core/types";
 import { cleanText, isTTSFootnoteMarker, shouldSkipTTSNode } from "@readany/core/tts";
+import type { ViewSettings } from "@readany/core/types";
 import { Overlayer } from "foliate-js/overlayer.js";
 import { marked } from "marked";
 /**
@@ -470,6 +470,36 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       }
     }, []);
 
+    const getScrollNavigationDistance = useCallback(() => {
+      const renderer = viewRef.current?.renderer;
+      const size = Number(renderer?.size ?? 0);
+      const fallbackSize =
+        containerRef.current?.clientHeight && containerRef.current.clientHeight > 0
+          ? containerRef.current.clientHeight
+          : window.innerHeight;
+      return Math.max(1, (Number.isFinite(size) && size > 0 ? size : fallbackSize) - 96);
+    }, []);
+
+    const goNextByMode = useCallback(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      if (view.renderer?.scrolled) {
+        void view.next(getScrollNavigationDistance());
+        return;
+      }
+      void view.goRight();
+    }, [getScrollNavigationDistance]);
+
+    const goPrevByMode = useCallback(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      if (view.renderer?.scrolled) {
+        void view.prev(getScrollNavigationDistance());
+        return;
+      }
+      void view.goLeft();
+    }, [getScrollNavigationDistance]);
+
     const ensureDesktopTTS = useCallback(async () => {
       const view = viewRef.current;
       const current = view?.renderer?.getContents?.()?.[0];
@@ -897,10 +927,10 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       ref,
       () => ({
         goNext: () => {
-          viewRef.current?.goRight();
+          goNextByMode();
         },
         goPrev: () => {
-          viewRef.current?.goLeft();
+          goPrevByMode();
         },
         goToHref: (href: string) => {
           viewRef.current?.goTo(href);
@@ -1477,7 +1507,13 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     const range = doc.createRange();
                     range.selectNodeContents(textNode);
                     const rect = range.getBoundingClientRect();
-                    if (rect.right > 0 && rect.left < vw && rect.bottom > 0 && rect.top < vh && rect.width > 0) {
+                    if (
+                      rect.right > 0 &&
+                      rect.left < vw &&
+                      rect.bottom > 0 &&
+                      rect.top < vh &&
+                      rect.width > 0
+                    ) {
                       const text = normalizeTTSSegmentText(textNode.nodeValue);
                       if (text) visibleTexts.push(text);
                     }
@@ -2266,31 +2302,6 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       applyReflowLayoutSettings(view, viewSettings);
     }, [viewSettings.viewMode, viewSettings.paginatedLayout, isFixedLayout, appTheme]);
 
-    useEffect(() => {
-      const handleMessage = (event: MessageEvent) => {
-        const data = event.data;
-        if (data?.type !== "iframe-wheel" || data.bookKey !== bookKey) return;
-
-        const view = viewRef.current;
-        const renderer = view?.renderer;
-        if (!renderer?.scrolled || typeof renderer.scrollBy !== "function") return;
-
-        const lineHeight = 16;
-        const pageHeight =
-          typeof renderer.clientHeight === "number" && renderer.clientHeight > 0
-            ? renderer.clientHeight
-            : window.innerHeight;
-
-        const multiplier =
-          data.deltaMode === 1 ? lineHeight : data.deltaMode === 2 ? pageHeight : 1;
-
-        renderer.scrollBy((data.deltaX ?? 0) * multiplier, (data.deltaY ?? 0) * multiplier);
-      };
-
-      window.addEventListener("message", handleMessage);
-      return () => window.removeEventListener("message", handleMessage);
-    }, [bookKey]);
-
     const handleViewerShellClick = useCallback(
       (event: {
         target: EventTarget | null;
@@ -2428,8 +2439,9 @@ function applyRendererSettings(
     applyReflowLayoutSettings(view, settings);
   }
 
-  // Disable page turn animation for instant response
-  // renderer.setAttribute("animated", "");
+  if (!isFixedLayout) {
+    renderer.setAttribute("animated", "");
+  }
 
   // Apply CSS styles (skip font overrides for fixed layout)
   applyRendererStyles(view, settings, isFixedLayout, theme);
