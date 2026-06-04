@@ -20,10 +20,22 @@ const WHEEL_MIN_COOLDOWN_MS = 350;
 const WHEEL_IDLE_MS = 200;
 
 const WHEEL_LINE_HEIGHT = 16;
-const CONTINUOUS_SCROLL_DELAY_MS = 100;
-const CONTINUOUS_SCROLL_DEBOUNCE_MS = 160;
-const CONTINUOUS_SCROLL_PRELOAD_RATIO = 0.35;
-const CONTINUOUS_SCROLL_MIN_PRELOAD_PX = 96;
+
+/** How close (px) to a chapter edge counts as "at the edge". */
+const SCROLLED_EDGE_TOLERANCE_PX = 4;
+
+/**
+ * Once pinned against a chapter edge, how much further the user must keep
+ * pushing (cumulative px in the same direction) before we actually turn.
+ * This prevents a tiny nudge while reading the last lines from misfiring.
+ */
+const SCROLLED_OVERSCROLL_TURN_PX = 120;
+
+/** Forget accumulated overscroll after this idle gap (ms). */
+const SCROLLED_OVERSCROLL_RESET_MS = 250;
+
+/** Lock window (ms) after a scrolled chapter turn settles, to avoid double-firing. */
+const SCROLLED_TURN_UNLOCK_MS = 80;
 
 const wheelDeltaToPixels = (delta: number, deltaMode = 0) => {
   if (deltaMode === 1) return delta * WHEEL_LINE_HEIGHT;
@@ -38,61 +50,83 @@ export function usePagination({ bookKey, viewRef, containerRef }: UsePaginationO
   const wheelLocked = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockTime = useRef(0);
-  const continuousScrollTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-  const continuousScrollDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrolledTurnLock = useRef(false);
+  const scrolledTurnUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Signed cumulative overscroll while pinned at an edge: + toward bottom, - toward top.
+  const overscrollAccum = useRef(0);
+  const overscrollResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const queueContinuousScroll = useCallback((callback: () => void) => {
-    const timer = setTimeout(() => {
-      continuousScrollTimers.current.delete(timer);
-      callback();
-    }, CONTINUOUS_SCROLL_DELAY_MS);
-    continuousScrollTimers.current.add(timer);
-  }, []);
-
+  /**
+   * In scrolled mode the browser handles all in-chapter scrolling natively.
+   * We only intervene at the chapter boundary: once the viewport is pinned at
+   * the top/bottom of the current chapter, the user must keep deliberately
+   * pushing in that direction (cumulative overscroll) before we turn to the
+   * adjacent chapter. This keeps boundary turns intentional (no misfire from a
+   * small nudge) while still feeling immediate for a real continued scroll.
+   */
   const handleContinuousScroll = useCallback(
     (scrollDelta: number, threshold = 0) => {
       const view = viewRef.current;
       const renderer = view?.renderer;
       if (!view || !renderer?.scrolled) return false;
+      if (scrolledTurnLock.current) return false;
 
       const start = Number(renderer.start ?? 0);
       const end = Number(renderer.end ?? 0);
       const viewSize = Number(renderer.viewSize ?? 0);
-      const size = Number(renderer.size ?? end - start);
-      if (
-        !Number.isFinite(start) ||
-        !Number.isFinite(end) ||
-        !Number.isFinite(viewSize) ||
-        !Number.isFinite(size)
-      ) {
+      if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(viewSize)) {
         return false;
       }
 
-      const triggerDistance = Math.max(
-        CONTINUOUS_SCROLL_MIN_PRELOAD_PX,
-        size * CONTINUOUS_SCROLL_PRELOAD_RATIO,
-      );
-      const remainingToEnd = Math.max(0, viewSize - end);
+      const atTop = start <= SCROLLED_EDGE_TOLERANCE_PX;
+      const atBottom = viewSize - end <= SCROLLED_EDGE_TOLERANCE_PX;
 
-      if (scrollDelta > threshold && start <= triggerDistance) {
-        const distance = Math.max(1, Math.ceil(start) + 1);
-        queueContinuousScroll(() => {
-          void viewRef.current?.prev(distance);
+      // scrollDelta > 0: pushing toward top; < 0: pushing toward bottom.
+      const pushingBottom = scrollDelta < -threshold && atBottom;
+      const pushingTop = scrollDelta > threshold && atTop;
+
+      // Not pinned against an edge in a meaningful direction → reset and bail.
+      if (!pushingBottom && !pushingTop) {
+        overscrollAccum.current = 0;
+        return false;
+      }
+
+      // Accumulate cumulative push in the current direction (reset if it flips).
+      const dir = pushingBottom ? 1 : -1;
+      if (Math.sign(overscrollAccum.current) !== dir) overscrollAccum.current = 0;
+      overscrollAccum.current += dir * Math.abs(scrollDelta);
+
+      // Forget the accumulation if the user pauses at the edge (e.g. reading the last lines).
+      if (overscrollResetTimer.current) clearTimeout(overscrollResetTimer.current);
+      overscrollResetTimer.current = setTimeout(() => {
+        overscrollAccum.current = 0;
+      }, SCROLLED_OVERSCROLL_RESET_MS);
+
+      // Require a deliberate push past the edge before turning.
+      if (Math.abs(overscrollAccum.current) < SCROLLED_OVERSCROLL_TURN_PX) return false;
+
+      overscrollAccum.current = 0;
+      const turn = (run: () => Promise<unknown> | undefined) => {
+        scrolledTurnLock.current = true;
+        Promise.resolve(run()).finally(() => {
+          if (scrolledTurnUnlockTimer.current) clearTimeout(scrolledTurnUnlockTimer.current);
+          scrolledTurnUnlockTimer.current = setTimeout(() => {
+            scrolledTurnLock.current = false;
+          }, SCROLLED_TURN_UNLOCK_MS);
         });
+      };
+
+      if (pushingBottom) {
+        const distance = Math.max(1, Math.ceil(viewSize - end) + 1);
+        turn(() => viewRef.current?.next(distance));
         return true;
       }
 
-      if (scrollDelta < -threshold && remainingToEnd <= triggerDistance) {
-        const distance = Math.max(1, Math.ceil(remainingToEnd) + 1);
-        queueContinuousScroll(() => {
-          void viewRef.current?.next(distance);
-        });
-        return true;
-      }
-
-      return false;
+      const distance = Math.max(1, Math.ceil(start) + 1);
+      turn(() => viewRef.current?.prev(distance));
+      return true;
     },
-    [queueContinuousScroll, viewRef],
+    [viewRef],
   );
 
   const handleScrolledWheel = useCallback(
@@ -110,14 +144,8 @@ export function usePagination({ bookKey, viewRef, containerRef }: UsePaginationO
           ? -(Math.abs(pixelDeltaX) > 0 ? pixelDeltaX : pixelDeltaY)
           : -pixelDeltaY;
 
-      if (continuousScrollDebounceTimer.current) {
-        clearTimeout(continuousScrollDebounceTimer.current);
-      }
-      continuousScrollDebounceTimer.current = setTimeout(() => {
-        continuousScrollDebounceTimer.current = null;
-        handleContinuousScroll(scrollDelta, 0);
-      }, CONTINUOUS_SCROLL_DEBOUNCE_MS);
-
+      // Fire immediately so a boundary turn happens the moment we hit the edge.
+      handleContinuousScroll(scrollDelta, 0);
       return true;
     },
     [handleContinuousScroll, viewRef],
@@ -174,12 +202,14 @@ export function usePagination({ bookKey, viewRef, containerRef }: UsePaginationO
   useEffect(() => {
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
-      if (continuousScrollDebounceTimer.current) {
-        clearTimeout(continuousScrollDebounceTimer.current);
-        continuousScrollDebounceTimer.current = null;
+      if (scrolledTurnUnlockTimer.current) {
+        clearTimeout(scrolledTurnUnlockTimer.current);
+        scrolledTurnUnlockTimer.current = null;
       }
-      for (const timer of continuousScrollTimers.current) clearTimeout(timer);
-      continuousScrollTimers.current.clear();
+      if (overscrollResetTimer.current) {
+        clearTimeout(overscrollResetTimer.current);
+        overscrollResetTimer.current = null;
+      }
     };
   }, []);
 

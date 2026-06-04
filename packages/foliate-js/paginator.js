@@ -14,12 +14,6 @@ const debounce = (f, wait, immediate) => {
   };
 };
 
-const CONTINUOUS_SCROLL_EDGE_RATIO = 0.35;
-const CONTINUOUS_SCROLL_EDGE_MIN = 96;
-const CONTINUOUS_SCROLL_EDGE_DELAY = 80;
-const CONTINUOUS_SCROLL_EDGE_COOLDOWN = 500;
-const CONTINUOUS_SCROLL_DELTA_EPSILON = 0.5;
-
 const animateScroll = (element, scrollProp, startValue, endValue, duration) =>
   new Promise((resolve) => {
     if (document.hidden) {
@@ -495,9 +489,6 @@ export class Paginator extends HTMLElement {
   #touchScrolled;
   #lastVisibleRange;
   #isAnimating = false;
-  #lastScrollStart = 0;
-  #scrollEdgeTimer = null;
-  #scrollEdgeSuppressUntil = 0;
   constructor() {
     super();
     this.#root.innerHTML = `<style>
@@ -596,7 +587,10 @@ export class Paginator extends HTMLElement {
     // header/footer elements removed
 
     this.#observer.observe(this.#container);
-    this.#container.addEventListener("scroll", this.#onContainerScroll.bind(this));
+    this.#container.addEventListener("scroll", () => {
+      // Don't dispatch scroll events during animation to prevent jank
+      if (!this.#isAnimating) this.dispatchEvent(new Event("scroll"));
+    });
     this.#container.addEventListener(
       "scroll",
       debounce(() => {
@@ -674,7 +668,6 @@ export class Paginator extends HTMLElement {
       clearTimeout(this.#renderTimeout);
       this.#renderTimeout = null;
     }
-    this.#clearContinuousScrollEdgeTimer();
   }
   attributeChangedCallback(name, _, value) {
     switch (name) {
@@ -839,73 +832,6 @@ export class Paginator extends HTMLElement {
   get pages() {
     return Math.round(this.viewSize / this.size);
   }
-  #clearContinuousScrollEdgeTimer() {
-    if (!this.#scrollEdgeTimer) return;
-    clearTimeout(this.#scrollEdgeTimer);
-    this.#scrollEdgeTimer = null;
-  }
-  #suppressContinuousScrollEdge(ms = CONTINUOUS_SCROLL_EDGE_COOLDOWN) {
-    this.#scrollEdgeSuppressUntil = Math.max(this.#scrollEdgeSuppressUntil, Date.now() + ms);
-    this.#clearContinuousScrollEdgeTimer();
-  }
-  #onContainerScroll() {
-    if (this.#isAnimating) return;
-
-    this.dispatchEvent(new Event("scroll"));
-    if (!this.scrolled) return;
-
-    const start = this.start;
-    const delta = start - this.#lastScrollStart;
-    this.#lastScrollStart = start;
-
-    if (
-      Math.abs(delta) < CONTINUOUS_SCROLL_DELTA_EPSILON ||
-      this.#locked ||
-      this.#navigationLocked ||
-      Date.now() < this.#scrollEdgeSuppressUntil
-    ) {
-      return;
-    }
-
-    this.#scheduleContinuousScrollEdge(delta > 0 ? 1 : -1);
-  }
-  #scheduleContinuousScrollEdge(dir) {
-    this.#clearContinuousScrollEdgeTimer();
-    this.#scrollEdgeTimer = setTimeout(() => {
-      this.#scrollEdgeTimer = null;
-      this.#maybeTurnContinuousScrollEdge(dir);
-    }, CONTINUOUS_SCROLL_EDGE_DELAY);
-  }
-  #maybeTurnContinuousScrollEdge(dir) {
-    if (
-      !this.scrolled ||
-      this.#locked ||
-      this.#isAnimating ||
-      this.#navigationLocked ||
-      Date.now() < this.#scrollEdgeSuppressUntil
-    ) {
-      return;
-    }
-
-    const { size, viewSize } = this;
-    if (!Number.isFinite(size) || !Number.isFinite(viewSize) || size <= 0 || viewSize <= size) return;
-
-    const triggerDistance = Math.max(CONTINUOUS_SCROLL_EDGE_MIN, size * CONTINUOUS_SCROLL_EDGE_RATIO);
-    if (dir < 0) {
-      const distanceToStart = this.start;
-      if (distanceToStart <= triggerDistance && this.#adjacentIndex(-1) != null) {
-        this.#suppressContinuousScrollEdge();
-        void this.prev(Math.max(1, Math.ceil(distanceToStart) + 1));
-      }
-      return;
-    }
-
-    const distanceToEnd = Math.max(0, viewSize - this.end);
-    if (distanceToEnd <= triggerDistance && this.#adjacentIndex(1) != null) {
-      this.#suppressContinuousScrollEdge();
-      void this.next(Math.max(1, Math.ceil(distanceToEnd) + 1));
-    }
-  }
   scrollBy(dx, dy) {
     const delta = this.#vertical ? dy : dx;
     const element = this.#container;
@@ -1053,7 +979,6 @@ export class Paginator extends HTMLElement {
     const { scrollProp, size } = this;
     if (element[scrollProp] === offset) {
       this.#scrollBounds = [offset, this.atStart ? 0 : size, this.atEnd ? 0 : size];
-      this.#lastScrollStart = this.start;
       this.#afterScroll(reason);
       return;
     }
@@ -1065,13 +990,11 @@ export class Paginator extends HTMLElement {
       return animateScroll(element, scrollProp, startPosition, offset, 300).then(() => {
         this.#isAnimating = false;
         this.#scrollBounds = [offset, this.atStart ? 0 : size, this.atEnd ? 0 : size];
-        this.#lastScrollStart = this.start;
         this.#afterScroll(reason);
       });
     } else {
       element[scrollProp] = offset;
       this.#scrollBounds = [offset, this.atStart ? 0 : size, this.atEnd ? 0 : size];
-      this.#lastScrollStart = this.start;
       this.#afterScroll(reason);
     }
   }
@@ -1083,7 +1006,6 @@ export class Paginator extends HTMLElement {
     return this.#scrollToAnchor(anchor, select ? "selection" : "navigation");
   }
   async #scrollToAnchor(anchor, reason = "anchor") {
-    this.#suppressContinuousScrollEdge();
     this.#anchor = anchor;
     const rects = uncollapse(anchor)?.getClientRects?.();
     // if anchor is an element or a range

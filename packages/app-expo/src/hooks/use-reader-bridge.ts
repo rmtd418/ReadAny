@@ -689,40 +689,36 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         return;
       }
 
-      const { deltaY, start, end, viewSize, size, totalSections } = msg;
+      const { deltaY, start, end, viewSize, totalSections } = msg;
       const currentIndex =
         typeof msg.currentSectionIndex === "number"
           ? msg.currentSectionIndex
           : msg.currentSectionIndex.current;
       const threshold = 30;
+      // deltaY > 0 → finger moving down (reading backward, toward chapter top)
+      // deltaY < 0 → finger moving up (reading forward, toward chapter bottom)
+      // Predictive geometry: turn when this gesture would carry past the edge.
       const scrollDelta = deltaY;
-      const triggerDistance = Math.max(96, size * 0.35);
-      const remainingToEnd = Math.max(0, viewSize - end);
 
-      const atStart = scrollDelta > threshold && start <= triggerDistance;
-      const atEnd = scrollDelta < -threshold && remainingToEnd <= triggerDistance;
+      const atStart = scrollDelta > threshold && start <= scrollDelta;
+      const atEnd = scrollDelta < -threshold && Math.ceil(end) - scrollDelta >= viewSize;
 
       console.log("[ReaderBridge] continuous-scroll:", {
         deltaY,
         start,
         end,
         viewSize,
-        size,
         currentIndex,
         totalSections,
         atStart,
         atEnd,
-        triggerDistance,
-        remainingToEnd,
-        thresholdCheck: scrollDelta < -threshold,
-        indexCheck: currentIndex < totalSections - 1,
       });
 
       // Finger moves up (deltaY < 0) at end of chapter → go to next
       if (atEnd && currentIndex < totalSections - 1) {
         console.log("[ReaderBridge] Going to next chapter");
         scrollTransitioningRef.current = true;
-        goNext(Math.max(1, Math.ceil(remainingToEnd) + 1));
+        goNext(Math.max(1, viewSize - Math.floor(end) + 1));
         setTimeout(() => {
           scrollTransitioningRef.current = false;
         }, 500);
