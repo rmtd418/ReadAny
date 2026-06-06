@@ -88,6 +88,8 @@ export interface ITTSPlayer {
   pause(): void;
   resume(): void;
   stop(): void;
+  /** Whether playback is currently paused (true suspend). Optional — platforms without true pause may omit it. */
+  readonly paused?: boolean;
 
   onStateChange?: (state: "playing" | "paused" | "stopped") => void;
   onChunkChange?: (index: number, total: number) => void;

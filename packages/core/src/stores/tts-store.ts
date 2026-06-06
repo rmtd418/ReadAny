@@ -64,6 +64,9 @@ let _sessionCurrentIndex = 0;
 /** Generation counter — incremented on every play/jumpToChunk to invalidate stale callbacks */
 let _sessionGeneration = 0;
 let _sleepTimerHandle: ReturnType<typeof setTimeout> | null = null;
+/** Voice the active DashScope run is synthesizing with; lets resume() decide whether
+ *  it can true-resume (voice unchanged) or must re-speak (voice changed). */
+let _dashscopeActiveVoice: string | undefined;
 
 function getSystemTTS(): ITTSPlayer {
   if (!_systemTTS) _systemTTS = _factories.createSystemTTS();
@@ -148,6 +151,7 @@ export const useTTSStore = create<TTSState>()(
 
     play: (text: string | string[]) => {
       const config = normalizeTTSConfig(get().config);
+      _dashscopeActiveVoice = config.dashscopeVoice;
       const segments = Array.isArray(text) ? text.map((item) => item.trim()).filter(Boolean) : [text.trim()].filter(Boolean);
       const sessionSegments = segments.length > 0 ? segments : [Array.isArray(text) ? text.join(" ").trim() : text.trim()].filter(Boolean);
       _sessionSegments = sessionSegments;
@@ -218,6 +222,23 @@ export const useTTSStore = create<TTSState>()(
       const config = normalizeTTSConfig(get().config);
       const { playState } = get();
       if (playState !== "paused") return;
+
+      // DashScope supports true suspend/resume and derives progress from the audio
+      // clock (#358), so if it is actually suspended, continue exactly where paused —
+      // no re-synthesis, no API re-call, no jump. Do NOT bump generation or rebind
+      // callbacks; the original speak()'s callbacks keep driving progress.
+      // Edge is intentionally NOT true-resumed here: its highlight notifications are
+      // wall-clock timers cleared on pause and not rescheduled on resume, so a true
+      // resume would skip highlights — it stays on the re-speak path below (its main behavior).
+      if (config.engine === "dashscope" && config.dashscopeApiKey) {
+        const player = getDashScopeTTS();
+        if (player.paused && config.dashscopeVoice === _dashscopeActiveVoice) {
+          player.resume();
+          set({ playState: "playing" });
+          return;
+        }
+      }
+
       if (_sessionSegments.length > 0) {
         const nextIndex = Math.max(0, Math.min(_sessionCurrentIndex, _sessionSegments.length - 1));
         const remainingSegments = _sessionSegments.slice(nextIndex);
@@ -242,6 +263,7 @@ export const useTTSStore = create<TTSState>()(
 
           if (config.engine === "dashscope" && config.dashscopeApiKey) {
             const player = getDashScopeTTS();
+            _dashscopeActiveVoice = config.dashscopeVoice;
             player.onStateChange = onState;
             player.onChunkChange = onChunk;
             player.onEnd = handleEnd;
@@ -282,6 +304,7 @@ export const useTTSStore = create<TTSState>()(
       dashscope.stop();
       _sessionSegments = [];
       _sessionCurrentIndex = 0;
+      _dashscopeActiveVoice = undefined;
       set({
         playState: "stopped",
         currentText: "",
@@ -329,6 +352,7 @@ export const useTTSStore = create<TTSState>()(
     jumpToChunk: (index: number) => {
       if (index < 0 || index >= _sessionSegments.length) return;
       const config = normalizeTTSConfig(get().config);
+      _dashscopeActiveVoice = config.dashscopeVoice;
       getSystemTTS().stop();
       getEdgeTTS().stop();
       getDashScopeTTS().stop();
