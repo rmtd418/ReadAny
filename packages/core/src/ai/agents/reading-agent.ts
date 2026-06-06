@@ -300,7 +300,23 @@ export async function* streamReadingAgent(
 
     const iterator = eventStream[Symbol.asyncIterator]();
     let eventResult = await raceNext(iterator);
-    const thinkTagParser = new ThinkTagStreamParser();
+    let turnTextBuffer = "";
+
+    function* flushBufferedTurnText(hasToolCalls: boolean): Generator<AgentStreamEvent> {
+      if (!turnTextBuffer) return;
+      const parser = new ThinkTagStreamParser();
+      const events = [...parser.push(turnTextBuffer), ...parser.flush()];
+      turnTextBuffer = "";
+      for (const event of events) {
+        if (event.type === "reasoning") {
+          yield { type: "reasoning", content: event.content, stepType: "thinking" };
+        } else if (hasToolCalls) {
+          yield { type: "reasoning", content: event.content, stepType: "thinking" };
+        } else {
+          yield { type: "token", content: event.content };
+        }
+      }
+    }
 
     while (!eventResult.done) {
       const event = eventResult.value as any;
@@ -313,28 +329,16 @@ export async function* streamReadingAgent(
         if (chunk) {
           const content = chunk.content;
 
-          // Always extract text content, even when the chunk also contains tool_call_chunks.
-          // OpenAI models often send text (the "reason" before calling a tool) and
-          // tool_call_chunks in the same stream of chunks.
+          // Buffer normal text until the model turn ends. If the same turn also
+          // calls tools, that text is tool-planning chatter rather than final
+          // answer text and must not be streamed into the response body.
           if (typeof content === "string" && content) {
-            for (const event of thinkTagParser.push(content)) {
-              if (event.type === "token") {
-                yield { type: "token", content: event.content };
-              } else {
-                yield { type: "reasoning", content: event.content, stepType: "thinking" };
-              }
-            }
+            turnTextBuffer += content;
           } else if (Array.isArray(content)) {
             // Handle Anthropic-style content blocks (text + thinking)
             for (const block of content) {
               if (block.type === "text" && typeof block.text === "string" && block.text) {
-                for (const event of thinkTagParser.push(block.text)) {
-                  if (event.type === "token") {
-                    yield { type: "token", content: event.content };
-                  } else {
-                    yield { type: "reasoning", content: event.content, stepType: "thinking" };
-                  }
-                }
+                turnTextBuffer += block.text;
               } else if (block.type === "thinking") {
                 // Anthropic may return thinking content in different fields
                 // Try block.text first (most common), then block.thinking, then block.content
@@ -388,20 +392,21 @@ export async function* streamReadingAgent(
       // emitted from streaming chunks (e.g. non-OpenAI models that don't
       // send tool_call_chunks).
       if (event.event === "on_chat_model_end") {
-        for (const flushedEvent of thinkTagParser.flush()) {
-          if (flushedEvent.type === "token") {
-            yield { type: "token", content: flushedEvent.content };
-          } else {
-            yield { type: "reasoning", content: flushedEvent.content, stepType: "thinking" };
-          }
+        const output = event.data?.output;
+        const toolCalls =
+          output?.tool_calls ?? output?.additional_kwargs?.tool_calls ?? ([] as unknown[]);
+        const hasToolCalls =
+          (Array.isArray(toolCalls) && toolCalls.length > 0) ||
+          [...streamingToolCalls.values()].some((entry) => entry.emitted);
+
+        for (const flushedEvent of flushBufferedTurnText(hasToolCalls)) {
+          yield flushedEvent;
         }
 
         // Clear streaming accumulator for the next LLM turn
         streamingToolCalls.clear();
 
-        const output = event.data?.output;
         if (output) {
-          const toolCalls = output.tool_calls ?? output.additional_kwargs?.tool_calls;
           if (Array.isArray(toolCalls)) {
             for (const tc of toolCalls) {
               // Check if already emitted from streaming chunks

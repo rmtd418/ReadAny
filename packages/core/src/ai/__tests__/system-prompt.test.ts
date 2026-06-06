@@ -37,6 +37,7 @@ describe("buildSystemPrompt citations", () => {
 
     expect(prompt).toContain("Fallback Source Requirements");
     expect(prompt).toContain("If the exact fallback result/chunk you cite has a non-empty cfi");
+    expect(prompt).toContain("Call addCitation before writing the final response body");
     expect(prompt).toContain("Use [1], [2], [3] markers only after addCitation succeeds");
     expect(prompt).toContain("Never invent a CFI");
     expect(prompt).toContain("addCitation");
@@ -53,6 +54,7 @@ describe("buildSystemPrompt citations", () => {
 
     expect(prompt).toContain("Citation Requirements");
     expect(prompt).toContain("addCitation");
+    expect(prompt).toContain("Wait for addCitation to return a citation result successfully");
     expect(prompt).toContain("Users can click [N]");
   });
 });

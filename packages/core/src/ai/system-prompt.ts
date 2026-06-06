@@ -219,7 +219,11 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
 
   steps.push("   - **getSurroundingContext**: for current page content");
 
-  steps.push("3. **Synthesize and answer** — Analyze the tool results and write your answer");
+  steps.push("3. **Register citations before answering** — If your answer uses book content:");
+  steps.push("   - Call **addCitation** before writing the final response body");
+  steps.push("   - Wait for addCitation to return successfully before using the matching [N] marker");
+  steps.push("   - This rule applies to BOTH indexed books and non-indexed fallback content");
+  steps.push("4. **Synthesize and answer** — Only after citation registration, write your answer");
   steps.push("");
 
   if (isVectorized) {
@@ -255,7 +259,10 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
       "   - Step 3: Call addCitation with the extracted CFI and set citationIndex to the number you will use in [N]",
     );
     steps.push(
-      "   - Step 4: Write your response using [1], [2] to reference citations — each must match the citationIndex you set",
+      "   - Step 4: Wait for addCitation to return a citation result successfully",
+    );
+    steps.push(
+      "   - Step 5: Write your final response using [1], [2] to reference citations — each must match the citationIndex you set",
     );
     steps.push(
       "   - **Example**: ragSearch returns {cfi: 'epubcfi(/6/52!/4...)', ...} → pass this exact CFI to addCitation",
@@ -276,13 +283,14 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
     steps.push(
       "1. If the exact fallback result/chunk you cite has a non-empty cfi, call addCitation with that cfi, chapterTitle, chapterIndex, and quotedText",
     );
-    steps.push("2. Use [1], [2], [3] markers only after addCitation succeeds");
+    steps.push("2. Call addCitation before writing the final response body");
+    steps.push("3. Use [1], [2], [3] markers only after addCitation succeeds");
     steps.push(
-      "3. If no cfi is present, or addCitation returns an error, cite the source in plain text using chapterTitle/chapterIndex and a short quoted excerpt",
+      "4. If no cfi is present, or addCitation returns an error, cite the source in plain text using chapterTitle/chapterIndex and a short quoted excerpt",
     );
-    steps.push("4. Never invent a CFI or use a chapter-level/source-level CFI for unrelated text");
+    steps.push("5. Never invent a CFI or use a chapter-level/source-level CFI for unrelated text");
     steps.push(
-      "5. If the user needs consistently precise jumpable references, tell them indexing the book improves reliability",
+      "6. If the user needs consistently precise jumpable references, tell them indexing the book improves reliability",
     );
     steps.push("");
   }
@@ -298,7 +306,7 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
     '- **Each tool call must have a distinct purpose.** Good: ragToc → summarize(chapter 1) → summarize(chapter 2). Bad: ragSearch("主题") → ragSearch("主要主题") → ragSearch("书的主题").',
   );
   steps.push(
-    "- If a tool returns enough information to answer (even partially), STOP calling tools and answer with what you have.",
+    "- If a content retrieval/analysis tool returns enough information to answer, do NOT call more retrieval tools. If the answer uses that book content, call addCitation first, then answer.",
   );
   steps.push(
     "- If a tool returns no results or an error, tell the user honestly. Do NOT retry with rephrased queries.",

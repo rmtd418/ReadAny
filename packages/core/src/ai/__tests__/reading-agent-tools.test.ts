@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIConfig } from "../../types";
 import { streamReadingAgent } from "../agents/reading-agent";
 import type { ToolDefinition } from "../tools";
@@ -37,6 +37,10 @@ function makeAIConfig(): AIConfig {
   };
 }
 
+beforeEach(() => {
+  createReactAgentMock.mockReset();
+});
+
 describe("streamReadingAgent tool registration", () => {
   it("registers fallback tools when only bookId is available", async () => {
     createReactAgentMock.mockReturnValue({
@@ -71,5 +75,123 @@ describe("streamReadingAgent tool registration", () => {
     expect(toolNames).toContain("fallbackSearch");
     expect(toolNames).toContain("fallbackChapterContext");
     expect(toolNames).toContain("addCitation");
+  });
+
+  it("keeps tool-call turn text out of the final response before addCitation completes", async () => {
+    createReactAgentMock.mockReturnValue({
+      streamEvents: vi.fn(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            event: "on_chat_model_stream",
+            data: {
+              chunk: {
+                content: "I should register the citation before answering.",
+              },
+            },
+          };
+          yield {
+            event: "on_chat_model_end",
+            data: {
+              output: {
+                tool_calls: [
+                  {
+                    name: "addCitation",
+                    args: {
+                      citationIndex: 1,
+                      chapterTitle: "Chapter 1",
+                      chapterIndex: 0,
+                      cfi: "epubcfi(/6/2)",
+                      quotedText: "source text",
+                    },
+                  },
+                ],
+              },
+            },
+          };
+          yield {
+            event: "on_tool_start",
+            name: "addCitation",
+            data: {
+              input: {
+                citationIndex: 1,
+                chapterTitle: "Chapter 1",
+                chapterIndex: 0,
+                cfi: "epubcfi(/6/2)",
+                quotedText: "source text",
+              },
+            },
+          };
+          yield {
+            event: "on_tool_end",
+            name: "addCitation",
+            data: {
+              output: JSON.stringify({
+                type: "citation",
+                bookId: "book-1",
+                chapterTitle: "Chapter 1",
+                chapterIndex: 0,
+                cfi: "epubcfi(/6/2)",
+                text: "source text",
+                citationIndex: 1,
+              }),
+            },
+          };
+          yield {
+            event: "on_chat_model_stream",
+            data: {
+              chunk: {
+                content: "Final answer with a registered citation.[1]",
+              },
+            },
+          };
+          yield {
+            event: "on_chat_model_end",
+            data: {
+              output: {},
+            },
+          };
+        },
+      })),
+    });
+
+    const events = [];
+    for await (const event of streamReadingAgent(
+      {
+        aiConfig: makeAIConfig(),
+        book: null,
+        bookId: "book-1",
+        semanticContext: null,
+        enabledSkills: [],
+        isVectorized: false,
+        getAvailableTools,
+      },
+      "介绍一下这本书",
+    )) {
+      events.push(event);
+    }
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "reasoning",
+          content: "I should register the citation before answering.",
+        }),
+        expect.objectContaining({ type: "tool_call", name: "addCitation" }),
+        expect.objectContaining({
+          type: "citation",
+          citation: expect.objectContaining({ citationIndex: 1 }),
+        }),
+        expect.objectContaining({
+          type: "token",
+          content: "Final answer with a registered citation.[1]",
+        }),
+      ]),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "token",
+        content: "I should register the citation before answering.",
+      }),
+    );
   });
 });
