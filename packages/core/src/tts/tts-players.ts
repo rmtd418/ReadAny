@@ -138,6 +138,7 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
   private currentStreamIndex = 0;
   private boundaryRecorded = false;
   private lastNotifiedChunkIndex = -1;
+  private runId = 0;
 
   onStateChange?: (state: "playing" | "paused" | "stopped") => void;
   onChunkChange?: (index: number, total: number) => void;
@@ -165,6 +166,7 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     this.pendingBytes = [];
 
     const chunks = Array.isArray(text) ? text.filter(Boolean) : splitIntoChunks(text);
+    const myRun = ++this.runId;
     this._playing = true;
     this._paused = false;
     this.allChunksDone = false;
@@ -205,21 +207,27 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     }, 200);
 
     for (let i = 0; i < chunks.length; i++) {
-      if (!this._playing) return;
+      if (!this._playing || myRun !== this.runId) return;
       this.currentStreamIndex = i;
       this.boundaryRecorded = false;
       try {
-        await this.streamChunk(chunks[i], config, i === 0);
+        await this.streamChunk(chunks[i], config, i === 0, myRun);
       } catch (err) {
         console.error("[DashScope TTS] chunk error:", err);
       }
     }
 
+    if (myRun !== this.runId) return;
     this.flushPendingBytes();
     this.allChunksDone = true;
   }
 
-  private async streamChunk(text: string, config: TTSConfig, isFirst: boolean): Promise<void> {
+  private async streamChunk(
+    text: string,
+    config: TTSConfig,
+    isFirst: boolean,
+    myRun: number,
+  ): Promise<void> {
     const platform = getPlatformService();
     this.abortController = new AbortController();
     this.pendingBytes = [];
@@ -256,7 +264,7 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     let firstAudioReceived = false;
 
     while (true) {
-      if (!this._playing) {
+      if (!this._playing || myRun !== this.runId) {
         reader.cancel();
         return;
       }
