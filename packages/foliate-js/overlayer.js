@@ -184,10 +184,10 @@ export class Overlayer {
 
     // 创建右箭头路径 (三角形指向右侧，指向文本)
     const arrow = createSVGElement("path");
-    const arrowPath = `M ${arrowX + arrowSize} ${centerY} 
-                          L ${arrowX} ${centerY - arrowSize / 2} 
-                          L ${arrowX + arrowSize * 0.3} ${centerY} 
-                          L ${arrowX} ${centerY + arrowSize / 2} 
+    const arrowPath = `M ${arrowX + arrowSize} ${centerY}
+                          L ${arrowX} ${centerY - arrowSize / 2}
+                          L ${arrowX + arrowSize * 0.3} ${centerY}
+                          L ${arrowX} ${centerY + arrowSize / 2}
                           Z`;
 
     arrow.setAttribute("d", arrowPath);

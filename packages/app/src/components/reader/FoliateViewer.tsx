@@ -12,8 +12,8 @@ import type {
   ChapterParagraph,
   ChapterTranslationResult,
 } from "@readany/core/translation/chapter-translator";
-import type { ViewSettings } from "@readany/core/types";
 import { cleanText, isTTSFootnoteMarker, shouldSkipTTSNode } from "@readany/core/tts";
+import type { ViewSettings } from "@readany/core/types";
 import { Overlayer } from "foliate-js/overlayer.js";
 import { marked } from "marked";
 /**
@@ -230,7 +230,7 @@ function getTTSSegmentIdentity(cfi?: string | null, text?: string | null) {
   return `${cfi || ""}::${normalizeTTSSegmentText(text)}`;
 }
 
-function getIframePointInContainerFraction(
+function getIframeClickMetrics(
   doc: Document,
   container: HTMLElement | null,
   clientX: number,
@@ -243,7 +243,20 @@ function getIframePointInContainerFraction(
   const scaleX = iframe.clientWidth > 0 ? iframeRect.width / iframe.clientWidth : 1;
   const x = iframeRect.left + clientX * scaleX - containerRect.left;
   if (containerRect.width <= 0) return null;
-  return Math.max(0, Math.min(1, x / containerRect.width));
+  return {
+    fraction: Math.max(0, Math.min(1, x / containerRect.width)),
+    x,
+    scaleX,
+    iframeClientWidth: iframe.clientWidth,
+    iframeRect: {
+      left: iframeRect.left,
+      width: iframeRect.width,
+    },
+    containerRect: {
+      left: containerRect.left,
+      width: containerRect.width,
+    },
+  };
 }
 
 // Polyfills required by foliate-js
@@ -469,6 +482,52 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         }
       }
     }, []);
+
+    const getScrollNavigationDistance = useCallback(() => {
+      const renderer = viewRef.current?.renderer;
+      const size = Number(renderer?.size ?? 0);
+      const fallbackSize =
+        containerRef.current?.clientHeight && containerRef.current.clientHeight > 0
+          ? containerRef.current.clientHeight
+          : window.innerHeight;
+      return Math.max(1, (Number.isFinite(size) && size > 0 ? size : fallbackSize) - 96);
+    }, []);
+
+    const goNextByMode = useCallback(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      console.log("[ReaderTap][viewer:navigate]", {
+        action: "next",
+        scrolled: !!view.renderer?.scrolled,
+        rendererStart: view.renderer?.start,
+        rendererEnd: view.renderer?.end,
+        rendererPage: view.renderer?.page,
+        rendererPages: view.renderer?.pages,
+      });
+      if (view.renderer?.scrolled) {
+        void view.next(getScrollNavigationDistance());
+        return;
+      }
+      void view.goRight();
+    }, [getScrollNavigationDistance]);
+
+    const goPrevByMode = useCallback(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      console.log("[ReaderTap][viewer:navigate]", {
+        action: "prev",
+        scrolled: !!view.renderer?.scrolled,
+        rendererStart: view.renderer?.start,
+        rendererEnd: view.renderer?.end,
+        rendererPage: view.renderer?.page,
+        rendererPages: view.renderer?.pages,
+      });
+      if (view.renderer?.scrolled) {
+        void view.prev(getScrollNavigationDistance());
+        return;
+      }
+      void view.goLeft();
+    }, [getScrollNavigationDistance]);
 
     const ensureDesktopTTS = useCallback(async () => {
       const view = viewRef.current;
@@ -897,10 +956,10 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       ref,
       () => ({
         goNext: () => {
-          viewRef.current?.goRight();
+          goNextByMode();
         },
         goPrev: () => {
-          viewRef.current?.goLeft();
+          goPrevByMode();
         },
         goToHref: (href: string) => {
           viewRef.current?.goTo(href);
@@ -1477,7 +1536,13 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
                     const range = doc.createRange();
                     range.selectNodeContents(textNode);
                     const rect = range.getBoundingClientRect();
-                    if (rect.right > 0 && rect.left < vw && rect.bottom > 0 && rect.top < vh && rect.width > 0) {
+                    if (
+                      rect.right > 0 &&
+                      rect.left < vw &&
+                      rect.bottom > 0 &&
+                      rect.top < vh &&
+                      rect.width > 0
+                    ) {
                       const text = normalizeTTSSegmentText(textNode.nodeValue);
                       if (text) visibleTexts.push(text);
                     }
@@ -1814,20 +1879,30 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
           const screenX = ev.screenX;
           const screenY = ev.screenY;
 
-          // In paginated (CSS columns) mode, clientX is relative to the full
-          // expanded document width, not the visible page. We need to subtract
-          // the scroll offset to get the position within the visible viewport.
+          // Use the iframe's actual screen rect instead of deriving the visible
+          // page from paginator internals. The latter changed with continuous
+          // scrolled-mode support and can classify tap zones incorrectly.
           const view = viewRef.current;
           const renderer = view?.renderer;
           const pageWidth = renderer?.size || 0;
           const scrollStart = renderer?.start || 0;
-          // Visible range in document coords: [scrollStart - pageWidth, scrollStart]
-          // Position within visible page: clientX - (scrollStart - pageWidth)
-          const visibleX = pageWidth > 0 ? clientX - (scrollStart - pageWidth) : clientX;
-          const xFraction =
-            pageWidth > 0
-              ? visibleX / pageWidth
-              : getIframePointInContainerFraction(doc, containerRef.current, clientX);
+          const clickMetrics = getIframeClickMetrics(doc, containerRef.current, clientX);
+          const xFraction = clickMetrics?.fraction ?? null;
+
+          console.log("[ReaderTap][iframe:pointerup]", {
+            bookKey,
+            clientX,
+            clientY,
+            pageWidth,
+            scrollStart,
+            rendererStart: renderer?.start,
+            rendererEnd: renderer?.end,
+            rendererPage: renderer?.page,
+            rendererPages: renderer?.pages,
+            rendererScrolled: !!renderer?.scrolled,
+            xFraction,
+            clickMetrics,
+          });
 
           setTimeout(() => {
             // If show-annotation handler already handled this click, skip
@@ -1863,7 +1938,12 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
               // This is a simple click - toggle toolbar if there was no selection before
               if (!hadSelectionOnPointerDown.current && !hasSelectionNow) {
                 // Send message to toggle toolbar
-                console.log("[handlePointerUp] sending iframe-single-click, bookKey:", bookKey);
+                console.log("[ReaderTap][iframe:post]", {
+                  bookKey,
+                  clientX,
+                  clientY,
+                  xFraction,
+                });
                 window.postMessage(
                   {
                     type: "iframe-single-click",
@@ -2266,31 +2346,6 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       applyReflowLayoutSettings(view, viewSettings);
     }, [viewSettings.viewMode, viewSettings.paginatedLayout, isFixedLayout, appTheme]);
 
-    useEffect(() => {
-      const handleMessage = (event: MessageEvent) => {
-        const data = event.data;
-        if (data?.type !== "iframe-wheel" || data.bookKey !== bookKey) return;
-
-        const view = viewRef.current;
-        const renderer = view?.renderer;
-        if (!renderer?.scrolled || typeof renderer.scrollBy !== "function") return;
-
-        const lineHeight = 16;
-        const pageHeight =
-          typeof renderer.clientHeight === "number" && renderer.clientHeight > 0
-            ? renderer.clientHeight
-            : window.innerHeight;
-
-        const multiplier =
-          data.deltaMode === 1 ? lineHeight : data.deltaMode === 2 ? pageHeight : 1;
-
-        renderer.scrollBy((data.deltaX ?? 0) * multiplier, (data.deltaY ?? 0) * multiplier);
-      };
-
-      window.addEventListener("message", handleMessage);
-      return () => window.removeEventListener("message", handleMessage);
-    }, [bookKey]);
-
     const handleViewerShellClick = useCallback(
       (event: {
         target: EventTarget | null;
@@ -2305,6 +2360,15 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         if (!container) return;
         if (target !== container && target !== view) return;
 
+        const rect = container.getBoundingClientRect();
+        console.log("[ReaderTap][shell:post]", {
+          bookKey,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          containerLeft: rect.left,
+          containerWidth: rect.width,
+          xFraction: rect.width > 0 ? (event.clientX - rect.left) / rect.width : null,
+        });
         window.postMessage(
           {
             type: "viewer-single-click",
@@ -2428,8 +2492,9 @@ function applyRendererSettings(
     applyReflowLayoutSettings(view, settings);
   }
 
-  // Disable page turn animation for instant response
-  // renderer.setAttribute("animated", "");
+  if (!isFixedLayout) {
+    renderer.setAttribute("animated", "");
+  }
 
   // Apply CSS styles (skip font overrides for fixed layout)
   applyRendererStyles(view, settings, isFixedLayout, theme);
@@ -2482,6 +2547,7 @@ function getRendererStyles(settings: ViewSettings, theme: AppTheme): string {
 
   return `${settings.customFontFaceCSS ? `/* Custom font faces */\n${settings.customFontFaceCSS}\n\n` : ""}/* Font styles */
 html {
+  --theme-bg-color: ${bgColor};
   --readany-font-family: ${fontFamily};
   --serif-font: "${fontTheme.serif}";
   --sans-serif-font: "${fontTheme.sansSerif}";

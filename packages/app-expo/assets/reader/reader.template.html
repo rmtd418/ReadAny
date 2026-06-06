@@ -816,10 +816,10 @@
           await openBook(msg);
           break;
         case 'goNext':
-          if (view) await view.next();
+          if (view) await goNextByMode();
           break;
         case 'goPrev':
-          if (view) await view.prev();
+          if (view) await goPrevByMode();
           break;
         case 'goToFraction':
           if (view && msg.fraction != null) await view.goToFraction(msg.fraction);
@@ -1056,7 +1056,6 @@
           attachPullBookmarkListener(doc);
           attachSelectionListener(doc);
           attachNoteLongPress(doc);
-          attachContinuousScrollListener(doc);
           refreshUserAnnotations(100);
           // Auto-inject ruby annotations if enabled
           if (_rubyMode && (_rubyWordDict || _rubyCharDict)) {
@@ -1206,8 +1205,7 @@
           renderer.setAttribute('max-column-count', '1');
           renderer.setAttribute('max-block-size', '100%');
           renderer.setAttribute('max-inline-size', '100%');
-          // Disable page turn animation for instant response
-          // renderer.setAttribute('animated', '');
+          renderer.setAttribute('animated', '');
           // Default gap/margin
           const margin = msg.pageMargin || 16;
           const gapPercent = Math.max(1, Math.round((margin / 393) * 100));
@@ -1409,6 +1407,31 @@
           renderer.removeAttribute('flow');
           renderer.setAttribute('max-inline-size', '100%');
         }
+      }
+    }
+
+    function getScrollNavigationDistance() {
+      if (!view || !view.renderer) return Math.max(1, window.innerHeight - 96);
+      const size = Number(view.renderer.size || 0);
+      const fallbackSize = window.innerHeight || document.documentElement.clientHeight || 720;
+      return Math.max(1, (Number.isFinite(size) && size > 0 ? size : fallbackSize) - 96);
+    }
+
+    async function goNextByMode(distance) {
+      if (!view) return;
+      if (view.renderer && view.renderer.scrolled) {
+        await view.next(Math.max(1, Number(distance || getScrollNavigationDistance())));
+      } else {
+        await view.next();
+      }
+    }
+
+    async function goPrevByMode(distance) {
+      if (!view) return;
+      if (view.renderer && view.renderer.scrolled) {
+        await view.prev(Math.max(1, Number(distance || getScrollNavigationDistance())));
+      } else {
+        await view.prev();
       }
     }
 
@@ -2133,47 +2156,6 @@ a { color: ${primary} !important; }
           selectionBottom: iframeRect.top + lastRect.bottom,
         },
       });
-    }
-
-    // ─── Continuous scroll listener ───
-    function attachContinuousScrollListener(doc) {
-      if (doc.__readany_continuous_scroll) return;
-      doc.__readany_continuous_scroll = true;
-
-      let touchStartY = 0;
-      let touchStartX = 0;
-
-      doc.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          touchStartY = e.touches[0].clientY;
-          touchStartX = e.touches[0].clientX;
-        }
-      }, { passive: true });
-
-      doc.addEventListener('touchend', (e) => {
-        if (!view || !view.renderer) return;
-        const renderer = view.renderer;
-        if (!renderer.scrolled) return;
-
-        if (e.changedTouches.length === 1) {
-          const touchEndY = e.changedTouches[0].clientY;
-          const touchEndX = e.changedTouches[0].clientX;
-          const deltaY = touchEndY - touchStartY;
-          const deltaX = touchEndX - touchStartX;
-
-          if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 30) {
-            postToRN('continuous-scroll', {
-              deltaY,
-              start: renderer.start,
-              end: renderer.end,
-              viewSize: renderer.viewSize,
-              size: renderer.size,
-              currentSectionIndex,
-              totalSections,
-            });
-          }
-        }
-      }, { passive: true });
     }
 
     // ─── TOC conversion ───
@@ -3215,8 +3197,8 @@ a { color: ${primary} !important; }
     }
 
     // ─── Expose global functions for injectJavaScript ───
-    window.goNext = function () { if (view) view.next(); };
-    window.goPrev = function () { if (view) view.prev(); };
+    window.goNext = function (distance) { goNextByMode(distance); };
+    window.goPrev = function (distance) { goPrevByMode(distance); };
     window.goLeft = function () { if (view) view.goLeft(); };
     window.goRight = function () { if (view) view.goRight(); };
     window.goToHref = function (href) { if (view) view.goTo(href); };

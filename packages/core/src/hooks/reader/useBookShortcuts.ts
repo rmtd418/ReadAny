@@ -25,6 +25,35 @@ export function useBookShortcuts({
   onToggleChat: _onToggleChat,
   enabled = true,
 }: UseBookShortcutsOptions) {
+  const getScrollDistance = useCallback((view: FoliateView) => {
+    const size = Number(view.renderer?.size ?? 0);
+    const fallbackSize =
+      typeof window !== "undefined" && window.innerHeight > 0 ? window.innerHeight : 720;
+    return Math.max(1, (Number.isFinite(size) && size > 0 ? size : fallbackSize) - 96);
+  }, []);
+
+  const goPrev = useCallback(
+    (view: FoliateView) => {
+      if (view.renderer?.scrolled) {
+        void view.prev(getScrollDistance(view));
+        return;
+      }
+      void view.prev();
+    },
+    [getScrollDistance],
+  );
+
+  const goNext = useCallback(
+    (view: FoliateView) => {
+      if (view.renderer?.scrolled) {
+        void view.next(getScrollDistance(view));
+        return;
+      }
+      void view.next();
+    },
+    [getScrollDistance],
+  );
+
   const handleAction = useCallback(
     (key: string, modifiers: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => {
       const view = viewRef.current;
@@ -40,27 +69,27 @@ export function useBookShortcuts({
           view.goRight();
           return true;
         case "ArrowUp":
-          view.prev();
+          goPrev(view);
           return true;
         case "PageUp":
-          view.prev();
+          goPrev(view);
           return true;
         case "ArrowDown":
         case " ":
           if (modifiers.shiftKey) {
-            view.prev();
+            goPrev(view);
           } else {
-            view.next();
+            goNext(view);
           }
           return true;
         case "PageDown":
-          view.next();
+          goNext(view);
           return true;
         case "[":
-          view.prev();
+          goPrev(view);
           return true;
         case "]":
-          view.next();
+          goNext(view);
           return true;
         case "f":
           if (cmd) {
@@ -85,7 +114,7 @@ export function useBookShortcuts({
           return false;
       }
     },
-    [viewRef, onToggleSearch, onToggleToc],
+    [viewRef, onToggleSearch, onToggleToc, goPrev, goNext],
   );
 
   useEffect(() => {
@@ -105,7 +134,12 @@ export function useBookShortcuts({
     const onMessage = (event: MessageEvent) => {
       const data = event.data;
       if (data?.type !== "iframe-keydown" || data.bookKey !== bookKey) return;
-      if (data.defaultPrevented || data.isComposing || data.key === "Process" || data.keyCode === 229) {
+      if (
+        data.defaultPrevented ||
+        data.isComposing ||
+        data.key === "Process" ||
+        data.keyCode === 229
+      ) {
         return;
       }
 

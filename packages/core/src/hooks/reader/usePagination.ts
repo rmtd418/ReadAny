@@ -1,6 +1,6 @@
 /**
  * usePagination — handles page flip and scroll navigation via
- * mouse events and touch events from iframe bridge.
+ * mouse events from the host container and iframe bridge.
  *
  * Strategy: Leading-edge throttle with "idle unlock".
  */
@@ -86,6 +86,7 @@ export function usePagination({ bookKey, viewRef, containerRef }: UsePaginationO
 
       switch (data.type) {
         case "iframe-wheel":
+          if (viewRef.current?.renderer?.scrolled) return;
           handleWheel(data.deltaY, data.deltaX);
           break;
       }
@@ -93,20 +94,21 @@ export function usePagination({ bookKey, viewRef, containerRef }: UsePaginationO
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [bookKey, handleWheel]);
+  }, [bookKey, handleWheel, viewRef]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const onWheel = (e: WheelEvent) => {
+      if (viewRef.current?.renderer?.scrolled) return;
       e.preventDefault();
       handleWheel(e.deltaY, e.deltaX);
     };
 
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [containerRef, handleWheel]);
+  }, [containerRef, handleWheel, viewRef]);
 
   return { handleWheel };
 }

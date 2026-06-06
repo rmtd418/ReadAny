@@ -169,7 +169,6 @@ export const handleClick = (_bookKey: string, event: MouseEvent) => {
 };
 
 export const handleWheel = (bookKey: string, event: WheelEvent) => {
-  event.preventDefault();
   window.postMessage(
     {
       type: "iframe-wheel",
@@ -234,7 +233,7 @@ export function registerIframeEventHandlers(bookKey: string, doc: Document): voi
   doc.addEventListener("mouseup", handleMouseup.bind(null, bookKey));
   doc.addEventListener("click", handleClick.bind(null, bookKey));
   doc.addEventListener("wheel", handleWheel.bind(null, bookKey), {
-    passive: false,
+    passive: true,
   });
   doc.addEventListener("touchstart", handleTouchStart.bind(null, bookKey));
   doc.addEventListener("touchmove", handleTouchMove.bind(null, bookKey));

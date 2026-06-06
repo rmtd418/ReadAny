@@ -128,13 +128,19 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
     [inject],
   );
 
-  const goNext = useCallback(() => {
-    inject("window.goNext()");
-  }, [inject]);
+  const goNext = useCallback(
+    (distance?: number) => {
+      inject(`window.goNext(${Number.isFinite(distance) ? distance : ""})`);
+    },
+    [inject],
+  );
 
-  const goPrev = useCallback(() => {
-    inject("window.goPrev()");
-  }, [inject]);
+  const goPrev = useCallback(
+    (distance?: number) => {
+      inject(`window.goPrev(${Number.isFinite(distance) ? distance : ""})`);
+    },
+    [inject],
+  );
 
   const goLeft = useCallback(() => {
     inject("window.goLeft()");
@@ -628,11 +634,10 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
   }, []);
 
   // ─── Ruby Annotation Commands ───
-  const setRubyDicts = useCallback(
-    (wordDictJson: string | null, charDictJson: string | null) => {
-      const wordArg = wordDictJson ? JSON.stringify(wordDictJson) : "null";
-      const charArg = charDictJson ? JSON.stringify(charDictJson) : "null";
-      webViewRef.current?.injectJavaScript(`
+  const setRubyDicts = useCallback((wordDictJson: string | null, charDictJson: string | null) => {
+    const wordArg = wordDictJson ? JSON.stringify(wordDictJson) : "null";
+    const charArg = charDictJson ? JSON.stringify(charDictJson) : "null";
+    webViewRef.current?.injectJavaScript(`
         (function() {
           try {
             if (window.setRubyDicts) {
@@ -642,13 +647,10 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         })();
         true;
       `);
-    },
-    [],
-  );
+  }, []);
 
-  const injectRuby = useCallback(
-    (mode: string) => {
-      webViewRef.current?.injectJavaScript(`
+  const injectRuby = useCallback((mode: string) => {
+    webViewRef.current?.injectJavaScript(`
         (function() {
           try {
             if (window.injectRuby) window.injectRuby(${JSON.stringify(mode)});
@@ -656,9 +658,7 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         })();
         true;
       `);
-    },
-    [],
-  );
+  }, []);
 
   const removeRuby = useCallback(() => {
     webViewRef.current?.injectJavaScript(`
@@ -670,71 +670,6 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
       true;
     `);
   }, []);
-
-  // ─── Handle continuous scroll for chapter navigation ───
-  const scrollTransitioningRef = useRef(false);
-
-  const handleContinuousScroll = useCallback(
-    (msg: {
-      deltaY: number;
-      start: number;
-      end: number;
-      viewSize: number;
-      size: number;
-      currentSectionIndex: { current: number; total: number } | number;
-      totalSections: number;
-    }) => {
-      if (scrollTransitioningRef.current) {
-        console.log("[ReaderBridge] continuous-scroll: already transitioning, skip");
-        return;
-      }
-
-      const { deltaY, start, end, viewSize, size, totalSections } = msg;
-      const currentIndex =
-        typeof msg.currentSectionIndex === "number"
-          ? msg.currentSectionIndex
-          : msg.currentSectionIndex.current;
-      const threshold = 30;
-
-      const atStart = start <= Math.abs(deltaY) || start <= size * 0.3;
-      const atEnd =
-        Math.ceil(end) >= viewSize - Math.abs(deltaY) || Math.ceil(end) >= viewSize - size * 0.3;
-
-      console.log("[ReaderBridge] continuous-scroll:", {
-        deltaY,
-        start,
-        end,
-        viewSize,
-        size,
-        currentIndex,
-        totalSections,
-        atStart,
-        atEnd,
-        thresholdCheck: deltaY < -threshold,
-        indexCheck: currentIndex < totalSections - 1,
-      });
-
-      // Finger moves up (deltaY < 0) at end of chapter → go to next
-      if (deltaY < -threshold && atEnd && currentIndex < totalSections - 1) {
-        console.log("[ReaderBridge] Going to next chapter");
-        scrollTransitioningRef.current = true;
-        goNext();
-        setTimeout(() => {
-          scrollTransitioningRef.current = false;
-        }, 500);
-      }
-      // Finger moves down (deltaY > 0) at start of chapter → go to prev
-      else if (deltaY > threshold && atStart && currentIndex > 0) {
-        console.log("[ReaderBridge] Going to previous chapter");
-        scrollTransitioningRef.current = true;
-        goPrev();
-        setTimeout(() => {
-          scrollTransitioningRef.current = false;
-        }, 500);
-      }
-    },
-    [goNext, goPrev],
-  );
 
   // ─── Handle messages from WebView ───
 
@@ -952,9 +887,6 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
               }
             }
             break;
-          case "continuous-scroll":
-            handleContinuousScroll(msg);
-            break;
           case "debug":
             console.log("[WebView]", msg.message);
             break;
@@ -965,7 +897,7 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         console.error("[ReaderBridge] Parse error:", err);
       }
     },
-    [handleContinuousScroll],
+    [],
   );
 
   return useMemo(

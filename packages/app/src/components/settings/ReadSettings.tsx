@@ -9,10 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { useSettingsStore } from "@/stores/settings-store";
-import { useRubyStore, type RubyMode } from "@readany/core/stores/ruby-store";
-import { useFontStore } from "@readany/core/stores";
 import { useAppStore } from "@/stores/app-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { useFontStore } from "@readany/core/stores";
+import { type RubyMode, useRubyStore } from "@readany/core/stores/ruby-store";
 import { Download, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -42,6 +42,22 @@ export function ReadSettingsPanel() {
         <p className="mb-4 text-xs text-muted-foreground/60">{t("settings.readingNotice")}</p>
 
         <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-foreground">{t("settings.viewMode")}</span>
+            <Select
+              value={readSettings.viewMode ?? "paginated"}
+              onValueChange={(v) => updateReadSettings({ viewMode: v as "paginated" | "scroll" })}
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="paginated">{t("settings.paginated")}</SelectItem>
+                <SelectItem value="scroll">{t("settings.scroll")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex items-center justify-between">
             <span className="text-sm text-foreground">{t("settings.paginatedLayout")}</span>
             <Select
@@ -190,20 +206,14 @@ function RubySettingsSection() {
 
   return (
     <section className="rounded-lg bg-muted/60 p-4">
-      <h2 className="mb-4 text-sm font-medium text-foreground">
-        {t("ruby.title")}
-      </h2>
-      <p className="mb-4 text-xs text-muted-foreground">
-        {t("ruby.desc")}
-      </p>
+      <h2 className="mb-4 text-sm font-medium text-foreground">{t("ruby.title")}</h2>
+      <p className="mb-4 text-xs text-muted-foreground">{t("ruby.desc")}</p>
 
       <div className="space-y-4">
         {/* Dictionary status */}
         <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
           <div>
-            <span className="text-sm text-foreground">
-              {t("ruby.dictZh")}
-            </span>
+            <span className="text-sm text-foreground">{t("ruby.dictZh")}</span>
             <span className="ml-2 text-xs text-muted-foreground">~2.5MB</span>
           </div>
           {zhReady ? (
@@ -240,9 +250,7 @@ function RubySettingsSection() {
         {/* Mode selector (only when dict is ready and a book is open) */}
         {zhReady && currentBookId && (
           <div className="flex items-center justify-between">
-            <span className="text-sm text-foreground">
-              {t("ruby.mode")}
-            </span>
+            <span className="text-sm text-foreground">{t("ruby.mode")}</span>
             <Select value={currentRubyMode || "off"} onValueChange={handleModeChange}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
@@ -256,9 +264,7 @@ function RubySettingsSection() {
           </div>
         )}
 
-        {dictStates.zh.error && (
-          <p className="text-xs text-destructive">{dictStates.zh.error}</p>
-        )}
+        {dictStates.zh.error && <p className="text-xs text-destructive">{dictStates.zh.error}</p>}
       </div>
     </section>
   );
