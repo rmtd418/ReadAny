@@ -7,7 +7,7 @@ import { fontSize, fontWeight, radius, useColors } from "../../styles/theme";
 
 interface ConfigTransferProps {
   getData: () => unknown;
-  applyData: (data: unknown) => void;
+  applyData: (data: unknown) => void | Promise<void>;
   validate: (data: unknown) => boolean;
   label: string;
 }
@@ -23,6 +23,7 @@ export const ConfigTransfer = memo(function ConfigTransfer({
   const [mode, setMode] = useState<"idle" | "export" | "import">("idle");
   const [token, setToken] = useState("");
   const [importText, setImportText] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleExport = useCallback(() => {
     try {
@@ -42,7 +43,7 @@ export const ConfigTransfer = memo(function ConfigTransfer({
   }, [token, t]);
 
   const applyImportedData = useCallback(
-    (raw: string) => {
+    async (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) {
         Alert.alert(t("common.error", "错误"), t("settings.invalidConfig", "配置格式无效"));
@@ -58,19 +59,24 @@ export const ConfigTransfer = memo(function ConfigTransfer({
         return;
       }
       try {
-        applyData(data);
+        setIsImporting(true);
+        await applyData(data);
         Alert.alert(t("common.success", "成功"), t("settings.configImported", "配置已导入"));
         setMode("idle");
         setImportText("");
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         Alert.alert(t("common.error", "错误"), `${t("settings.importFailed", "导入失败")}: ${msg}`);
+      } finally {
+        setIsImporting(false);
       }
     },
     [validate, applyData, t],
   );
 
-  const handleImport = useCallback(() => applyImportedData(importText), [importText, applyImportedData]);
+  const handleImport = useCallback(() => {
+    void applyImportedData(importText);
+  }, [importText, applyImportedData]);
 
   const handlePaste = useCallback(async () => {
     const text = await Clipboard.getStringAsync();
@@ -194,14 +200,14 @@ export const ConfigTransfer = memo(function ConfigTransfer({
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleImport}
-            disabled={!importText.trim()}
+            disabled={!importText.trim() || isImporting}
             style={{
               flex: 1,
               paddingVertical: 10,
               borderRadius: radius.md,
               backgroundColor: colors.primary,
               alignItems: "center",
-              opacity: importText.trim() ? 1 : 0.5,
+              opacity: importText.trim() && !isImporting ? 1 : 0.5,
             }}
           >
             <Text style={{ fontSize: fontSize.sm, color: colors.primaryForeground, fontWeight: fontWeight.medium }}>

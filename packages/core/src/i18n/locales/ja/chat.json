@@ -70,6 +70,8 @@
     "reasoningDone": "推論完了",
     "scrollToBottom": "一番下へスクロール",
     "loadingMindmap": "マインドマップを読み込み中...",
+    "toolFailed": "呼び出し失敗",
+    "toolFailedDetail": "ツール呼び出しに失敗しました",
     "aborted": "ユーザーにより生成を停止しました"
   },
   "toolLabels": {
@@ -81,6 +83,7 @@
     "analyzeArguments": "議論を分析中",
     "findQuotes": "引用を検索中",
     "getAnnotations": "注釈を取得中",
+    "addCitation": "引用を登録中",
     "compareSections": "セクションを比較中",
     "getCurrentChapter": "現在の章を取得中",
     "getSelection": "選択テキストを取得中",
@@ -92,7 +95,10 @@
     "searchAllNotes": "全ノートを検索中",
     "getReadingStats": "読書統計を取得中",
     "getSkills": "スキルを照会中",
-    "mindmap": "マインドマップを生成中"
+    "mindmap": "マインドマップを生成中",
+    "fallbackToc": "元ファイルの目次を読み取り中",
+    "fallbackSearch": "元ファイルをスキャン中",
+    "fallbackChapterContext": "章の内容を読み取り中"
   },
   "mindmap": {
     "title": "マインドマップ",

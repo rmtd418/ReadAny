@@ -24,7 +24,8 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-const MAX_INPUT_HEIGHT = 100;
+const SINGLE_LINE_INPUT_HEIGHT = 46;
+const MAX_INPUT_HEIGHT = 112;
 const INPUT_PADDING_VERTICAL = 16;
 
 export function ChatInput({
@@ -38,7 +39,7 @@ export function ChatInput({
   const [text, setText] = useState("");
   const [deepThinking, setDeepThinking] = useState(false);
   const [spoilerFree, setSpoilerFree] = useState(false);
-  const [inputHeight, setInputHeight] = useState(36);
+  const [inputHeight, setInputHeight] = useState(SINGLE_LINE_INPUT_HEIGHT);
   const { t } = useTranslation();
   const colors = useColors();
   const s = makeStyles(colors);
@@ -49,18 +50,29 @@ export function ChatInput({
     if (!trimmed && quotes.length === 0) return;
     inputRef.current?.blur();
     onSend(trimmed, deepThinking, spoilerFree, quotes.length > 0 ? quotes : undefined);
+    setInputHeight(SINGLE_LINE_INPUT_HEIGHT);
     setText("");
     setDeepThinking(false);
     setSpoilerFree(false);
-    setInputHeight(36);
   }, [text, deepThinking, spoilerFree, quotes, onSend]);
 
+  const handleTextChange = useCallback((nextText: string) => {
+    setText(nextText);
+    if (!nextText) {
+      setInputHeight(SINGLE_LINE_INPUT_HEIGHT);
+    }
+  }, []);
+
   const handleContentSizeChange = useCallback((e: any) => {
+    if (!text) {
+      setInputHeight(SINGLE_LINE_INPUT_HEIGHT);
+      return;
+    }
     const contentHeight = e.nativeEvent.contentSize.height;
     const totalHeight = contentHeight + INPUT_PADDING_VERTICAL;
     const h = Math.min(totalHeight, MAX_INPUT_HEIGHT);
-    setInputHeight(Math.max(36, h));
-  }, []);
+    setInputHeight(Math.max(SINGLE_LINE_INPUT_HEIGHT, h));
+  }, [text]);
 
   const canSend = text.trim().length > 0 || quotes.length > 0;
 
@@ -97,7 +109,7 @@ export function ChatInput({
           }
           placeholderTextColor={colors.mutedForeground}
           value={text}
-          onChangeText={setText}
+          onChangeText={handleTextChange}
           multiline
           onContentSizeChange={handleContentSizeChange}
           returnKeyType="default"
@@ -176,7 +188,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,
-      overflow: "hidden",
+      shadowColor: colors.foreground,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
     },
     quotesRow: {
       flexDirection: "row",
@@ -207,16 +223,19 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.foreground,
       paddingHorizontal: 16,
       paddingTop: 12,
-      paddingBottom: 4,
+      paddingBottom: 6,
+      minHeight: SINGLE_LINE_INPUT_HEIGHT,
       maxHeight: MAX_INPUT_HEIGHT,
       lineHeight: 20,
+      textAlignVertical: "top",
     },
     actionBar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 12,
-      paddingBottom: 8,
+      paddingBottom: 9,
+      minHeight: 36,
     },
     toggleRow: {
       flexDirection: "row",
@@ -250,9 +269,12 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.muted,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
     },
     sendBtnActive: {
+      borderColor: withOpacity(colors.primary, 0.35),
       backgroundColor: colors.primary,
     },
     deepThinkHint: {

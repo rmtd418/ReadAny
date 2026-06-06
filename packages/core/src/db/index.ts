@@ -56,6 +56,7 @@ export {
   getThread,
   insertThread,
   updateThreadTitle,
+  updateThreadMemory,
   deleteThread,
   deleteThreadsByBookId,
   // Message queries

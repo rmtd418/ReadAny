@@ -4,7 +4,11 @@
 import type { AIConfig, AIEndpoint, ReadSettings } from "@readany/core/types";
 import type { TranslationConfig, TranslationTargetLang } from "@readany/core/types/translation";
 import { logAIEndpointDebug, summarizeDebugText } from "@readany/core/ai/request-debug";
-import { buildProviderModelsUrl, providerSupportsExactRequestUrl } from "@readany/core/utils/api";
+import {
+  buildProviderModelsUrl,
+  providerRequiresApiKey,
+  providerSupportsExactRequestUrl,
+} from "@readany/core/utils/api";
 import { create } from "zustand";
 import { deleteSecure, loadSecure, saveSecure, withPersist } from "./persist";
 
@@ -30,6 +34,7 @@ export interface SettingsState {
   removeEndpoint: (id: string) => Promise<void>;
   setActiveEndpoint: (id: string) => void;
   setActiveModel: (model: string) => void;
+  importAIConfig: (config: AIConfig) => Promise<void>;
   getActiveEndpoint: () => Promise<AIEndpoint | undefined>;
   getEndpointById: (id: string) => Promise<AIEndpoint | undefined>;
   fetchModels: (endpointId: string) => Promise<string[]>;
@@ -321,6 +326,71 @@ async function fetchLMStudioModels(endpoint: AIEndpoint): Promise<string[]> {
 // Helper to get secure key for endpoint
 const getApiKeyStorageKey = (endpointId: string) => `apikey_${endpointId}`;
 
+function pickUsableEndpoint(endpoints: AIEndpoint[], activeEndpointId: string) {
+  return (
+    endpoints.find((endpoint) => endpoint.id === activeEndpointId) ||
+    endpoints.find(
+      (endpoint) => !providerRequiresApiKey(endpoint.provider) || Boolean(endpoint.apiKey),
+    ) ||
+    endpoints[0]
+  );
+}
+
+function normalizeImportedAIConfig(importedConfig: AIConfig, currentConfig: AIConfig): AIConfig {
+  const importedEndpoints = Array.isArray(importedConfig.endpoints)
+    ? importedConfig.endpoints
+        .filter((endpoint): endpoint is AIEndpoint => Boolean(endpoint?.id))
+        .map((endpoint) => ({
+          ...defaultEndpoint,
+          ...endpoint,
+          id: String(endpoint.id),
+          name: endpoint.name || endpoint.provider || defaultEndpoint.name,
+          apiKey: typeof endpoint.apiKey === "string" ? endpoint.apiKey : "",
+          models: Array.isArray(endpoint.models)
+            ? endpoint.models.filter((model): model is string => typeof model === "string")
+            : [],
+          modelsFetched: Boolean(endpoint.modelsFetched || endpoint.models?.length),
+          modelsFetching: false,
+        }))
+    : [];
+
+  const endpoints = importedEndpoints.length > 0 ? importedEndpoints : currentConfig.endpoints;
+  const preferredEndpointId =
+    typeof importedConfig.activeEndpointId === "string"
+      ? importedConfig.activeEndpointId
+      : currentConfig.activeEndpointId;
+  const activeEndpoint = pickUsableEndpoint(endpoints, preferredEndpointId);
+  const activeEndpointId = activeEndpoint?.id || "";
+
+  let activeModel =
+    typeof importedConfig.activeModel === "string"
+      ? importedConfig.activeModel
+      : currentConfig.activeModel;
+  if (activeEndpoint && (!activeModel || !activeEndpoint.models.includes(activeModel))) {
+    activeModel = activeEndpoint.models[0] || activeModel || "";
+  }
+
+  return {
+    ...currentConfig,
+    ...importedConfig,
+    endpoints,
+    activeEndpointId,
+    activeModel,
+    temperature:
+      typeof importedConfig.temperature === "number"
+        ? importedConfig.temperature
+        : currentConfig.temperature,
+    maxTokens:
+      typeof importedConfig.maxTokens === "number"
+        ? importedConfig.maxTokens
+        : currentConfig.maxTokens,
+    slidingWindowSize:
+      typeof importedConfig.slidingWindowSize === "number"
+        ? importedConfig.slidingWindowSize
+        : currentConfig.slidingWindowSize,
+  };
+}
+
 export const useSettingsStore = create<SettingsState>()(
   withPersist("settings", (set, get, api) => {
     // Load API keys from secure storage and merge with current endpoints
@@ -441,6 +511,30 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           aiConfig: { ...state.aiConfig, activeModel: model },
         })),
+
+      importAIConfig: async (config) => {
+        const currentState = get();
+        const normalizedConfig = normalizeImportedAIConfig(config, currentState.aiConfig);
+        const importedEndpointIds = new Set(
+          normalizedConfig.endpoints.map((endpoint) => endpoint.id),
+        );
+
+        await Promise.all([
+          ...currentState.aiConfig.endpoints
+            .filter((endpoint) => !importedEndpointIds.has(endpoint.id))
+            .map((endpoint) => deleteSecure(getApiKeyStorageKey(endpoint.id))),
+          ...normalizedConfig.endpoints.map((endpoint) =>
+            endpoint.apiKey
+              ? saveSecure(getApiKeyStorageKey(endpoint.id), endpoint.apiKey)
+              : deleteSecure(getApiKeyStorageKey(endpoint.id)),
+          ),
+        ]);
+
+        set({
+          aiConfig: normalizedConfig,
+          _apiKeysLoaded: true,
+        });
+      },
 
       getActiveEndpoint: async () => {
         const state = get();

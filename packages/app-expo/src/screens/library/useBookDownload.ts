@@ -13,7 +13,10 @@ export function useBookDownload({ loadBooks, onSuccess }: UseBookDownloadOptions
   const { t } = useTranslation();
   const [downloadingBookId, setDownloadingBookId] = useState<string | null>(null);
   const [downloadingBookTitle, setDownloadingBookTitle] = useState("");
-  const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    downloaded: number;
+    total: number;
+  } | null>(null);
 
   const downloadBook = useCallback(
     async (book: Book) => {
@@ -78,6 +81,18 @@ export function useBookDownload({ loadBooks, onSuccess }: UseBookDownloadOptions
         }
 
         console.log(`[useBookDownload] Book ${book.id} downloaded successfully`);
+        const { useVectorModelStore } = await import("@/stores/vector-model-store");
+        const vmState = useVectorModelStore.getState();
+        if (
+          vmState.autoVectorizeOnImport &&
+          vmState.vectorModelEnabled &&
+          vmState.hasVectorCapability()
+        ) {
+          const { queueBookForAutoVectorize } = await import("@/lib/rag/auto-vectorize-book");
+          queueBookForAutoVectorize({ ...book, syncStatus: "local" }).catch((err) => {
+            console.warn(`[useBookDownload] Auto-vectorize enqueue failed for ${book.id}:`, err);
+          });
+        }
         onSuccess(book.id);
         return true;
       } catch (err) {

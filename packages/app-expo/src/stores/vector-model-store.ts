@@ -17,11 +17,13 @@ export interface VectorModelState {
   vectorModels: VectorModelConfig[];
   selectedVectorModelId: string | null;
   vectorModelEnabled: boolean;
+  autoVectorizeOnImport: boolean;
   vectorModelMode: "remote" | "builtin";
   selectedBuiltinModelId: string | null;
   builtinModelStates: Record<string, BuiltinModelState>;
 
   setVectorModelEnabled: (enabled: boolean) => void;
+  setAutoVectorizeOnImport: (enabled: boolean) => void;
   setVectorModelMode: (mode: "remote" | "builtin") => void;
   addVectorModel: (model: VectorModelConfig) => void;
   updateVectorModel: (id: string, updates: Partial<VectorModelConfig>) => void;
@@ -38,11 +40,13 @@ export const useVectorModelStore = create<VectorModelState>()(
     vectorModels: [],
     selectedVectorModelId: null,
     vectorModelEnabled: true,
+    autoVectorizeOnImport: false,
     vectorModelMode: "remote",
     selectedBuiltinModelId: null,
     builtinModelStates: {},
 
     setVectorModelEnabled: (vectorModelEnabled) => set({ vectorModelEnabled }),
+    setAutoVectorizeOnImport: (autoVectorizeOnImport) => set({ autoVectorizeOnImport }),
     setVectorModelMode: (vectorModelMode) => set({ vectorModelMode }),
 
     addVectorModel: (model) => {

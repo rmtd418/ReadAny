@@ -17,6 +17,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { TauriPlatformService } from "./lib/platform/tauri-platform-service";
 import { syncLegacyDesktopLibraryRootConfig } from "./lib/storage/desktop-library-root";
 import { TauriVectorDB } from "./lib/tauri-vector-db";
+import { registerDesktopFallbackContentProvider } from "./lib/rag/fallback-content-provider";
 import { useLibraryStore } from "./stores/library-store";
 import { flushAllWrites } from "./stores/persist";
 import { useVectorModelStore } from "./stores/vector-model-store";
@@ -31,6 +32,7 @@ setFeedbackWorkerUrl(feedbackWorkerUrl);
 const tauriPlatform = new TauriPlatformService();
 tauriPlatform.initSync().catch(console.error);
 setPlatformService(tauriPlatform);
+registerDesktopFallbackContentProvider();
 
 // Set Tauri fetch for streaming AI requests (avoids CORS issues)
 setStreamingFetch(tauriFetch as typeof globalThis.fetch);

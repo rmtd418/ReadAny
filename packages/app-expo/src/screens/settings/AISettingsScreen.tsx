@@ -1,6 +1,6 @@
 import { useSettingsStore } from "@/stores";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
-import type { AIEndpoint } from "@readany/core/types";
+import type { AIConfig, AIEndpoint } from "@readany/core/types";
 import { getDefaultBaseUrl, PROVIDER_CONFIGS } from "@readany/core/utils";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,6 +36,7 @@ export default function AISettingsScreen() {
     setActiveEndpoint,
     setActiveModel,
     updateAIConfig,
+    importAIConfig,
     fetchModels,
   } = useSettingsStore();
 
@@ -246,14 +247,7 @@ export default function AISettingsScreen() {
               <ConfigTransfer
                 label={t("settings.aiConfig", "AI 配置")}
                 getData={() => aiConfig}
-                applyData={(data) => {
-                  const d = data as Record<string, unknown>;
-                  if (d && typeof d === "object") {
-                    useSettingsStore.setState((s) => ({
-                      aiConfig: { ...s.aiConfig, ...(d as Partial<typeof s.aiConfig>) },
-                    }));
-                  }
-                }}
+                applyData={(data) => importAIConfig(data as AIConfig)}
                 validate={(d) =>
                   typeof d === "object" && d !== null && "endpoints" in d && Array.isArray((d as Record<string, unknown>).endpoints)
                 }

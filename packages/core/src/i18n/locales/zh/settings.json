@@ -185,6 +185,8 @@
     "vectorModel": "向量模型",
     "vm_title": "向量模型",
     "vm_desc": "配置嵌入模型，用于语义搜索和 RAG 检索",
+    "vm_autoVectorizeOnImport": "导入后自动向量化",
+    "vm_autoVectorizeOnImportDesc": "开启后，导入或从同步端下载的新书会自动排队建立索引。默认关闭，避免意外消耗模型额度。",
     "vm_modeTitle": "模型来源",
     "vm_modeBuiltin": "内置本地模型",
     "vm_modeBuiltinDesc": "下载模型到本地运行，无需 API",

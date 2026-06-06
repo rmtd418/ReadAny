@@ -33,6 +33,20 @@ interface MessageListProps {
 
 const BOTTOM_THRESHOLD = 80;
 
+function sortCitationsByIndex(citations: CitationPart[]): CitationPart[] {
+  return citations
+    .map((citation, order) => ({ citation, order }))
+    .sort((a, b) => {
+      const aIndex = a.citation.citationIndex;
+      const bIndex = b.citation.citationIndex;
+      if (typeof aIndex === "number" && typeof bIndex === "number") return aIndex - bIndex;
+      if (typeof aIndex === "number") return -1;
+      if (typeof bIndex === "number") return 1;
+      return a.order - b.order;
+    })
+    .map(({ citation }) => citation);
+}
+
 export function MessageList({
   messages,
   isStreaming,
@@ -274,7 +288,9 @@ function MessageBubble({
 
   // Extract citations from message parts
   const citations = useMemo(() => {
-    return message.parts.filter((p): p is CitationPart => p.type === "citation");
+    return sortCitationsByIndex(
+      message.parts.filter((p): p is CitationPart => p.type === "citation"),
+    );
   }, [message.parts]);
 
   const triggerLongPress = useCallback(() => {

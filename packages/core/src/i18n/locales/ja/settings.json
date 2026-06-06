@@ -182,6 +182,8 @@
     "vectorModel": "ベクトルモデル",
     "vm_title": "ベクトルモデル",
     "vm_desc": "セマンティック検索とRAG検索のための埋め込みモデルを設定",
+    "vm_autoVectorizeOnImport": "新しい本を自動ベクトル化",
+    "vm_autoVectorizeOnImportDesc": "有効にすると、インポートまたは同期でダウンロードした本を自動でインデックス作成キューに入れます。予期しないモデル使用を避けるため既定ではオフです。",
     "vm_modeTitle": "モデルソース",
     "vm_modeBuiltin": "組み込みローカルモデル",
     "vm_modeBuiltinDesc": "モデルをダウンロードしてローカルで実行。APIは不要です",

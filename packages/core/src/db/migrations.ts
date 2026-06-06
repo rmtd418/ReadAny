@@ -112,6 +112,15 @@ const migrations: Migration[] = [
     description: "Add user rating and reviews to books",
     up: ["ALTER TABLE books ADD COLUMN rating REAL", "ALTER TABLE books ADD COLUMN reviews TEXT"],
   },
+  {
+    version: 13,
+    description: "Add rolling memory summary to chat threads",
+    up: [
+      "ALTER TABLE threads ADD COLUMN memory_summary TEXT",
+      "ALTER TABLE threads ADD COLUMN memory_updated_at INTEGER",
+      "ALTER TABLE threads ADD COLUMN memory_message_count INTEGER DEFAULT 0",
+    ],
+  },
 ];
 
 /** Run pending migrations */

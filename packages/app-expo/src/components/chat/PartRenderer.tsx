@@ -137,13 +137,14 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
 
 const TOOL_LABEL_KEYS: Record<string, string> = {
   ragSearch: "toolLabels.ragSearch",
-  ragToc: "toolToc",
+  ragToc: "toolLabels.ragToc",
   ragContext: "toolLabels.ragContext",
   summarize: "toolLabels.summarize",
   extractEntities: "toolLabels.extractEntities",
   analyzeArguments: "toolLabels.analyzeArguments",
   findQuotes: "toolLabels.findQuotes",
   getAnnotations: "toolLabels.getAnnotations",
+  addCitation: "toolLabels.addCitation",
   compareSections: "toolLabels.compareSections",
   getCurrentChapter: "toolLabels.getCurrentChapter",
   getSelection: "toolLabels.getSelection",
@@ -156,13 +157,22 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   getReadingStats: "toolLabels.getReadingStats",
   getSkills: "toolLabels.getSkills",
   mindmap: "toolLabels.mindmap",
+  fallbackToc: "toolLabels.fallbackToc",
+  fallbackSearch: "toolLabels.fallbackSearch",
+  fallbackChapterContext: "toolLabels.fallbackChapterContext",
 };
 
 function ToolCallPartView({ part }: { part: ToolCallPart }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const hasError = part.status === "error" || Boolean(part.error);
+
+  const [isOpen, setIsOpen] = useState(hasError);
   const { t } = useTranslation();
   const colors = useColors();
   const s = makeToolStyles(colors);
+
+  useEffect(() => {
+    if (hasError) setIsOpen(true);
+  }, [hasError]);
 
   const getStatusIcon = () => {
     switch (part.status) {
@@ -181,15 +191,25 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
 
   const label = TOOL_LABEL_KEYS[part.name] ? t(TOOL_LABEL_KEYS[part.name]) : part.name;
   const queryText = part.args.query ? String(part.args.query) : "";
+  const errorMessage =
+    part.error ||
+    (part.result && typeof part.result === "object"
+      ? String((part.result as Record<string, unknown>).error || "")
+      : "");
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, hasError && s.errorContainer]}>
       <TouchableOpacity style={s.header} onPress={() => setIsOpen(!isOpen)} activeOpacity={0.7}>
         <View style={s.headerLeft}>
           {getStatusIcon()}
           <Text style={s.headerText} numberOfLines={1}>
             {label}
           </Text>
+          {hasError ? (
+            <View style={s.errorBadge}>
+              <Text style={s.errorBadgeText}>{t("streaming.toolFailed", "调用失败")}</Text>
+            </View>
+          ) : null}
           {queryText ? (
             <Text style={s.queryText} numberOfLines={1}>
               {queryText.slice(0, 30)}
@@ -231,9 +251,10 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
               </View>
             </View>
           )}
-          {part.error && (
+          {hasError && (
             <View style={s.errorBlock}>
-              <Text style={s.errorText}>{part.error}</Text>
+              <Text style={s.errorTitle}>{t("streaming.toolFailedDetail", "工具调用失败")}</Text>
+              <Text style={s.errorText}>{errorMessage || t("streaming.toolFailed", "调用失败")}</Text>
             </View>
           )}
         </View>
@@ -329,6 +350,10 @@ const makeToolStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       overflow: "hidden",
     },
+    errorContainer: {
+      borderColor: withOpacity(colors.destructive, 0.35),
+      backgroundColor: withOpacity(colors.destructive, 0.04),
+    },
     header: {
       flexDirection: "row",
       alignItems: "center",
@@ -353,6 +378,17 @@ const makeToolStyles = (colors: ThemeColors) =>
       fontSize: fs.xs,
       fontFamily: "Menlo",
       color: colors.mutedForeground,
+    },
+    errorBadge: {
+      borderRadius: radius.sm,
+      backgroundColor: withOpacity(colors.destructive, 0.1),
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    errorBadgeText: {
+      fontSize: fs.xs,
+      color: colors.destructive,
+      fontWeight: fw.medium,
     },
     chevron: {},
     chevronOpen: { transform: [{ rotate: "180deg" }] },
@@ -400,6 +436,13 @@ const makeToolStyles = (colors: ThemeColors) =>
     },
     errorText: {
       fontSize: fs.xs,
+      color: colors.destructive,
+      lineHeight: 16,
+    },
+    errorTitle: {
+      marginBottom: 4,
+      fontSize: fs.xs,
+      fontWeight: fw.medium,
       color: colors.destructive,
     },
   });

@@ -1,7 +1,6 @@
 import {
   CheckIcon,
   ClockIcon,
-  DatabaseIcon,
   Loader2Icon,
   MoreVerticalIcon,
 } from "@/components/ui/Icon";
@@ -342,7 +341,6 @@ export const BookCard = memo(function BookCard({
           {/* Vectorized badge */}
           {book.isVectorized && !isVectorizing && (
             <View style={s.vecBadge}>
-              <DatabaseIcon size={8} color="#fff" />
               <Text style={s.vecBadgeText}>{t("home.vec_indexed", "已索引")}</Text>
             </View>
           )}

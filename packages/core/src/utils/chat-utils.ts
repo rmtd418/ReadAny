@@ -3,6 +3,36 @@
  */
 import type { MessageV2 } from "../types/message";
 
+function parseToolResult(result: unknown): Record<string, unknown> | null {
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  return result && typeof result === "object" ? (result as Record<string, unknown>) : null;
+}
+
+function findCitationIndexFromToolCalls(entry: any, toolCalls: any[] | undefined): number | undefined {
+  if (!toolCalls) return undefined;
+  for (const tc of toolCalls) {
+    if (tc.name !== "addCitation") continue;
+    const result = parseToolResult(tc.result);
+    if (!result || result.type !== "citation") continue;
+    const matches =
+      result.cfi === entry.cfi &&
+      result.text === entry.text &&
+      result.chapterTitle === entry.chapterTitle &&
+      result.chapterIndex === entry.chapterIndex;
+    if (matches && typeof result.citationIndex === "number") {
+      return result.citationIndex;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Convert legacy message format to MessageV2 format with parts.
  * Handles three cases:
@@ -84,6 +114,7 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
                 name: tc.name,
                 args: tc.args,
                 result: tc.result,
+                error: tc.error,
                 status: tc.status || "completed",
                 createdAt: m.createdAt,
               });
@@ -99,6 +130,8 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
               chapterIndex: entry.chapterIndex,
               cfi: entry.cfi,
               text: entry.text,
+              citationIndex:
+                entry.citationIndex ?? findCitationIndexFromToolCalls(entry, m.toolCalls),
               status: "completed",
               createdAt: m.createdAt,
             });
@@ -151,6 +184,7 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
           name: tc.name,
           args: tc.args,
           result: tc.result,
+          error: tc.error,
           status: tc.status || "completed",
           createdAt: m.createdAt,
         });

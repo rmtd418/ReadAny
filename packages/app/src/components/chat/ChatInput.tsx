@@ -172,7 +172,7 @@ export function ChatInput({
             <button
               type="button"
               onClick={onStop}
-              className="flex size-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
+              className="flex size-7 items-center justify-center rounded-full border border-destructive/20 bg-destructive text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
             >
               <Square className="size-3" />
             </button>
@@ -183,8 +183,8 @@ export function ChatInput({
               onClick={() => handleSend()}
               className={`flex size-7 items-center justify-center rounded-full transition-colors ${
                 value.trim() || quotes.length > 0
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-muted text-muted-foreground"
+                  ? "border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                  : "border border-border bg-background text-muted-foreground hover:bg-muted"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               <Send className="size-3.5" />

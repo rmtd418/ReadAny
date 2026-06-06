@@ -2,6 +2,7 @@
  * Annotation Tools — getAnnotations, addCitation
  */
 import { getChunks, getHighlights, getNotes } from "../../db/database";
+import { resolveFallbackCitationSource } from "../fallback-source-resolver";
 import type { ToolDefinition } from "./tool-types";
 
 /** Create get annotations tool for a specific book */
@@ -102,9 +103,12 @@ export function createAddCitationTool(bookId: string): ToolDefinition {
       // Use segmentCfis (per-paragraph CFIs) for precise navigation when available,
       // falling back to startCfi/endCfi heuristic for older data.
       let refinedCfi = aiCfi;
+      let hasIndexedChapterChunks = false;
+      let chunkLookupFailed = false;
       try {
         const chunks = await getChunks(bookId);
         const chapterChunks = chunks.filter((c) => c.chapterIndex === chapterIndex);
+        hasIndexedChapterChunks = chapterChunks.length > 0;
 
         // Find the chunk that contains the quoted text
         const normalizedQuote = quotedText.replace(/\s+/g, "");
@@ -166,7 +170,41 @@ export function createAddCitationTool(bookId: string): ToolDefinition {
         }
       } catch (e) {
         // If refinement fails, fall back to AI-provided CFI
+        chunkLookupFailed = true;
         console.warn("[addCitation] CFI refinement failed, using AI-provided CFI:", e);
+      }
+
+      if (!hasIndexedChapterChunks && !chunkLookupFailed) {
+        try {
+          const fallbackSource = await resolveFallbackCitationSource({
+            bookId,
+            chapterIndex,
+            quotedText,
+            preferredCfi: aiCfi,
+          });
+
+          if (!fallbackSource) {
+            return {
+              error:
+                "Could not resolve a precise CFI for this fallback citation. Use a plain chapter/source reference instead, or index the book for precise jump links.",
+              chapterTitle,
+              chapterIndex,
+              quotedText,
+            };
+          }
+
+          refinedCfi = fallbackSource.cfi;
+        } catch (e) {
+          return {
+            error:
+              e instanceof Error
+                ? e.message
+                : "Could not resolve a precise CFI for this fallback citation",
+            chapterTitle,
+            chapterIndex,
+            quotedText,
+          };
+        }
       }
 
       // Return citation metadata

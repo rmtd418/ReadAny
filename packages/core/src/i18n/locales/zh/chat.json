@@ -70,6 +70,8 @@
     "reasoningDone": "思考过程",
     "scrollToBottom": "回到底部",
     "loadingMindmap": "加载思维导图...",
+    "toolFailed": "调用失败",
+    "toolFailedDetail": "工具调用失败",
     "aborted": "用户取消了生成"
   },
   "toolLabels": {
@@ -81,6 +83,7 @@
     "analyzeArguments": "分析论证",
     "findQuotes": "查找金句",
     "getAnnotations": "获取标注",
+    "addCitation": "登记引用",
     "compareSections": "对比章节",
     "getCurrentChapter": "获取当前章节",
     "getSelection": "获取选中内容",
@@ -92,7 +95,10 @@
     "searchAllNotes": "搜索所有笔记",
     "getReadingStats": "获取阅读统计",
     "getSkills": "查询技能",
-    "mindmap": "生成思维导图"
+    "mindmap": "生成思维导图",
+    "fallbackToc": "读取原始目录",
+    "fallbackSearch": "扫描原始文件",
+    "fallbackChapterContext": "读取章节内容"
   },
   "mindmap": {
     "title": "思维导图",

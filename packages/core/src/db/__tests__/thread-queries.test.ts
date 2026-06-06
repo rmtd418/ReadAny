@@ -26,6 +26,7 @@ const {
   getThread,
   insertThread,
   updateThreadTitle,
+  updateThreadMemory,
   deleteThread,
   deleteThreadsByBookId,
 } = await import("../thread-queries");
@@ -52,6 +53,9 @@ describe("thread-queries", () => {
           id: "thread-1",
           book_id: "book-1",
           title: "Discussion",
+          memory_summary: "User prefers concise answers.",
+          memory_updated_at: 1500,
+          memory_message_count: 4,
           created_at: 1000,
           updated_at: 2000,
         },
@@ -65,6 +69,8 @@ describe("thread-queries", () => {
       expect(threads[0].id).toBe("thread-1");
       expect(threads[0].bookId).toBe("book-1");
       expect(threads[0].title).toBe("Discussion");
+      expect(threads[0].memorySummary).toBe("User prefers concise answers.");
+      expect(threads[0].memoryMessageCount).toBe(4);
       expect(threads[0].messages).toHaveLength(1);
       expect(mockGetMessages).toHaveBeenCalledWith("thread-1");
       expect(mockSelect).toHaveBeenCalledWith(
@@ -185,6 +191,22 @@ describe("thread-queries", () => {
       expect(sql).toContain("UPDATE threads SET title = ?");
       expect(params[0]).toBe("Updated Title");
       expect(params[4]).toBe("thread-1"); // WHERE id = ?
+    });
+  });
+
+  describe("updateThreadMemory", () => {
+    it("updates rolling memory with sync tracking", async () => {
+      mockExecute.mockResolvedValue(undefined);
+
+      await updateThreadMemory("thread-1", "Compressed memory", 6);
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      expect(coreMocks.nextUpdatedAt).toHaveBeenCalledWith(mockDb, "threads", "thread-1");
+
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain("UPDATE threads SET memory_summary = ?");
+      expect(params[0]).toBe("Compressed memory");
+      expect(params[2]).toBe(6);
+      expect(params[6]).toBe("thread-1");
     });
   });
 

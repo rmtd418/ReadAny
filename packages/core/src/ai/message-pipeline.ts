@@ -14,10 +14,12 @@ interface PipelineConfig {
 
 interface PipelineContext {
   book: Book | null;
+  bookId?: string | null;
   semanticContext: SemanticContext | null;
   enabledSkills: Skill[];
   isVectorized: boolean;
   userLanguage: string;
+  memorySummary?: string;
 }
 
 export interface ProcessedMessage {

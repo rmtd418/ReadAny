@@ -1,3 +1,4 @@
+import { triggerVectorizeBook } from "@/lib/rag/vectorize-trigger";
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { useAppStore } from "@/stores/app-store";
 import { useDownloadProgressStore } from "@/stores/download-progress-store";
@@ -6,6 +7,7 @@ import { useMissingBookPromptStore } from "@/stores/missing-book-prompt-store";
 import { setBookSyncStatus } from "@readany/core/db/database";
 import { getPlatformService } from "@readany/core/services";
 import { useSyncStore } from "@readany/core/stores/sync-store";
+import { useVectorModelStore } from "@readany/core/stores/vector-model-store";
 import { downloadBookFile } from "@readany/core/sync";
 import { createSyncBackend } from "@readany/core/sync/sync-backend-factory";
 import type { Book } from "@readany/core/types";
@@ -29,7 +31,9 @@ function authorsLikelyMatch(a?: string, b?: string): boolean {
   if (left === right || left.includes(right) || right.includes(left)) return true;
   const leftParts = left.split(/[,，、/&]+/).filter((part) => part.length > 1);
   const rightParts = right.split(/[,，、/&]+/).filter((part) => part.length > 1);
-  return leftParts.some((part) => rightParts.some((candidate) => part.includes(candidate) || candidate.includes(part)));
+  return leftParts.some((part) =>
+    rightParts.some((candidate) => part.includes(candidate) || candidate.includes(part)),
+  );
 }
 
 function shouldConfirmReimportCandidate(
@@ -127,6 +131,20 @@ export async function openDesktopBook({
       if (outcome === "error") {
         toast.error(t("library.downloadFailed", "下载失败，请重试"));
         return false;
+      }
+      const vmState = useVectorModelStore.getState();
+      if (
+        vmState.autoVectorizeOnImport &&
+        vmState.vectorModelEnabled &&
+        vmState.hasVectorCapability()
+      ) {
+        triggerVectorizeBook(book.id, book.filePath, (progress) => {
+          const pct =
+            progress.totalChunks > 0 ? progress.processedChunks / progress.totalChunks : 0;
+          useLibraryStore.getState().updateBook(book.id, { vectorizeProgress: pct });
+        }).catch((err) => {
+          console.warn(`[openDesktopBook] Auto-vectorize failed for ${book.meta.title}:`, err);
+        });
       }
       return true;
     } catch (error) {

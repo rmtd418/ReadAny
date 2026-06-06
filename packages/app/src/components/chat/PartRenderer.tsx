@@ -200,6 +200,7 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   analyzeArguments: "toolLabels.analyzeArguments",
   findQuotes: "toolLabels.findQuotes",
   getAnnotations: "toolLabels.getAnnotations",
+  addCitation: "toolLabels.addCitation",
   compareSections: "toolLabels.compareSections",
   getCurrentChapter: "toolLabels.getCurrentChapter",
   getSelection: "toolLabels.getSelection",
@@ -212,11 +213,16 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   getReadingStats: "toolLabels.getReadingStats",
   getSkills: "toolLabels.getSkills",
   mindmap: "toolLabels.mindmap",
+  fallbackToc: "toolLabels.fallbackToc",
+  fallbackSearch: "toolLabels.fallbackSearch",
+  fallbackChapterContext: "toolLabels.fallbackChapterContext",
 };
 
 function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const hasError = part.status === "error" || Boolean(part.error);
+
+  const [isOpen, setIsOpen] = useState(hasError);
 
   const getStatusIcon = () => {
     switch (part.status) {
@@ -236,17 +242,41 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const label = TOOL_LABEL_KEYS[part.name] ? t(TOOL_LABEL_KEYS[part.name]) : part.name;
   const queryText = part.args.query ? String(part.args.query) : "";
   const scopeText = part.args.scope ? String(part.args.scope) : "";
+  const errorMessage =
+    part.error ||
+    (part.result && typeof part.result === "object"
+      ? String((part.result as Record<string, unknown>).error || "")
+      : "");
+
+  useEffect(() => {
+    if (hasError) setIsOpen(true);
+  }, [hasError]);
 
   return (
     <div className="my-1">
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div
+        className={cn(
+          "overflow-hidden rounded-lg border",
+          hasError ? "border-destructive/30 bg-destructive/5" : "border-border",
+        )}
+      >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <CollapsibleTrigger asChild>
-            <div className="flex h-auto w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 hover:bg-muted/50">
+            <div
+              className={cn(
+                "flex h-auto w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 hover:bg-muted/50",
+                hasError && "hover:bg-destructive/10",
+              )}
+            >
               <div className="flex flex-1 items-center gap-2 overflow-hidden">
                 {getStatusIcon()}
                 <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">{label}</span>
+                {hasError && (
+                  <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
+                    {t("streaming.toolFailed")}
+                  </span>
+                )}
                 {queryText && (
                   <span className="flex-1 truncate font-mono text-xs text-muted-foreground">
                     {queryText.slice(0, 50)}
@@ -309,9 +339,10 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
                 </div>
               )}
 
-              {part.error && (
-                <div className="rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
-                  {part.error}
+              {hasError && (
+                <div className="rounded border border-destructive/30 bg-destructive/10 p-2 text-xs leading-relaxed text-destructive">
+                  <div className="mb-1 font-medium">{t("streaming.toolFailedDetail")}</div>
+                  <div className="break-words">{errorMessage || t("streaming.toolFailed")}</div>
                 </div>
               )}
             </div>

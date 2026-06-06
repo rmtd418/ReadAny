@@ -20,6 +20,20 @@ interface MessageListProps {
 /** Threshold (px) to consider the user "at the bottom" */
 const BOTTOM_THRESHOLD = 80;
 
+function sortCitationsByIndex(citations: CitationPart[]): CitationPart[] {
+  return citations
+    .map((citation, order) => ({ citation, order }))
+    .sort((a, b) => {
+      const aIndex = a.citation.citationIndex;
+      const bIndex = b.citation.citationIndex;
+      if (typeof aIndex === "number" && typeof bIndex === "number") return aIndex - bIndex;
+      if (typeof aIndex === "number") return -1;
+      if (typeof bIndex === "number") return 1;
+      return a.order - b.order;
+    })
+    .map(({ citation }) => citation);
+}
+
 export function MessageList({
   messages,
   onCitationClick,
@@ -224,7 +238,9 @@ function MessageBubble({ message, onCitationClick, isStreaming, currentStep }: M
   if (!hasContent) return null;
 
   // Collect all CitationPart objects from the message for reference in text
-  const citations = message.parts.filter((p) => p.type === "citation") as CitationPart[];
+  const citations = sortCitationsByIndex(
+    message.parts.filter((p) => p.type === "citation") as CitationPart[],
+  );
 
   // Show "thinking" indicator in gaps between parts, but NOT when:
   // - A text part is actively streaming (cursor handles that)

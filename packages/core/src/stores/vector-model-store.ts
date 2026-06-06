@@ -24,6 +24,8 @@ export interface VectorModelState {
   selectedVectorModelId: string | null;
   /** Whether vector model feature is enabled */
   vectorModelEnabled: boolean;
+  /** Whether newly imported/downloaded books should be vectorized automatically */
+  autoVectorizeOnImport: boolean;
 
   /** Which mode is active: "remote" (API) or "builtin" (local Transformers.js) */
   vectorModelMode: "remote" | "builtin";
@@ -34,6 +36,7 @@ export interface VectorModelState {
 
   // Actions — general
   setVectorModelEnabled: (enabled: boolean) => void;
+  setAutoVectorizeOnImport: (enabled: boolean) => void;
   setVectorModelMode: (mode: "remote" | "builtin") => void;
 
   // Actions — remote models
@@ -71,11 +74,13 @@ export const useVectorModelStore = create<VectorModelState>()(
     vectorModels: [],
     selectedVectorModelId: null,
     vectorModelEnabled: true,
+    autoVectorizeOnImport: false,
     vectorModelMode: "builtin",
     selectedBuiltinModelId: "all-MiniLM-L6-v2",
     builtinModelStates: {},
 
     setVectorModelEnabled: (vectorModelEnabled) => set({ vectorModelEnabled }),
+    setAutoVectorizeOnImport: (autoVectorizeOnImport) => set({ autoVectorizeOnImport }),
     setVectorModelMode: (vectorModelMode) => set({ vectorModelMode }),
 
     // --- Remote models ---

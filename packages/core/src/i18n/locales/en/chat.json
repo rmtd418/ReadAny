@@ -70,6 +70,8 @@
     "reasoningDone": "Reasoning",
     "scrollToBottom": "Scroll to bottom",
     "loadingMindmap": "Loading mindmap...",
+    "toolFailed": "Call failed",
+    "toolFailedDetail": "Tool call failed",
     "aborted": "Generation stopped by user"
   },
   "toolLabels": {
@@ -81,6 +83,7 @@
     "analyzeArguments": "Analyzing arguments",
     "findQuotes": "Finding quotes",
     "getAnnotations": "Getting annotations",
+    "addCitation": "Registering citation",
     "compareSections": "Comparing sections",
     "getCurrentChapter": "Getting current chapter",
     "getSelection": "Getting selection",
@@ -92,7 +95,10 @@
     "searchAllNotes": "Searching all notes",
     "getReadingStats": "Getting reading stats",
     "getSkills": "Querying skills",
-    "mindmap": "Generating mindmap"
+    "mindmap": "Generating mindmap",
+    "fallbackToc": "Reading original table of contents",
+    "fallbackSearch": "Scanning original file",
+    "fallbackChapterContext": "Reading chapter content"
   },
   "mindmap": {
     "title": "Mindmap",

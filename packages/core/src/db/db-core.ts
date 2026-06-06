@@ -444,6 +444,9 @@ export async function initDatabase(): Promise<void> {
       id TEXT PRIMARY KEY,
       book_id TEXT,
       title TEXT NOT NULL DEFAULT '',
+      memory_summary TEXT,
+      memory_updated_at INTEGER,
+      memory_message_count INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )

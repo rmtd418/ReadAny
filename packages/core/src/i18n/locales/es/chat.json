@@ -70,6 +70,8 @@
     "reasoningDone": "Razonamiento",
     "scrollToBottom": "Ir al final",
     "loadingMindmap": "Cargando mapa mental...",
+    "toolFailed": "Llamada fallida",
+    "toolFailedDetail": "La llamada de herramienta falló",
     "aborted": "Generación detenida por el usuario"
   },
   "toolLabels": {
@@ -81,6 +83,7 @@
     "analyzeArguments": "Analizando argumentos",
     "findQuotes": "Buscando citas",
     "getAnnotations": "Obteniendo anotaciones",
+    "addCitation": "Registrando cita",
     "compareSections": "Comparando secciones",
     "getCurrentChapter": "Obteniendo capítulo actual",
     "getSelection": "Obteniendo selección",
@@ -92,7 +95,10 @@
     "searchAllNotes": "Buscando todas las notas",
     "getReadingStats": "Obteniendo estadísticas de lectura",
     "getSkills": "Consultando habilidades",
-    "mindmap": "Generando mapa mental"
+    "mindmap": "Generando mapa mental",
+    "fallbackToc": "Leyendo tabla de contenidos original",
+    "fallbackSearch": "Escaneando archivo original",
+    "fallbackChapterContext": "Leyendo contenido del capítulo"
   },
   "mindmap": {
     "title": "Mapa mental",

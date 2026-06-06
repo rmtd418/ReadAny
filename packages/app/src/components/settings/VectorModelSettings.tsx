@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Switch } from "@/components/ui/switch";
-import { ConfigTransfer } from "./ConfigTransfer";
 import { useVectorModelStore } from "@/stores/vector-model-store";
 import { BUILTIN_EMBEDDING_MODELS } from "@readany/core/ai/builtin-embedding-models";
 import { clearModelCache, loadEmbeddingPipeline } from "@readany/core/ai/local-embedding-service";
@@ -16,6 +15,7 @@ import type { VectorModelConfig } from "@readany/core/types";
 import { Check, Download, Edit2, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ConfigTransfer } from "./ConfigTransfer";
 
 function normalizeEmbeddingsUrl(url: string): string {
   return url.replace(/\/$/, "");
@@ -432,10 +432,14 @@ function RemoteModelsSection() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs text-muted-foreground">
+              <label
+                htmlFor="vector-model-name"
+                className="mb-1 block text-xs text-muted-foreground"
+              >
                 {t("settings.vm_name")} *
               </label>
               <Input
+                id="vector-model-name"
                 value={formData.name}
                 onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
                 placeholder="OpenAI Embedding"
@@ -443,10 +447,14 @@ function RemoteModelsSection() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-muted-foreground">
+              <label
+                htmlFor="vector-model-model-id"
+                className="mb-1 block text-xs text-muted-foreground"
+              >
                 {t("settings.vm_modelId")} *
               </label>
               <Input
+                id="vector-model-model-id"
                 value={formData.modelId}
                 onChange={(e) => setFormData((p) => ({ ...p, modelId: e.target.value }))}
                 placeholder="text-embedding-3-small"
@@ -456,10 +464,11 @@ function RemoteModelsSection() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
+            <label htmlFor="vector-model-url" className="mb-1 block text-xs text-muted-foreground">
               {t("settings.vm_url")} *
             </label>
             <Input
+              id="vector-model-url"
               value={formData.url}
               onChange={(e) => setFormData((p) => ({ ...p, url: e.target.value }))}
               placeholder="https://api.openai.com/v1/embeddings"
@@ -469,10 +478,14 @@ function RemoteModelsSection() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
+            <label
+              htmlFor="vector-model-api-key"
+              className="mb-1 block text-xs text-muted-foreground"
+            >
               {t("settings.vm_apiKey")}
             </label>
             <PasswordInput
+              id="vector-model-api-key"
               value={formData.apiKey}
               onChange={(e) => setFormData((p) => ({ ...p, apiKey: e.target.value }))}
               placeholder="sk-..."
@@ -481,10 +494,14 @@ function RemoteModelsSection() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
+            <label
+              htmlFor="vector-model-description"
+              className="mb-1 block text-xs text-muted-foreground"
+            >
               {t("settings.vm_description")}
             </label>
             <Input
+              id="vector-model-description"
               value={formData.description}
               onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
               placeholder={t("settings.vm_descriptionPlaceholder")}
@@ -516,8 +533,14 @@ function RemoteModelsSection() {
 /* ------------------------------------------------------------------ */
 export function VectorModelSettings() {
   const { t } = useTranslation();
-  const { vectorModelEnabled, vectorModelMode, setVectorModelEnabled, setVectorModelMode } =
-    useVectorModelStore();
+  const {
+    vectorModelEnabled,
+    autoVectorizeOnImport,
+    vectorModelMode,
+    setVectorModelEnabled,
+    setAutoVectorizeOnImport,
+    setVectorModelMode,
+  } = useVectorModelStore();
 
   return (
     <div className="space-y-6 p-4 pt-3">
@@ -534,6 +557,23 @@ export function VectorModelSettings() {
 
       {vectorModelEnabled && (
         <>
+          <section className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-sm font-medium text-foreground">
+                  {t("settings.vm_autoVectorizeOnImport", "导入后自动向量化")}
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {t(
+                    "settings.vm_autoVectorizeOnImportDesc",
+                    "开启后，导入或从同步端下载的新书会自动排队建立索引。默认关闭，避免意外消耗模型额度。",
+                  )}
+                </p>
+              </div>
+              <Switch checked={autoVectorizeOnImport} onCheckedChange={setAutoVectorizeOnImport} />
+            </div>
+          </section>
+
           {/* Mode toggle */}
           <section className="rounded-lg bg-muted/60 p-4">
             <h2 className="text-sm font-medium text-foreground mb-2">
@@ -589,6 +629,7 @@ export function VectorModelSettings() {
               vectorModels: state.vectorModels,
               selectedVectorModelId: state.selectedVectorModelId,
               vectorModelEnabled: state.vectorModelEnabled,
+              autoVectorizeOnImport: state.autoVectorizeOnImport,
               vectorModelMode: state.vectorModelMode,
               selectedBuiltinModelId: state.selectedBuiltinModelId,
             };
@@ -603,14 +644,18 @@ export function VectorModelSettings() {
                 store.addVectorModel(m);
               }
             }
-            if (d.selectedVectorModelId) store.setSelectedVectorModelId(d.selectedVectorModelId as string);
-            if (typeof d.vectorModelEnabled === "boolean") store.setVectorModelEnabled(d.vectorModelEnabled);
-            if (d.vectorModelMode === "remote" || d.vectorModelMode === "builtin") store.setVectorModelMode(d.vectorModelMode);
-            if (d.selectedBuiltinModelId) store.setSelectedBuiltinModelId(d.selectedBuiltinModelId as string);
+            if (d.selectedVectorModelId)
+              store.setSelectedVectorModelId(d.selectedVectorModelId as string);
+            if (typeof d.vectorModelEnabled === "boolean")
+              store.setVectorModelEnabled(d.vectorModelEnabled);
+            if (typeof d.autoVectorizeOnImport === "boolean")
+              store.setAutoVectorizeOnImport(d.autoVectorizeOnImport);
+            if (d.vectorModelMode === "remote" || d.vectorModelMode === "builtin")
+              store.setVectorModelMode(d.vectorModelMode);
+            if (d.selectedBuiltinModelId)
+              store.setSelectedBuiltinModelId(d.selectedBuiltinModelId as string);
           }}
-          validate={(d) =>
-            typeof d === "object" && d !== null && "vectorModels" in d
-          }
+          validate={(d) => typeof d === "object" && d !== null && "vectorModels" in d}
         />
       </section>
     </div>

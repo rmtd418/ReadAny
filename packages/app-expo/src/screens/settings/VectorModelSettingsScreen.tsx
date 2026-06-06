@@ -1,14 +1,14 @@
-import {
-  ChevronLeftIcon,
-  EditIcon,
-  PlusIcon,
-  Trash2Icon,
-  XIcon,
-} from "@/components/ui/Icon";
+import { ChevronLeftIcon, EditIcon, PlusIcon, Trash2Icon, XIcon } from "@/components/ui/Icon";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
-import { ConfigTransfer } from "../../components/settings/ConfigTransfer";
 import { useVectorModelStore } from "@/stores/vector-model-store";
-import { type ThemeColors, fontSize, fontWeight, radius, useColors, withOpacity } from "@/styles/theme";
+import {
+  type ThemeColors,
+  fontSize,
+  fontWeight,
+  radius,
+  useColors,
+  withOpacity,
+} from "@/styles/theme";
 import { useNavigation } from "@react-navigation/native";
 import type { VectorModelConfig } from "@readany/core/types";
 /**
@@ -29,6 +29,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ConfigTransfer } from "../../components/settings/ConfigTransfer";
 import { PasswordInput } from "../../components/ui/PasswordInput";
 
 export default function VectorModelSettingsScreen() {
@@ -39,7 +40,9 @@ export default function VectorModelSettingsScreen() {
   const layout = useResponsiveLayout();
   const {
     vectorModelEnabled,
+    autoVectorizeOnImport,
     setVectorModelEnabled,
+    setAutoVectorizeOnImport,
   } = useVectorModelStore();
 
   return (
@@ -71,7 +74,9 @@ export default function VectorModelSettingsScreen() {
               <View style={s.enableCard}>
                 <View style={s.enableInfo}>
                   <Text style={s.enableTitle}>{t("settings.vm_title", "向量模型")}</Text>
-                  <Text style={s.enableDesc}>{t("settings.vm_desc", "启用向量搜索和知识检索")}</Text>
+                  <Text style={s.enableDesc}>
+                    {t("settings.vm_desc", "启用向量搜索和知识检索")}
+                  </Text>
                 </View>
                 <Switch
                   value={vectorModelEnabled}
@@ -82,11 +87,44 @@ export default function VectorModelSettingsScreen() {
               </View>
             </View>
 
-            {vectorModelEnabled && <RemoteModelsSection />}
+            {vectorModelEnabled && (
+              <>
+                <View style={s.section}>
+                  <View style={s.enableCard}>
+                    <View style={s.enableInfo}>
+                      <Text style={s.enableTitle}>
+                        {t("settings.vm_autoVectorizeOnImport", "导入后自动向量化")}
+                      </Text>
+                      <Text style={s.enableDesc}>
+                        {t(
+                          "settings.vm_autoVectorizeOnImportDesc",
+                          "导入或从同步端下载的新书会自动排队建立索引。默认关闭，避免意外消耗模型额度。",
+                        )}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={autoVectorizeOnImport}
+                      onValueChange={setAutoVectorizeOnImport}
+                      trackColor={{ false: colors.muted, true: colors.primary }}
+                      thumbColor={colors.card}
+                    />
+                  </View>
+                </View>
+
+                <RemoteModelsSection />
+              </>
+            )}
 
             {/* Transfer */}
             <View style={{ marginTop: 16 }}>
-              <Text style={{ fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.foreground, marginBottom: 8 }}>
+              <Text
+                style={{
+                  fontSize: fontSize.sm,
+                  fontWeight: fontWeight.semibold,
+                  color: colors.foreground,
+                  marginBottom: 8,
+                }}
+              >
                 {t("settings.transferConfig", "配置迁移")}
               </Text>
               <ConfigTransfer
@@ -97,6 +135,7 @@ export default function VectorModelSettingsScreen() {
                     vectorModels: state.vectorModels,
                     selectedVectorModelId: state.selectedVectorModelId,
                     vectorModelEnabled: state.vectorModelEnabled,
+                    autoVectorizeOnImport: state.autoVectorizeOnImport,
                     vectorModelMode: state.vectorModelMode,
                     selectedBuiltinModelId: state.selectedBuiltinModelId,
                   };
@@ -108,10 +147,16 @@ export default function VectorModelSettingsScreen() {
                     for (const m of store.vectorModels) store.deleteVectorModel(m.id);
                     for (const m of d.vectorModels as VectorModelConfig[]) store.addVectorModel(m);
                   }
-                  if (d.selectedVectorModelId) store.setSelectedVectorModelId(d.selectedVectorModelId as string);
-                  if (typeof d.vectorModelEnabled === "boolean") store.setVectorModelEnabled(d.vectorModelEnabled);
-                  if (d.vectorModelMode === "remote" || d.vectorModelMode === "builtin") store.setVectorModelMode(d.vectorModelMode);
-                  if (d.selectedBuiltinModelId) store.setSelectedBuiltinModelId(d.selectedBuiltinModelId as string);
+                  if (d.selectedVectorModelId)
+                    store.setSelectedVectorModelId(d.selectedVectorModelId as string);
+                  if (typeof d.vectorModelEnabled === "boolean")
+                    store.setVectorModelEnabled(d.vectorModelEnabled);
+                  if (typeof d.autoVectorizeOnImport === "boolean")
+                    store.setAutoVectorizeOnImport(d.autoVectorizeOnImport);
+                  if (d.vectorModelMode === "remote" || d.vectorModelMode === "builtin")
+                    store.setVectorModelMode(d.vectorModelMode);
+                  if (d.selectedBuiltinModelId)
+                    store.setSelectedBuiltinModelId(d.selectedBuiltinModelId as string);
                 }}
                 validate={(d) => typeof d === "object" && d !== null && "vectorModels" in d}
               />

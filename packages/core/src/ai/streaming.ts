@@ -1,3 +1,4 @@
+import i18n from "i18next";
 /**
  * AI Streaming service — handles streaming chat completions
  * Uses LangGraph reading agent for unified model support with tool calling.
@@ -6,12 +7,13 @@
 import type { AIConfig, Book, SemanticContext, Skill, Thread } from "../types";
 import { streamReadingAgent } from "./agents/reading-agent";
 import { processMessages } from "./message-pipeline";
+import { getToolResultError } from "./tool-result";
 import type { ToolDefinition } from "./tools/tool-types";
-import i18n from "i18next";
 
 export interface StreamingOptions {
   thread: Thread;
   book: Book | null;
+  bookId?: string | null;
   semanticContext: SemanticContext | null;
   enabledSkills: Skill[];
   isVectorized: boolean;
@@ -27,11 +29,21 @@ export interface StreamingOptions {
   onToken: (token: string) => void;
   onComplete: (
     fullText: string,
-    toolCalls?: Array<{ name: string; args: Record<string, unknown>; result?: unknown }>,
+    toolCalls?: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      result?: unknown;
+      error?: string;
+    }>,
   ) => void;
   onAbort?: (
     fullText: string,
-    toolCalls?: Array<{ name: string; args: Record<string, unknown>; result?: unknown }>,
+    toolCalls?: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      result?: unknown;
+      error?: string;
+    }>,
   ) => void;
   onError: (error: Error) => void;
   onToolCall?: (toolName: string, args: Record<string, unknown>) => void;
@@ -62,10 +74,12 @@ export class StreamingChat {
       options.thread,
       {
         book: options.book,
+        bookId: options.book?.id || options.bookId || options.thread.bookId || null,
         semanticContext: options.semanticContext,
         enabledSkills: options.enabledSkills,
         isVectorized: options.isVectorized,
         userLanguage: i18n.language || options.book?.meta.language || "en",
+        memorySummary: options.thread.memorySummary,
       },
       { slidingWindowSize: options.aiConfig.slidingWindowSize },
     );
@@ -79,18 +93,24 @@ export class StreamingChat {
 
     try {
       let fullText = "";
-      const toolCalls: Array<{ name: string; args: Record<string, unknown>; result?: unknown }> =
-        [];
+      const toolCalls: Array<{
+        name: string;
+        args: Record<string, unknown>;
+        result?: unknown;
+        error?: string;
+      }> = [];
 
       const stream = streamReadingAgent(
         {
           aiConfig: options.aiConfig,
           book: options.book,
+          bookId: options.book?.id || options.bookId || options.thread.bookId || null,
           semanticContext: options.semanticContext,
           enabledSkills: options.enabledSkills,
           isVectorized: options.isVectorized,
           deepThinking: options.deepThinking,
           spoilerFree: options.spoilerFree,
+          memorySummary: options.thread.memorySummary,
           getAvailableTools: options.getAvailableTools,
           signal,
         },
@@ -137,13 +157,17 @@ export class StreamingChat {
             toolCalls.push({ name: event.name, args: event.args });
             break;
 
-          case "tool_result":
+          case "tool_result": {
             options.onToolResult?.(event.name, event.result);
             const existingTc = [...toolCalls]
               .reverse()
-              .find((tc) => tc.name === event.name && !tc.result);
-            if (existingTc) existingTc.result = event.result;
+              .find((tc) => tc.name === event.name && tc.result === undefined);
+            if (existingTc) {
+              existingTc.result = event.result;
+              existingTc.error = getToolResultError(event.result) || undefined;
+            }
             break;
+          }
 
           case "reasoning":
             options.onReasoning?.(event.content, event.stepType);

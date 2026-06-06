@@ -23,6 +23,11 @@ import {
 import { createAddCitationTool, createGetAnnotationsTool } from "./annotation-tools";
 import { getContextTools } from "./context-tools";
 import {
+  createFallbackChapterContextTool,
+  createFallbackSearchTool,
+  createFallbackTocTool,
+} from "./fallback-content-tools";
+import {
   createClassifyBooksTool,
   createListBooksTool,
   createManageBookGroupsTool,
@@ -90,9 +95,16 @@ export function getAvailableTools(options: {
         createFindQuotesTool(options.bookId),
         createCompareSectionsTool(options.bookId),
       );
+    } else {
+      tools.push(
+        createFallbackTocTool(options.bookId),
+        createFallbackSearchTool(options.bookId),
+        createFallbackChapterContextTool(options.bookId),
+      );
     }
 
-    // Annotation & citation tools (always available when book is loaded)
+    // Citations are available for indexed chunks and for fallback sources that
+    // can be validated against concrete reader segments.
     tools.push(createGetAnnotationsTool(options.bookId), createAddCitationTool(options.bookId));
   }
 

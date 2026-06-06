@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---- Mocks ----
 vi.mock("../../db/database", () => ({
@@ -62,7 +62,12 @@ import {
 import { emitLibraryChanged } from "../../events/library-events";
 import { search } from "../../rag/search";
 import { loadFromFS } from "../../stores/persist";
+import { setFallbackContentProvider } from "../fallback-content-service";
 import { getAvailableTools } from "../tools";
+
+afterEach(() => {
+  setFallbackContentProvider(null);
+});
 
 // ---- Helpers ----
 function findTool(tools: ReturnType<typeof getAvailableTools>, name: string) {
@@ -109,7 +114,10 @@ function makeBook(overrides: Record<string, unknown> = {}) {
 // getAvailableTools — assembly logic
 // ============================================
 describe("getAvailableTools", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setFallbackContentProvider(null);
+  });
 
   it("should return general tools when no bookId", () => {
     const tools = getAvailableTools({ bookId: null, isVectorized: false, enabledSkills: [] });
@@ -130,7 +138,17 @@ describe("getAvailableTools", () => {
     expect(names).not.toContain("getAnnotations");
   });
 
-  it("should include annotation tools when bookId provided", () => {
+  it("should register fallback exploration tools for non-vectorized books", () => {
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain("fallbackToc");
+    expect(names).toContain("fallbackSearch");
+    expect(names).toContain("fallbackChapterContext");
+    expect(names).not.toContain("ragSearch");
+  });
+
+  it("should include annotations and validated citations for non-vectorized books", () => {
     const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
     const names = tools.map((t) => t.name);
     expect(names).toContain("getAnnotations");
@@ -150,6 +168,8 @@ describe("getAvailableTools", () => {
     expect(names).toContain("analyzeArguments");
     expect(names).toContain("findQuotes");
     expect(names).toContain("compareSections");
+    expect(names).toContain("getAnnotations");
+    expect(names).toContain("addCitation");
   });
 
   it("should include custom skill tools", () => {
@@ -557,6 +577,85 @@ describe("compareSections tool", () => {
 });
 
 // ============================================
+// fallback content tools
+// ============================================
+describe("fallback content tools", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function registerFallbackChapters() {
+    vi.mocked(getBook).mockResolvedValue(makeBook({ isVectorized: false }) as any);
+    setFallbackContentProvider({
+      async getChapters() {
+        return [
+          {
+            index: 0,
+            title: "Chapter 1",
+            content:
+              "Opening paragraph.\n\nThe target passage explains how fallback citations find their position.",
+            segments: [
+              { text: "Opening paragraph.", cfi: "epubcfi(/6/2!/4/2)" },
+              {
+                text: "The target passage explains how fallback citations find their position.",
+                cfi: "epubcfi(/6/2!/4/4)",
+              },
+            ],
+          },
+        ];
+      },
+    });
+  }
+
+  it("returns a segment CFI for fallback search matches", async () => {
+    registerFallbackChapters();
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tool = findTool(tools, "fallbackSearch");
+    const result = (await tool.execute({ query: "target passage", topK: 1 })) as any;
+
+    expect(result.results[0].chapterTitle).toBe("Chapter 1");
+    expect(result.results[0].cfi).toBe("epubcfi(/6/2!/4/4)");
+    expect(result.results[0].cfiPrecision).toBe("segment");
+  });
+
+  it("registers fallback citations only when quoted text resolves to a segment CFI", async () => {
+    registerFallbackChapters();
+    vi.mocked(getChunks).mockResolvedValue([]);
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tool = findTool(tools, "addCitation");
+    const result = (await tool.execute({
+      citationIndex: 1,
+      chapterTitle: "Chapter 1",
+      chapterIndex: 0,
+      cfi: "",
+      quotedText: "target passage explains",
+      reasoning: "fallback source",
+    })) as any;
+
+    expect(result.type).toBe("citation");
+    expect(result.cfi).toBe("epubcfi(/6/2!/4/4)");
+  });
+
+  it("rejects fallback citations that cannot be resolved", async () => {
+    registerFallbackChapters();
+    vi.mocked(getChunks).mockResolvedValue([]);
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tool = findTool(tools, "addCitation");
+    const result = (await tool.execute({
+      citationIndex: 1,
+      chapterTitle: "Chapter 1",
+      chapterIndex: 0,
+      cfi: "epubcfi(/fake)",
+      quotedText: "not in this chapter",
+      reasoning: "fallback source",
+    })) as any;
+
+    expect(result.error).toContain("Could not resolve a precise CFI");
+  });
+});
+
+// ============================================
 // getAnnotations tool
 // ============================================
 describe("getAnnotations tool", () => {
@@ -570,7 +669,7 @@ describe("getAnnotations tool", () => {
       { title: "Note 1", content: "Note content", chapterTitle: "Ch 1" },
     ] as any);
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "getAnnotations");
     const result = (await tool.execute({ type: "all" })) as any;
 
@@ -585,7 +684,7 @@ describe("getAnnotations tool", () => {
       { text: "Highlight", chapterTitle: "Ch 1", color: "blue" },
     ] as any);
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "getAnnotations");
     const result = (await tool.execute({ type: "highlights" })) as any;
 
@@ -598,7 +697,7 @@ describe("getAnnotations tool", () => {
       { title: "My Note", content: "Content", chapterTitle: "Ch 1" },
     ] as any);
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "getAnnotations");
     const result = (await tool.execute({ type: "notes" })) as any;
 
@@ -624,7 +723,7 @@ describe("addCitation tool", () => {
       }),
     ] as any);
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "addCitation");
     const result = (await tool.execute({
       citationIndex: 1,
@@ -644,7 +743,7 @@ describe("addCitation tool", () => {
   it("should fallback to AI-provided CFI when refinement fails", async () => {
     vi.mocked(getChunks).mockRejectedValue(new Error("DB error"));
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "addCitation");
     const result = (await tool.execute({
       citationIndex: 1,
@@ -670,7 +769,7 @@ describe("addCitation tool", () => {
       }),
     ] as any);
 
-    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "addCitation");
     const result = (await tool.execute({
       citationIndex: 1,

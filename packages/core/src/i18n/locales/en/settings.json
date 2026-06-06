@@ -189,6 +189,8 @@
     "vectorModel": "Vector Model",
     "vm_title": "Vector Model",
     "vm_desc": "Configure embedding model for semantic search and RAG retrieval",
+    "vm_autoVectorizeOnImport": "Auto-vectorize new books",
+    "vm_autoVectorizeOnImportDesc": "When enabled, imported or synced-downloaded books are queued for indexing automatically. Off by default to avoid unexpected model usage.",
     "vm_modeTitle": "Model Source",
     "vm_modeBuiltin": "Built-in Local Model",
     "vm_modeBuiltinDesc": "Download model to run locally, no API required",

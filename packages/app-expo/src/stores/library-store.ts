@@ -50,6 +50,11 @@ export interface RemoveBookOptions {
   preserveData?: boolean;
 }
 
+function keepActiveGroupId(activeGroupId: string, groups: BookGroup[]): string {
+  if (!activeGroupId) return "";
+  return groups.some((group) => group.id === activeGroupId) ? activeGroupId : "";
+}
+
 export interface LibraryState {
   books: Book[];
   groups: BookGroup[];
@@ -693,12 +698,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const cached = await loadFromFS<Book[]>("library-books");
       const cachedGroups = await loadFromFS<BookGroup[]>("library-groups");
       if (cached && cached.length > 0) {
-        set({
+        const groups = cachedGroups ?? get().groups;
+        set((state) => ({
           books: cached,
-          groups: cachedGroups ?? get().groups,
+          groups,
           isLoaded: true,
           allTags: computeTags(cached),
-        });
+          activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+        }));
       }
     } catch (err) {
       console.warn("[Library] Failed to load cached books:", err);
@@ -727,7 +734,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const emptyTags = savedTags.filter((t) => !dbTagSet.has(t) && !deletedSet.has(t));
       const allTags = [...dbTags, ...emptyTags].sort();
 
-      set({ books, groups, isLoaded: true, allTags });
+      set((state) => ({
+        books,
+        groups,
+        isLoaded: true,
+        allTags,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
       debouncedSave("library-books", books);
       debouncedSave("library-groups", groups);
       debouncedSave("library-tags", allTags);
@@ -741,7 +754,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       await db.initDatabase();
       const groups = await db.getGroups();
-      set({ groups });
+      set((state) => ({
+        groups,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
       debouncedSave("library-groups", groups);
     } catch (err) {
       console.error("Failed to load groups from database:", err);
@@ -866,7 +882,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           }
 
           const deletedMatch = fileHash
-            ? await db.getDeletedBookByFileHash(fileHash).catch((err) => { console.warn("[Library] Failed to check deleted book by hash:", err); return null; })
+            ? await db.getDeletedBookByFileHash(fileHash).catch((err) => {
+                console.warn("[Library] Failed to check deleted book by hash:", err);
+                return null;
+              })
             : null;
           const bookId = deletedMatch?.id ?? generateId();
 
@@ -983,13 +1002,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               try {
                 const vmState = useVectorModelStore.getState();
                 if (
+                  vmState.autoVectorizeOnImport &&
                   vmState.vectorModelEnabled &&
                   vmState.hasVectorCapability() &&
                   shouldAutoVectorizeMobile("txt", conversion.epubBytes.byteLength)
                 ) {
                   const base64 = bytesToBase64(conversion.epubBytes);
                   queueAutoVectorize(book, base64, "application/epub+zip");
-                } else if (vmState.vectorModelEnabled && vmState.hasVectorCapability()) {
+                } else if (
+                  vmState.autoVectorizeOnImport &&
+                  vmState.vectorModelEnabled &&
+                  vmState.hasVectorCapability()
+                ) {
                   console.warn(
                     `[importBooks] Skip auto-vectorize for large TXT conversion: ${fileName} (${conversion.epubBytes.byteLength} bytes)`,
                   );
@@ -1107,6 +1131,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               try {
                 const vmState = useVectorModelStore.getState();
                 if (
+                  vmState.autoVectorizeOnImport &&
                   vmState.vectorModelEnabled &&
                   vmState.hasVectorCapability() &&
                   shouldAutoVectorizeMobile("umd", conversion.epubBytes.byteLength)
@@ -1225,6 +1250,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           try {
             const vmState = useVectorModelStore.getState();
             if (
+              vmState.autoVectorizeOnImport &&
               vmState.vectorModelEnabled &&
               vmState.hasVectorCapability() &&
               shouldAutoVectorizeMobile(format, fileSize)
@@ -1245,7 +1271,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               };
               const mimeType = mimeTypes[format] || "application/epub+zip";
               queueAutoVectorize(book, base64, mimeType);
-            } else if (vmState.vectorModelEnabled && vmState.hasVectorCapability()) {
+            } else if (
+              vmState.autoVectorizeOnImport &&
+              vmState.vectorModelEnabled &&
+              vmState.hasVectorCapability()
+            ) {
               console.warn(
                 `[importBooks] Skip auto-vectorize for large/unsupported mobile import: ${fileName} (${fileSize} bytes, format=${format})`,
               );
@@ -1377,6 +1407,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     });
     try {
       await db.deleteGroup(groupId);
+      const [books, groups] = await Promise.all([db.getBooks(), db.getGroups()]);
+      set((state) => ({
+        books,
+        groups,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
+      debouncedSave("library-groups", groups);
+      debouncedSave("library-books", books);
     } catch (err) {
       console.error("Failed to delete group:", err);
     }
@@ -1418,7 +1456,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     });
     const books = get().books;
     for (const b of books) {
-      db.updateBook(b.id, { tags: b.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+      db.updateBook(b.id, { tags: b.tags }).catch((err) =>
+        console.warn("[Library] Failed to update book tags:", err),
+      );
     }
   },
 
@@ -1438,7 +1478,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     });
     for (const b of get().books) {
       if (b.tags.includes(trimmed)) {
-        db.updateBook(b.id, { tags: b.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+        db.updateBook(b.id, { tags: b.tags }).catch((err) =>
+          console.warn("[Library] Failed to update book tags:", err),
+        );
       }
     }
   },

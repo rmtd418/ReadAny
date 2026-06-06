@@ -112,7 +112,7 @@ export default function SkillsPage() {
           <h1 className="text-3xl font-bold">{t("settings.skills_title")}</h1>
           <p className="text-neutral-500">{t("settings.skills_desc")}</p>
         </div>
-        <Button variant="soft" size="sm" onClick={handleCreate}>
+        <Button size="sm" onClick={handleCreate}>
           <Plus className="size-4" />
           {t("settings.addSkill")}
         </Button>

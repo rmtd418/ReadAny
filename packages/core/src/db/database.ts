@@ -81,6 +81,7 @@ export {
   getThread,
   insertThread,
   updateThreadTitle,
+  updateThreadMemory,
   deleteThread,
   deleteThreadsByBookId,
 } from "./thread-queries";

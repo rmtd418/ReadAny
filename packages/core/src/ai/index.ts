@@ -36,3 +36,10 @@ export { getAvailableTools } from "./tools";
 export { getContextTools } from "./tools";
 
 export { readingContextService, getReadingContextSnapshot } from "./reading-context-service";
+export {
+  fallbackContentService,
+  setFallbackContentProvider,
+  type FallbackChapter,
+  type FallbackContentProvider,
+  type FallbackTextSegment,
+} from "./fallback-content-service";

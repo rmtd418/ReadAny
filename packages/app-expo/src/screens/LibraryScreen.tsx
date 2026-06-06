@@ -43,6 +43,7 @@ import {
   type WebDavImportSource,
   getPlatformService,
 } from "@readany/core";
+import { setFallbackContentProvider } from "@readany/core/ai";
 import { onLibraryChanged } from "@readany/core/events/library-events";
 import { useSyncStore } from "@readany/core/stores";
 import { SYNC_SECRET_KEYS } from "@readany/core/sync/sync-backend";
@@ -245,6 +246,42 @@ export function LibraryScreen() {
 
   useEffect(() => {
     setExtractorRef(extractorRef.current);
+    setFallbackContentProvider({
+      async getChapters(book) {
+        if (!extractorRef.current) throw new Error("Mobile fallback extractor is not ready");
+        const platform = getPlatformService();
+        const appData = await platform.getAppDataDir();
+        const filePath =
+          book.filePath.startsWith("/") ||
+          book.filePath.startsWith("file://") ||
+          book.filePath.startsWith("asset://") ||
+          book.filePath.startsWith("http")
+            ? book.filePath
+            : await platform.joinPath(appData, book.filePath);
+        const bytes = await platform.readFile(filePath);
+        const chunkSize = 0x8000;
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const mimeTypes: Record<string, string> = {
+          epub: "application/epub+zip",
+          pdf: "application/pdf",
+          mobi: "application/x-mobipocket-ebook",
+          azw: "application/vnd.amazon.ebook",
+          azw3: "application/vnd.amazon.ebook",
+          cbz: "application/vnd.comicbook+zip",
+          cbr: "application/vnd.comicbook+zip",
+          fb2: "application/x-fictionbook+xml",
+          fbz: "application/x-zip-compressed-fb2",
+          txt: "text/plain",
+        };
+        return extractorRef.current.extractChapters(
+          btoa(binary),
+          mimeTypes[String(book.format || "").toLowerCase()] || "application/epub+zip",
+        );
+      },
+    });
     setCallback((bookId, progress) => {
       console.log(
         `[AutoVectorize] Book ${bookId}: ${progress.status} (${Math.round(progress.progress * 100)}%)`,
@@ -252,6 +289,7 @@ export function LibraryScreen() {
     });
     return () => {
       setExtractorRef(null);
+      setFallbackContentProvider(null);
       setCallback(null);
     };
   }, []);

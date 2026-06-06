@@ -70,6 +70,8 @@
     "reasoningDone": "Raisonnement",
     "scrollToBottom": "Défiler vers le bas",
     "loadingMindmap": "Chargement de la carte mentale...",
+    "toolFailed": "Appel échoué",
+    "toolFailedDetail": "L'appel de l'outil a échoué",
     "aborted": "Génération arrêtée par l'utilisateur"
   },
   "toolLabels": {
@@ -81,6 +83,7 @@
     "analyzeArguments": "Analyse des arguments",
     "findQuotes": "Recherche de citations",
     "getAnnotations": "Récupération des annotations",
+    "addCitation": "Enregistrement de la citation",
     "compareSections": "Comparaison des sections",
     "getCurrentChapter": "Récupération du chapitre actuel",
     "getSelection": "Récupération de la sélection",
@@ -92,7 +95,10 @@
     "searchAllNotes": "Recherche dans toutes les notes",
     "getReadingStats": "Récupération des statistiques de lecture",
     "getSkills": "Interrogation des compétences",
-    "mindmap": "Génération de la carte mentale"
+    "mindmap": "Génération de la carte mentale",
+    "fallbackToc": "Lecture de la table des matières originale",
+    "fallbackSearch": "Analyse du fichier original",
+    "fallbackChapterContext": "Lecture du contenu du chapitre"
   },
   "mindmap": {
     "title": "Carte mentale",

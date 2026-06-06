@@ -1,6 +1,12 @@
 import { useCallback, useRef, useState } from "react";
+import { maybeCompressThreadMemory } from "../ai/chat-memory";
 import { getBuiltinSkills } from "../ai/skills/builtin-skills";
 import { StreamingChat, createMessageId } from "../ai/streaming";
+import {
+  applyToolResultToParts,
+  markRunningToolCallPartsAsError,
+  toolCallPartToMessageToolCall,
+} from "../ai/tool-call-state";
 import { getAvailableTools } from "../ai/tools";
 import { getSkills as getDbSkills } from "../db/database";
 import i18n from "../i18n";
@@ -30,6 +36,37 @@ import {
   createToolCallPart,
 } from "../types/message";
 import type { MindmapPart } from "../types/message";
+
+function buildPartsOrder(parts: Part[]) {
+  return parts.map((p) => {
+    const base = {
+      type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "mindmap",
+      id: p.id,
+    };
+    if (p.type === "text") {
+      return { ...base, text: (p as TextPart).text };
+    }
+    if (p.type === "mindmap") {
+      return {
+        ...base,
+        title: (p as MindmapPart).title,
+        markdown: (p as MindmapPart).markdown,
+      };
+    }
+    if (p.type === "citation") {
+      return {
+        ...base,
+        bookId: (p as CitationPart).bookId,
+        chapterTitle: (p as CitationPart).chapterTitle,
+        chapterIndex: (p as CitationPart).chapterIndex,
+        cfi: (p as CitationPart).cfi,
+        text: (p as CitationPart).text,
+        citationIndex: (p as CitationPart).citationIndex,
+      };
+    }
+    return base;
+  });
+}
 
 /** Type guard for mindmap tool result */
 function isMindmapResult(
@@ -197,6 +234,24 @@ export function useStreamingChat(options?: StreamingChatOptions) {
           ...thread,
           messages: [...thread.messages, userMessage as any],
         };
+        const threadForStream = await maybeCompressThreadMemory(
+          updatedThread,
+          aiConfigOverride || aiConfig,
+        );
+        if (threadForStream.memoryMessageCount !== updatedThread.memoryMessageCount) {
+          useChatStore.setState((storeState) => ({
+            threads: storeState.threads.map((item) =>
+              item.id === threadForStream.id
+                ? {
+                    ...item,
+                    memorySummary: threadForStream.memorySummary,
+                    memoryUpdatedAt: threadForStream.memoryUpdatedAt,
+                    memoryMessageCount: threadForStream.memoryMessageCount,
+                  }
+                : item,
+            ),
+          }));
+        }
 
         const currentParts: Part[] = [];
         let currentTextPart: TextPart | null = null;
@@ -204,8 +259,9 @@ export function useStreamingChat(options?: StreamingChatOptions) {
         let currentToolCallPart: ToolCallPart | null = null;
         void currentToolCallPart;
         await streamingRef.current.stream({
-          thread: updatedThread,
+          thread: threadForStream,
           book: options?.book || null,
+          bookId,
           semanticContext: options?.semanticContext || null,
           enabledSkills,
           isVectorized: options?.book?.isVectorized || false,
@@ -253,33 +309,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
                 timestamp: p.createdAt,
               }));
 
-            const partsOrder = currentParts.map((p) => {
-              const base = {
-                type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "mindmap",
-                id: p.id,
-              };
-              if (p.type === "text") {
-                return { ...base, text: (p as TextPart).text };
-              }
-              if (p.type === "mindmap") {
-                return {
-                  ...base,
-                  title: (p as MindmapPart).title,
-                  markdown: (p as MindmapPart).markdown,
-                };
-              }
-              if (p.type === "citation") {
-                return {
-                  ...base,
-                  bookId: (p as CitationPart).bookId,
-                  chapterTitle: (p as CitationPart).chapterTitle,
-                  chapterIndex: (p as CitationPart).chapterIndex,
-                  cfi: (p as CitationPart).cfi,
-                  text: (p as CitationPart).text,
-                };
-              }
-              return base;
-            });
+            const partsOrder = buildPartsOrder(currentParts);
 
             const assistantMessage = {
               id: messageId,
@@ -288,13 +318,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
               content: textContent,
               toolCalls: currentParts
                 .filter((p) => p.type === "tool_call")
-                .map((p) => ({
-                  id: p.id,
-                  name: (p as ToolCallPart).name,
-                  args: (p as ToolCallPart).args,
-                  result: (p as ToolCallPart).result,
-                  status: (p as ToolCallPart).status,
-                })),
+                .map((p) => toolCallPartToMessageToolCall(p as ToolCallPart)),
               reasoning: reasoning.length > 0 ? reasoning : undefined,
               partsOrder: partsOrder.length > 0 ? partsOrder : undefined,
               createdAt: Date.now(),
@@ -316,6 +340,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
           },
           onError: async (err) => {
             setError(err);
+            markRunningToolCallPartsAsError(currentParts, err.message || "Unknown error");
 
             const errorPart = createTextPart(`⚠️ ${err.message || "Unknown error"}`);
             errorPart.status = "error";
@@ -335,33 +360,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
               .map((p) => (p as TextPart).text)
               .join("\n");
 
-            const partsOrder = currentParts.map((p) => {
-              const base = {
-                type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "mindmap",
-                id: p.id,
-              };
-              if (p.type === "text") {
-                return { ...base, text: (p as TextPart).text };
-              }
-              if (p.type === "mindmap") {
-                return {
-                  ...base,
-                  title: (p as MindmapPart).title,
-                  markdown: (p as MindmapPart).markdown,
-                };
-              }
-              if (p.type === "citation") {
-                return {
-                  ...base,
-                  bookId: (p as CitationPart).bookId,
-                  chapterTitle: (p as CitationPart).chapterTitle,
-                  chapterIndex: (p as CitationPart).chapterIndex,
-                  cfi: (p as CitationPart).cfi,
-                  text: (p as CitationPart).text,
-                };
-              }
-              return base;
-            });
+            const partsOrder = buildPartsOrder(currentParts);
 
             const errorMessage = {
               id: messageId,
@@ -370,13 +369,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
               content: textContent,
               toolCalls: currentParts
                 .filter((p) => p.type === "tool_call")
-                .map((p) => ({
-                  id: p.id,
-                  name: (p as ToolCallPart).name,
-                  args: (p as ToolCallPart).args,
-                  result: (p as ToolCallPart).result,
-                  status: (p as ToolCallPart).status,
-                })),
+                .map((p) => toolCallPartToMessageToolCall(p as ToolCallPart)),
               partsOrder: partsOrder.length > 0 ? partsOrder : undefined,
               createdAt: Date.now(),
             };
@@ -422,33 +415,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
                 timestamp: p.createdAt,
               }));
 
-            const partsOrder = currentParts.map((p) => {
-              const base = {
-                type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "mindmap",
-                id: p.id,
-              };
-              if (p.type === "text") {
-                return { ...base, text: (p as TextPart).text };
-              }
-              if (p.type === "mindmap") {
-                return {
-                  ...base,
-                  title: (p as MindmapPart).title,
-                  markdown: (p as MindmapPart).markdown,
-                };
-              }
-              if (p.type === "citation") {
-                return {
-                  ...base,
-                  bookId: (p as CitationPart).bookId,
-                  chapterTitle: (p as CitationPart).chapterTitle,
-                  chapterIndex: (p as CitationPart).chapterIndex,
-                  cfi: (p as CitationPart).cfi,
-                  text: (p as CitationPart).text,
-                };
-              }
-              return base;
-            });
+            const partsOrder = buildPartsOrder(currentParts);
 
             const abortedMessage = {
               id: messageId,
@@ -458,13 +425,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
               parts: currentParts,
               toolCalls: currentParts
                 .filter((p) => p.type === "tool_call")
-                .map((p) => ({
-                  id: p.id,
-                  name: (p as ToolCallPart).name,
-                  args: (p as ToolCallPart).args,
-                  result: (p as ToolCallPart).result,
-                  status: (p as ToolCallPart).status,
-                })),
+                .map((p) => toolCallPartToMessageToolCall(p as ToolCallPart)),
               reasoning: reasoning.length > 0 ? reasoning : undefined,
               partsOrder: partsOrder.length > 0 ? partsOrder : undefined,
               createdAt: Date.now(),
@@ -502,19 +463,8 @@ export function useStreamingChat(options?: StreamingChatOptions) {
             }));
           },
           onToolResult: (name, result) => {
-            const part = [...currentParts]
-              .reverse()
-              .find(
-                (p) =>
-                  p.type === "tool_call" &&
-                  (p as ToolCallPart).name === name &&
-                  !(p as ToolCallPart).result,
-              ) as ToolCallPart | undefined;
+            const part = applyToolResultToParts(currentParts, name, result);
             if (part) {
-              part.result = result;
-              part.status = "completed";
-              part.updatedAt = Date.now();
-
               if (name === "mindmap" && isMindmapResult(result)) {
                 const mindmapPart = createMindmapPart(result.title, result.markdown);
                 currentParts.push(mindmapPart);
