@@ -50,6 +50,11 @@ export interface RemoveBookOptions {
   preserveData?: boolean;
 }
 
+function keepActiveGroupId(activeGroupId: string, groups: BookGroup[]): string {
+  if (!activeGroupId) return "";
+  return groups.some((group) => group.id === activeGroupId) ? activeGroupId : "";
+}
+
 export interface LibraryState {
   books: Book[];
   groups: BookGroup[];
@@ -693,12 +698,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const cached = await loadFromFS<Book[]>("library-books");
       const cachedGroups = await loadFromFS<BookGroup[]>("library-groups");
       if (cached && cached.length > 0) {
-        set({
+        const groups = cachedGroups ?? get().groups;
+        set((state) => ({
           books: cached,
-          groups: cachedGroups ?? get().groups,
+          groups,
           isLoaded: true,
           allTags: computeTags(cached),
-        });
+          activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+        }));
       }
     } catch (err) {
       console.warn("[Library] Failed to load cached books:", err);
@@ -727,7 +734,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const emptyTags = savedTags.filter((t) => !dbTagSet.has(t) && !deletedSet.has(t));
       const allTags = [...dbTags, ...emptyTags].sort();
 
-      set({ books, groups, isLoaded: true, allTags });
+      set((state) => ({
+        books,
+        groups,
+        isLoaded: true,
+        allTags,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
       debouncedSave("library-books", books);
       debouncedSave("library-groups", groups);
       debouncedSave("library-tags", allTags);
@@ -741,7 +754,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       await db.initDatabase();
       const groups = await db.getGroups();
-      set({ groups });
+      set((state) => ({
+        groups,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
       debouncedSave("library-groups", groups);
     } catch (err) {
       console.error("Failed to load groups from database:", err);
@@ -1391,6 +1407,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     });
     try {
       await db.deleteGroup(groupId);
+      const [books, groups] = await Promise.all([db.getBooks(), db.getGroups()]);
+      set((state) => ({
+        books,
+        groups,
+        activeGroupId: keepActiveGroupId(state.activeGroupId, groups),
+      }));
+      debouncedSave("library-groups", groups);
+      debouncedSave("library-books", books);
     } catch (err) {
       console.error("Failed to delete group:", err);
     }
