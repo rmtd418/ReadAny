@@ -128,19 +128,13 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
     [inject],
   );
 
-  const goNext = useCallback(
-    (distance?: number) => {
-      inject(`window.goNext(${Number.isFinite(distance) ? distance : ""})`);
-    },
-    [inject],
-  );
+  const goNext = useCallback(() => {
+    inject("window.goNext()");
+  }, [inject]);
 
-  const goPrev = useCallback(
-    (distance?: number) => {
-      inject(`window.goPrev(${Number.isFinite(distance) ? distance : ""})`);
-    },
-    [inject],
-  );
+  const goPrev = useCallback(() => {
+    inject("window.goPrev()");
+  }, [inject]);
 
   const goLeft = useCallback(() => {
     inject("window.goLeft()");
@@ -634,10 +628,11 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
   }, []);
 
   // ─── Ruby Annotation Commands ───
-  const setRubyDicts = useCallback((wordDictJson: string | null, charDictJson: string | null) => {
-    const wordArg = wordDictJson ? JSON.stringify(wordDictJson) : "null";
-    const charArg = charDictJson ? JSON.stringify(charDictJson) : "null";
-    webViewRef.current?.injectJavaScript(`
+  const setRubyDicts = useCallback(
+    (wordDictJson: string | null, charDictJson: string | null) => {
+      const wordArg = wordDictJson ? JSON.stringify(wordDictJson) : "null";
+      const charArg = charDictJson ? JSON.stringify(charDictJson) : "null";
+      webViewRef.current?.injectJavaScript(`
         (function() {
           try {
             if (window.setRubyDicts) {
@@ -647,10 +642,13 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         })();
         true;
       `);
-  }, []);
+    },
+    [],
+  );
 
-  const injectRuby = useCallback((mode: string) => {
-    webViewRef.current?.injectJavaScript(`
+  const injectRuby = useCallback(
+    (mode: string) => {
+      webViewRef.current?.injectJavaScript(`
         (function() {
           try {
             if (window.injectRuby) window.injectRuby(${JSON.stringify(mode)});
@@ -658,7 +656,9 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         })();
         true;
       `);
-  }, []);
+    },
+    [],
+  );
 
   const removeRuby = useCallback(() => {
     webViewRef.current?.injectJavaScript(`
@@ -689,45 +689,45 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
         return;
       }
 
-      const { deltaY, start, end, viewSize, totalSections } = msg;
+      const { deltaY, start, end, viewSize, size, totalSections } = msg;
       const currentIndex =
         typeof msg.currentSectionIndex === "number"
           ? msg.currentSectionIndex
           : msg.currentSectionIndex.current;
       const threshold = 30;
-      // deltaY > 0 → finger moving down (reading backward, toward chapter top)
-      // deltaY < 0 → finger moving up (reading forward, toward chapter bottom)
-      // Predictive geometry: turn when this gesture would carry past the edge.
-      const scrollDelta = deltaY;
 
-      const atStart = scrollDelta > threshold && start <= scrollDelta;
-      const atEnd = scrollDelta < -threshold && Math.ceil(end) - scrollDelta >= viewSize;
+      const atStart = start <= Math.abs(deltaY) || start <= size * 0.3;
+      const atEnd =
+        Math.ceil(end) >= viewSize - Math.abs(deltaY) || Math.ceil(end) >= viewSize - size * 0.3;
 
       console.log("[ReaderBridge] continuous-scroll:", {
         deltaY,
         start,
         end,
         viewSize,
+        size,
         currentIndex,
         totalSections,
         atStart,
         atEnd,
+        thresholdCheck: deltaY < -threshold,
+        indexCheck: currentIndex < totalSections - 1,
       });
 
       // Finger moves up (deltaY < 0) at end of chapter → go to next
-      if (atEnd && currentIndex < totalSections - 1) {
+      if (deltaY < -threshold && atEnd && currentIndex < totalSections - 1) {
         console.log("[ReaderBridge] Going to next chapter");
         scrollTransitioningRef.current = true;
-        goNext(Math.max(1, viewSize - Math.floor(end) + 1));
+        goNext();
         setTimeout(() => {
           scrollTransitioningRef.current = false;
         }, 500);
       }
       // Finger moves down (deltaY > 0) at start of chapter → go to prev
-      else if (atStart && currentIndex > 0) {
+      else if (deltaY > threshold && atStart && currentIndex > 0) {
         console.log("[ReaderBridge] Going to previous chapter");
         scrollTransitioningRef.current = true;
-        goPrev(Math.max(1, Math.ceil(start) + 1));
+        goPrev();
         setTimeout(() => {
           scrollTransitioningRef.current = false;
         }, 500);
