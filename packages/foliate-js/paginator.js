@@ -1057,6 +1057,34 @@ export class Paginator extends HTMLElement {
             width: 0;
             height: 0;
         }
+        @media (hover: hover) and (pointer: fine) {
+            :host([flow="scrolled"]) #container {
+                scrollbar-color: rgba(116, 103, 82, .42) transparent;
+                scrollbar-width: thin;
+            }
+            :host([flow="scrolled"]) #container::-webkit-scrollbar {
+                display: block;
+                width: 10px;
+                height: 10px;
+                background: transparent;
+            }
+            :host([flow="scrolled"]) #container::-webkit-scrollbar-track,
+            :host([flow="scrolled"]) #container::-webkit-scrollbar-track-piece,
+            :host([flow="scrolled"]) #container::-webkit-scrollbar-corner {
+                background: transparent;
+            }
+            :host([flow="scrolled"]) #container::-webkit-scrollbar-thumb {
+                min-height: 48px;
+                border: 3px solid transparent;
+                border-radius: 999px;
+                background: rgba(116, 103, 82, .42);
+                background-clip: content-box;
+            }
+            :host([flow="scrolled"]) #container::-webkit-scrollbar-thumb:hover {
+                background: rgba(116, 103, 82, .62);
+                background-clip: content-box;
+            }
+        }
         :host([flow="scrolled"]) #container.vertical {
             flex-direction: row;
         }
