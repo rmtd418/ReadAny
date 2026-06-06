@@ -219,20 +219,15 @@ export const useTTSStore = create<TTSState>()(
       const { playState } = get();
       if (playState !== "paused") return;
 
-      // Engines with true suspend/resume: if that player is actually suspended,
-      // continue exactly where paused — no re-synthesis, no API re-call, no jump.
-      // Do NOT bump generation or rebind callbacks; the original speak()'s callbacks
-      // keep driving progress. Otherwise fall through to the re-speak block below
-      // (system engine, or engine changed while paused so the player isn't suspended).
+      // DashScope supports true suspend/resume and derives progress from the audio
+      // clock (#358), so if it is actually suspended, continue exactly where paused —
+      // no re-synthesis, no API re-call, no jump. Do NOT bump generation or rebind
+      // callbacks; the original speak()'s callbacks keep driving progress.
+      // Edge is intentionally NOT true-resumed here: its highlight notifications are
+      // wall-clock timers cleared on pause and not rescheduled on resume, so a true
+      // resume would skip highlights — it stays on the re-speak path below (its main behavior).
       if (config.engine === "dashscope" && config.dashscopeApiKey) {
         const player = getDashScopeTTS();
-        if (player.paused) {
-          player.resume();
-          set({ playState: "playing" });
-          return;
-        }
-      } else if (config.engine === "edge") {
-        const player = getEdgeTTS();
         if (player.paused) {
           player.resume();
           set({ playState: "playing" });
