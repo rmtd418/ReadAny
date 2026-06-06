@@ -1056,7 +1056,6 @@
           attachPullBookmarkListener(doc);
           attachSelectionListener(doc);
           attachNoteLongPress(doc);
-          attachContinuousScrollListener(doc);
           refreshUserAnnotations(100);
           // Auto-inject ruby annotations if enabled
           if (_rubyMode && (_rubyWordDict || _rubyCharDict)) {
@@ -2157,66 +2156,6 @@ a { color: ${primary} !important; }
           selectionBottom: iframeRect.top + lastRect.bottom,
         },
       });
-    }
-
-    // ─── Continuous scroll listener ───
-    function attachContinuousScrollListener(doc) {
-      if (doc.__readany_continuous_scroll) return;
-      doc.__readany_continuous_scroll = true;
-
-      let touchStartY = 0;
-      let touchStartX = 0;
-
-      doc.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          touchStartY = e.touches[0].clientY;
-          touchStartX = e.touches[0].clientX;
-        }
-      }, { passive: true });
-
-      doc.addEventListener('touchend', (e) => {
-        if (!view || !view.renderer) return;
-        const renderer = view.renderer;
-        if (!renderer.scrolled) return;
-
-        if (e.changedTouches.length !== 1) return;
-
-        const touchEndY = e.changedTouches[0].clientY;
-        const touchEndX = e.changedTouches[0].clientX;
-        const deltaY = touchEndY - touchStartY;
-        const deltaX = touchEndX - touchStartX;
-
-        if (Math.abs(deltaY) <= Math.abs(deltaX) || Math.abs(deltaY) <= 30) return;
-
-        const postContinuousScroll = () => {
-          const latestRenderer = view && view.renderer;
-          if (!latestRenderer || !latestRenderer.scrolled) return;
-          postToRN('continuous-scroll', {
-            deltaY,
-            start: latestRenderer.start,
-            end: latestRenderer.end,
-            viewSize: latestRenderer.viewSize,
-            size: latestRenderer.size,
-            currentSectionIndex,
-            totalSections,
-          });
-        };
-
-        if (renderer.size >= renderer.viewSize) {
-          postContinuousScroll();
-        } else {
-          let posted = false;
-          let fallbackTimer = null;
-          const postOnce = () => {
-            if (posted) return;
-            posted = true;
-            if (fallbackTimer) clearTimeout(fallbackTimer);
-            postContinuousScroll();
-          };
-          renderer.addEventListener('relocate', postOnce, { once: true });
-          fallbackTimer = setTimeout(postOnce, 320);
-        }
-      }, { passive: true });
     }
 
     // ─── TOC conversion ───
