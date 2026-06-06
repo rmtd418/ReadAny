@@ -8,6 +8,7 @@
 
 import { getPlatformService } from "../services/platform";
 import { fetchEdgeTTSAudio } from "./edge-tts";
+import { type ChunkBoundary, resolveCurrentChunk } from "./playback-cursor";
 import { splitIntoChunks } from "./text-utils";
 import type { ITTSPlayer, TTSConfig } from "./types";
 
@@ -132,6 +133,11 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
   private checkEndTimer: ReturnType<typeof setInterval> | null = null;
   private pendingBytes: Uint8Array[] = [];
   private decodeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private chunkBoundaries: ChunkBoundary[] = [];
+  private totalChunks = 0;
+  private currentStreamIndex = 0;
+  private boundaryRecorded = false;
+  private lastNotifiedChunkIndex = -1;
 
   onStateChange?: (state: "playing" | "paused" | "stopped") => void;
   onChunkChange?: (index: number, total: number) => void;
@@ -163,6 +169,9 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     this._paused = false;
     this.allChunksDone = false;
     this.hasAudioData = false;
+    this.totalChunks = chunks.length;
+    this.chunkBoundaries = [];
+    this.lastNotifiedChunkIndex = -1;
 
     this.audioCtx = new AudioContext();
     this.gainNode = this.audioCtx.createGain();
@@ -171,6 +180,13 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
 
     this.checkEndTimer = setInterval(() => {
       if (!this._playing) return;
+      if (this.audioCtx) {
+        const current = resolveCurrentChunk(this.chunkBoundaries, this.audioCtx.currentTime);
+        if (current >= 0 && current !== this.lastNotifiedChunkIndex) {
+          this.lastNotifiedChunkIndex = current;
+          this.onChunkChange?.(current, this.totalChunks);
+        }
+      }
       if (
         this.allChunksDone &&
         this.audioCtx &&
@@ -190,7 +206,8 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
 
     for (let i = 0; i < chunks.length; i++) {
       if (!this._playing) return;
-      this.onChunkChange?.(i, chunks.length);
+      this.currentStreamIndex = i;
+      this.boundaryRecorded = false;
       try {
         await this.streamChunk(chunks[i], config, i === 0);
       } catch (err) {
@@ -332,6 +349,11 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     source.start(startAt);
     this.scheduledEnd = startAt + audioBuffer.duration;
     this.hasAudioData = true;
+
+    if (!this.boundaryRecorded) {
+      this.chunkBoundaries.push({ index: this.currentStreamIndex, startAt });
+      this.boundaryRecorded = true;
+    }
   }
 
   private finishPlayback() {
@@ -376,6 +398,9 @@ export class DashScopeTTSPlayer implements ITTSPlayer {
     this.pendingBytes = [];
     this.allChunksDone = false;
     this.hasAudioData = false;
+    this.chunkBoundaries = [];
+    this.lastNotifiedChunkIndex = -1;
+    this.boundaryRecorded = false;
     this._playing = false;
     this._paused = false;
     this.onStateChange?.("stopped");
