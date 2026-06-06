@@ -200,6 +200,7 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   analyzeArguments: "toolLabels.analyzeArguments",
   findQuotes: "toolLabels.findQuotes",
   getAnnotations: "toolLabels.getAnnotations",
+  addCitation: "toolLabels.addCitation",
   compareSections: "toolLabels.compareSections",
   getCurrentChapter: "toolLabels.getCurrentChapter",
   getSelection: "toolLabels.getSelection",
@@ -216,8 +217,6 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   fallbackSearch: "toolLabels.fallbackSearch",
   fallbackChapterContext: "toolLabels.fallbackChapterContext",
 };
-
-const INTERNAL_TOOL_NAMES = new Set(["addCitation"]);
 
 function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const { t } = useTranslation();
@@ -252,8 +251,6 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
   useEffect(() => {
     if (hasError) setIsOpen(true);
   }, [hasError]);
-
-  if (INTERNAL_TOOL_NAMES.has(part.name) && !hasError) return null;
 
   return (
     <div className="my-1">

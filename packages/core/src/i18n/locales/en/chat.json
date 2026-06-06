@@ -83,6 +83,7 @@
     "analyzeArguments": "Analyzing arguments",
     "findQuotes": "Finding quotes",
     "getAnnotations": "Getting annotations",
+    "addCitation": "Registering citation",
     "compareSections": "Comparing sections",
     "getCurrentChapter": "Getting current chapter",
     "getSelection": "Getting selection",

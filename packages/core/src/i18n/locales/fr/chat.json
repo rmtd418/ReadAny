@@ -83,6 +83,7 @@
     "analyzeArguments": "Analyse des arguments",
     "findQuotes": "Recherche de citations",
     "getAnnotations": "Récupération des annotations",
+    "addCitation": "Enregistrement de la citation",
     "compareSections": "Comparaison des sections",
     "getCurrentChapter": "Récupération du chapitre actuel",
     "getSelection": "Récupération de la sélection",

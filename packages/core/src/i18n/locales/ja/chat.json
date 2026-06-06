@@ -83,6 +83,7 @@
     "analyzeArguments": "議論を分析中",
     "findQuotes": "引用を検索中",
     "getAnnotations": "注釈を取得中",
+    "addCitation": "引用を登録中",
     "compareSections": "セクションを比較中",
     "getCurrentChapter": "現在の章を取得中",
     "getSelection": "選択テキストを取得中",

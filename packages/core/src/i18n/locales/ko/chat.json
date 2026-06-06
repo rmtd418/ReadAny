@@ -83,6 +83,7 @@
     "analyzeArguments": "논점 분석 중",
     "findQuotes": "인용구 찾는 중",
     "getAnnotations": "주석 가져오는 중",
+    "addCitation": "인용 등록 중",
     "compareSections": "섹션 비교 중",
     "getCurrentChapter": "현재 챕터 가져오는 중",
     "getSelection": "선택 영역 가져오는 중",
