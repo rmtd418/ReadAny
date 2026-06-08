@@ -3,6 +3,10 @@ const createSVGElement = (tag) => document.createElementNS("http://www.w3.org/20
 export class Overlayer {
   #svg = createSVGElement("svg");
   #map = new Map();
+  #maskId = `overlayer-mask-${Math.random().toString(36).slice(2)}`;
+  #mask = null;
+  #maskBase = null;
+  #hole = null;
   constructor() {
     Object.assign(this.#svg.style, {
       position: "absolute",
@@ -15,6 +19,59 @@ export class Overlayer {
   }
   get element() {
     return this.#svg;
+  }
+  #ensureMask() {
+    if (this.#mask) return this.#mask;
+
+    const defs = createSVGElement("defs");
+    const mask = createSVGElement("mask");
+    mask.setAttribute("id", this.#maskId);
+    mask.setAttribute("maskUnits", "userSpaceOnUse");
+    mask.setAttribute("maskContentUnits", "userSpaceOnUse");
+
+    const base = createSVGElement("rect");
+    base.setAttribute("x", "0");
+    base.setAttribute("y", "0");
+    base.setAttribute("width", "100%");
+    base.setAttribute("height", "100%");
+    base.setAttribute("fill", "white");
+
+    mask.append(base);
+    defs.append(mask);
+    this.#svg.prepend(defs);
+
+    this.#mask = mask;
+    this.#maskBase = base;
+    return mask;
+  }
+  setHole(x, y, width, height, radius = 0) {
+    if (![x, y, width, height].every((value) => Number.isFinite(value))) return;
+
+    const mask = this.#ensureMask();
+    let hole = this.#hole;
+    if (!hole) {
+      hole = createSVGElement("rect");
+      hole.setAttribute("fill", "black");
+      mask.append(hole);
+      this.#hole = hole;
+    }
+
+    hole.setAttribute("x", `${x - width / 2}`);
+    hole.setAttribute("y", `${y - height / 2}`);
+    hole.setAttribute("width", `${Math.max(0, width)}`);
+    hole.setAttribute("height", `${Math.max(0, height)}`);
+    hole.setAttribute("rx", `${Math.max(0, radius)}`);
+    hole.setAttribute("ry", `${Math.max(0, radius)}`);
+    this.#svg.style.mask = `url(#${this.#maskId})`;
+    this.#svg.style.webkitMask = `url(#${this.#maskId})`;
+  }
+  clearHole() {
+    if (this.#hole) {
+      this.#hole.remove();
+      this.#hole = null;
+    }
+    this.#svg.style.mask = "";
+    this.#svg.style.webkitMask = "";
   }
   add(key, range, draw, options) {
     if (this.#map.has(key)) this.remove(key);
