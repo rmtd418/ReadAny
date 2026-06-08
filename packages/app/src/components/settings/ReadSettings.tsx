@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useAppStore } from "@/stores/app-store";
+import { useLibraryStore } from "@/stores/library-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useFontStore } from "@readany/core/stores";
 import { type RubyMode, useRubyStore } from "@readany/core/stores/ruby-store";
@@ -20,9 +21,16 @@ import { useTranslation } from "react-i18next";
 export function ReadSettingsPanel() {
   const { t } = useTranslation();
   const { readSettings, updateReadSettings } = useSettingsStore();
+  const appTabs = useAppStore((s) => s.tabs);
+  const activeTabId = useAppStore((s) => s.activeTabId);
+  const books = useLibraryStore((s) => s.books);
   const customFonts = useFontStore((s) => s.fonts);
   const selectedFontId = useFontStore((s) => s.selectedFontId);
   const setSelectedFont = useFontStore((s) => s.setSelectedFont);
+  const activeReaderTab = appTabs.find((tab) => tab.id === activeTabId && tab.type === "reader");
+  const activeBook = books.find((book) => book.id === activeReaderTab?.bookId);
+  const isCurrentBookUnsupportedForChapterSlider =
+    activeBook?.format === "pdf" || activeBook?.format === "cbz";
 
   const currentFontValue = selectedFontId ?? "system";
 
@@ -74,6 +82,39 @@ export function ReadSettingsPanel() {
                 <SelectItem value="double">{t("settings.doublePage")}</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-foreground">{t("settings.progressSliderMode")}</span>
+              <Select
+                value={readSettings.progressSliderMode ?? "book"}
+                onValueChange={(v) =>
+                  updateReadSettings({ progressSliderMode: v as "book" | "chapter" })
+                }
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="book">{t("settings.progressSliderBook")}</SelectItem>
+                  <SelectItem
+                    value="chapter"
+                    disabled={isCurrentBookUnsupportedForChapterSlider}
+                  >
+                    {t("settings.progressSliderChapter")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground/80">
+              {t("settings.progressSliderModeDesc")}
+            </p>
+            {isCurrentBookUnsupportedForChapterSlider && (
+              <p className="mt-1 text-xs text-muted-foreground/80">
+                {t("settings.progressSliderModeCurrentFallback")}
+              </p>
+            )}
           </div>
 
           {/* Font */}

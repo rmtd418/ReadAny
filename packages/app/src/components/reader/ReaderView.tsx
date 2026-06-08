@@ -521,6 +521,11 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
   // Current section index for chapter translation
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [chapterSliderState, setChapterSliderState] = useState<{
+    fraction: number;
+    start: number;
+    end: number;
+  } | null>(null);
 
   // Track when foliate is ready to receive annotations
   const [foliateReady, setFoliateReady] = useState(false);
@@ -1124,6 +1129,20 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
         setCurrentPage(0);
       }
 
+      if (
+        typeof detail.fractionInSection === "number" &&
+        detail.sectionBounds &&
+        detail.sectionBounds.end >= detail.sectionBounds.start
+      ) {
+        setChapterSliderState({
+          fraction: Math.max(0, Math.min(1, detail.fractionInSection)),
+          start: detail.sectionBounds.start,
+          end: detail.sectionBounds.end,
+        });
+      } else {
+        setChapterSliderState(null);
+      }
+
       const trackingSuppressed = Date.now() < progressTrackingGuardUntilRef.current;
 
       // Track reading progress.
@@ -1220,6 +1239,37 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       throttledSaveProgress,
       translationReady,
     ],
+  );
+
+  const progressSliderMode = viewSettings.progressSliderMode ?? "book";
+  const isChapterSliderSupported = !isFixedLayout;
+  const effectiveProgressSliderMode =
+    progressSliderMode === "chapter" && isChapterSliderSupported ? "chapter" : "book";
+  const footerProgressPercent =
+    effectiveProgressSliderMode === "chapter"
+      ? Math.round((chapterSliderState?.fraction ?? 0) * 100)
+      : Math.round((readerTab?.progress ?? 0) * 100);
+
+  const handleFooterSeek = useCallback(
+    (fraction: number) => {
+      suppressProgressTracking(3000);
+
+      if (
+        effectiveProgressSliderMode === "chapter" &&
+        chapterSliderState &&
+        chapterSliderState.end > chapterSliderState.start
+      ) {
+        const globalFraction =
+          chapterSliderState.start +
+          Math.max(0, Math.min(1, fraction)) *
+            (chapterSliderState.end - chapterSliderState.start);
+        foliateRef.current?.goToFraction(globalFraction);
+        return;
+      }
+
+      foliateRef.current?.goToFraction(fraction);
+    },
+    [chapterSliderState, effectiveProgressSliderMode],
   );
 
   const handleTocReady = useCallback((toc: TOCItem[]) => {
@@ -2892,16 +2942,13 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
           {/* Floating Footer bar — overlays content area */}
           <FooterBar
-            tabId={tabId}
             totalPages={totalPages}
             currentPage={currentPage}
+            progressPercent={footerProgressPercent}
             isVisible={controlsVisible}
             onPrev={handleNavPrev}
             onNext={handleNavNext}
-            onSeek={(fraction) => {
-              suppressProgressTracking(3000);
-              foliateRef.current?.goToFraction(fraction);
-            }}
+            onSeek={handleFooterSeek}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           />

@@ -51,6 +51,7 @@ const defaultReadSettings: ReadSettings = {
   paginatedLayout: "double",
   pageMargin: 40,
   paragraphSpacing: 16,
+  progressSliderMode: "book",
   showTopTitleProgress: true,
   showBottomTimeBattery: true,
   volumeButtonsPageTurn: false,

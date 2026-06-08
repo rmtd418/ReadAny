@@ -558,6 +558,8 @@ function getAnchorPreviewPosition(
 /** Relocate event detail from foliate-view */
 export interface RelocateDetail {
   fraction?: number;
+  fractionInSection?: number;
+  sectionBounds?: { start: number; end: number };
   section?: { current: number; total: number };
   location?: { current: number; next: number; total: number };
   page?: { current: number; total: number };

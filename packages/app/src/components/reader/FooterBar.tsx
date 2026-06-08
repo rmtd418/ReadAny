@@ -17,7 +17,6 @@ import {
   resolveSystemVoiceValue,
 } from "@/lib/tts/system-voices";
 import type { TTSEngine } from "@/lib/tts/tts-service";
-import { useReaderStore } from "@/stores/reader-store";
 import { useTTSStore } from "@/stores/tts-store";
 import { getLocaleDisplayLabel, groupEdgeTTSVoices } from "@readany/core/tts";
 import {
@@ -36,9 +35,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface FooterBarProps {
-  tabId: string;
   totalPages: number;
   currentPage: number;
+  progressPercent: number;
   isVisible: boolean;
   onPrev: () => void;
   onNext: () => void;
@@ -51,9 +50,9 @@ interface FooterBarProps {
 }
 
 export function FooterBar({
-  tabId,
   totalPages,
   currentPage,
+  progressPercent,
   isVisible,
   onPrev,
   onNext,
@@ -64,7 +63,6 @@ export function FooterBar({
   onTTSClose,
 }: FooterBarProps) {
   const { t, i18n } = useTranslation();
-  const tab = useReaderStore((s) => s.tabs[tabId]);
 
   const playState = useTTSStore((s) => s.playState);
   const config = useTTSStore((s) => s.config);
@@ -100,8 +98,7 @@ export function FooterBar({
     if (!showTTS) setTtsExpanded(false);
   }, [showTTS]);
 
-  const progress = tab?.progress ?? 0;
-  const pct = Math.round(progress * 100);
+  const pct = Math.max(0, Math.min(100, Math.round(progressPercent)));
 
   // Local slider value for smooth dragging (avoids snap-back)
   const [localSliderValue, setLocalSliderValue] = useState<number | null>(null);

@@ -75,8 +75,15 @@ export class SectionProgress {
     const nextSize = size + pageFraction * sizeInSection;
     const remainingTotal = sizeTotal - size;
     const remainingSection = (1 - fractionInSection) * sizeInSection;
+    const sectionStart = this.sectionFractions[index] ?? 0;
+    const sectionEnd = this.sectionFractions[index + 1] ?? 1;
     return {
       fraction: nextSize / sizeTotal,
+      fractionInSection,
+      sectionBounds: {
+        start: sectionStart,
+        end: sectionEnd,
+      },
       section: {
         current: index,
         total: sizes.length,

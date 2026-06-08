@@ -65,6 +65,7 @@ export interface BookGroup {
 
 export type ViewMode = "paginated" | "scroll";
 export type PaginatedLayout = "single" | "double";
+export type ProgressSliderMode = "book" | "chapter";
 
 /** Font theme preset */
 export interface FontTheme {
@@ -93,6 +94,11 @@ export interface ReadSettings extends ViewSettings {
   showTopTitleProgress: boolean;
   showBottomTimeBattery: boolean;
   volumeButtonsPageTurn: boolean;
+  /**
+   * Optional for backward compatibility with persisted settings from older versions.
+   * `book` keeps the original whole-book slider behavior.
+   */
+  progressSliderMode?: ProgressSliderMode;
   defaultHighlightColor?: HighlightColor;
   /**
    * Mobile-only opt-in: when true, the reader scales fontSize by the OS
