@@ -151,6 +151,15 @@ export function AppLayout() {
   }, [toggleCommandPalette]);
 
   useEffect(() => {
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener("contextmenu", handleContextMenu, { capture: true });
+    return () => window.removeEventListener("contextmenu", handleContextMenu, { capture: true });
+  }, []);
+
+  useEffect(() => {
     if (!isReaderActive) return;
 
     const handleMouseMove = (e: MouseEvent) => {
