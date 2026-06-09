@@ -18,6 +18,15 @@ export async function toggleWindowFullscreen(appWindow: TauriWindow): Promise<vo
     return;
   }
 
+  // Try entering true fullscreen directly first. On Windows this avoids the
+  // visible "restore -> expand" jitter when the window is already maximized.
+  await appWindow.setFullscreen(true);
+  await waitForWindowState(WINDOW_STATE_SETTLE_MS);
+
+  if (await appWindow.isFullscreen()) {
+    return;
+  }
+
   if (maximized) {
     await appWindow.unmaximize();
     await waitForWindowState(WINDOW_STATE_SETTLE_MS);
