@@ -70,6 +70,8 @@
     "reasoningDone": "思考过程",
     "scrollToBottom": "回到底部",
     "loadingMindmap": "加载思维导图...",
+    "toolNotice": "已停止搜索",
+    "toolNoticeDetail": "章节搜索已停止",
     "toolFailed": "调用失败",
     "toolFailedDetail": "工具调用失败",
     "aborted": "用户取消了生成"

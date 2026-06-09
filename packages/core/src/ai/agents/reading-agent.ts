@@ -21,6 +21,10 @@ import type { ToolDefinition, ToolParameter } from "../tools/tool-types";
 
 const CHAPTER_REFERENCE_RE =
   /(?:第\s*)?[零〇一二两三四五六七八九十百千万\d]{1,8}\s*(?:章|卷|节|回|讲|篇|话)|这一章|这一节|chapter\s*\d+/iu;
+const CHAPTER_REFERENCE_EXECUTION_LIMIT = 3;
+const CHAPTER_TOOL_EXECUTION_LIMIT = 8;
+const DEFAULT_RECURSION_LIMIT = 24;
+const CHAPTER_TASK_RECURSION_LIMIT = 24;
 
 const CHAPTER_TASK_TOOL_NAMES = new Set([
   "resolveChapterReference",
@@ -33,6 +37,89 @@ const CHAPTER_TASK_TOOL_NAMES = new Set([
   "getSurroundingContext",
   "addCitation",
 ]);
+
+const CHAPTER_LOOKUP_STOP_TOOL_NAMES = new Set([
+  "resolveChapterReference",
+  "ragSearch",
+  "ragToc",
+  "ragContext",
+  "summarize",
+  "extractEntities",
+  "analyzeArguments",
+  "findQuotes",
+  "compareSections",
+  "fallbackSearch",
+  "fallbackToc",
+  "fallbackChapterContext",
+  "getCurrentChapter",
+  "getSurroundingContext",
+]);
+
+function simplifyChapterLookupQuery(query: string, fallback: string): string {
+  const source = (query || fallback).normalize("NFKC");
+  const sanitizedSource = source.replace(
+    /(?:这|那|哪)\s*一\s*(?:章|卷|节|回|讲|篇|话)/gu,
+    " ",
+  );
+  const chapterNumber = sanitizedSource.match(
+    /(?:第\s*)?([零〇一二两三四五六七八九十百千万\d]{1,8})\s*(?:章|卷|节|回|讲|篇|话)/u,
+  );
+  if (chapterNumber?.[1]) {
+    return `第${chapterNumber[1].replace(/\s+/g, "")}章`;
+  }
+
+  const simplified = source
+    .replace(
+      /请问|帮我|看看|查一下|搜一下|告诉我|想知道|讲讲|说说|内容|讲了什么|讲什么|说了什么|这一章|那一章|这一节|那一节|是哪一章/gu,
+      " ",
+    )
+    .replace(/[，。、“”"'`!！?？,:：;；()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!simplified) return source.trim();
+
+  const segments = simplified
+    .split(/\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  return segments[0] || simplified;
+}
+
+function buildSecondAttemptChapterLookupQuery(query: string, fallback: string): string {
+  const source = (query || fallback).normalize("NFKC");
+  return source
+    .replace(
+      /请问|帮我|看看|查一下|搜一下|告诉我|想知道|讲讲|说说|内容|讲了什么|讲什么|说了什么|这一章|那一章|这一节|那一节|是哪一章/gu,
+      " ",
+    )
+    .replace(/[，。、“”"'`!！?？,:：;；()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildChapterReferenceLimitResult(
+  lastResult: unknown,
+  attemptedQueries: string[],
+): Record<string, unknown> {
+  const base =
+    lastResult && typeof lastResult === "object" ? (lastResult as Record<string, unknown>) : {};
+  return {
+    ...base,
+    matched: false,
+    chapterIndex: undefined,
+    chapterTitle: undefined,
+    detectedChapterNumber: undefined,
+    attemptLimitReached: true,
+    attemptedQueries,
+    notice:
+      "未能可靠定位章节，请补充更准确的章节名",
+    reason:
+      "Chapter lookup attempt limit reached. Stop chapter search in this turn and ask the user for a more accurate chapter title.",
+  };
+}
 
 // --- Stream Event Types ---
 
@@ -152,6 +239,15 @@ export async function* streamReadingAgent(
 
   // Helper to check if aborted
   const isAborted = () => signal?.aborted ?? false;
+  const chapterReferenceState = {
+    executions: 0,
+    totalChapterToolExecutions: 0,
+    attemptedQueries: [] as string[],
+    lastResult: null as unknown,
+    limitReached: false,
+  };
+  const pendingToolCallNames: string[] = [];
+  const isChapterTask = CHAPTER_REFERENCE_RE.test(userInput);
 
   try {
     // Early abort check
@@ -279,7 +375,68 @@ export async function* streamReadingAgent(
         description: tool.description,
         schema,
         func: async (input) => {
-          return JSON.stringify(await executeTool(tool, input as Record<string, unknown>));
+          const toolInput = { ...(input as Record<string, unknown>) };
+          const isChapterLookupTool = CHAPTER_LOOKUP_STOP_TOOL_NAMES.has(tool.name);
+
+          if (chapterReferenceState.limitReached && isChapterLookupTool) {
+            return JSON.stringify(
+              buildChapterReferenceLimitResult(
+                chapterReferenceState.lastResult,
+                chapterReferenceState.attemptedQueries,
+              ),
+            );
+          }
+
+          if (isChapterTask && isChapterLookupTool) {
+            if (chapterReferenceState.totalChapterToolExecutions >= CHAPTER_TOOL_EXECUTION_LIMIT) {
+              chapterReferenceState.limitReached = true;
+              return JSON.stringify(
+                buildChapterReferenceLimitResult(
+                  chapterReferenceState.lastResult,
+                  chapterReferenceState.attemptedQueries,
+                ),
+              );
+            }
+            chapterReferenceState.totalChapterToolExecutions += 1;
+          }
+
+          if (tool.name === "resolveChapterReference") {
+            if (chapterReferenceState.executions >= CHAPTER_REFERENCE_EXECUTION_LIMIT) {
+              chapterReferenceState.limitReached = true;
+              return JSON.stringify(
+                buildChapterReferenceLimitResult(
+                  chapterReferenceState.lastResult,
+                  chapterReferenceState.attemptedQueries,
+                ),
+              );
+            }
+
+            const originalQuery = String(toolInput.query || userInput || "").trim();
+            const effectiveQuery =
+              chapterReferenceState.executions === 0
+                ? originalQuery
+                : chapterReferenceState.executions === 1
+                  ? buildSecondAttemptChapterLookupQuery(originalQuery, userInput) || originalQuery
+                  : simplifyChapterLookupQuery(originalQuery, userInput) || originalQuery;
+
+            toolInput.query = effectiveQuery;
+            chapterReferenceState.executions += 1;
+            chapterReferenceState.attemptedQueries.push(effectiveQuery);
+          }
+
+          const result = await executeTool(tool, toolInput);
+          if (tool.name === "resolveChapterReference") {
+            chapterReferenceState.lastResult = result;
+            if (
+              chapterReferenceState.executions >= CHAPTER_REFERENCE_EXECUTION_LIMIT &&
+              (!result ||
+                typeof result !== "object" ||
+                (result as Record<string, unknown>).matched !== true)
+            ) {
+              chapterReferenceState.limitReached = true;
+            }
+          }
+          return JSON.stringify(result);
         },
       });
     });
@@ -295,7 +452,10 @@ export async function* streamReadingAgent(
     // Keep normal turns bounded; batch chapter tasks should use dedicated flows later.
     const eventStream = agent.streamEvents(
       { messages: inputMessages },
-      { version: "v2", recursionLimit: 24 },
+      {
+        version: "v2",
+        recursionLimit: isChapterTask ? CHAPTER_TASK_RECURSION_LIMIT : DEFAULT_RECURSION_LIMIT,
+      },
     );
 
     // Track tool calls already emitted (from streaming chunks or on_chat_model_end)
@@ -459,6 +619,7 @@ export async function* streamReadingAgent(
 
       // Tool call started — skip if already emitted earlier
       if (event.event === "on_tool_start") {
+        pendingToolCallNames.push(event.name);
         if (pendingEarlyToolCalls > 0) {
           pendingEarlyToolCalls--;
         } else {
@@ -473,6 +634,9 @@ export async function* streamReadingAgent(
 
       // Tool call completed
       if (event.event === "on_tool_end") {
+        const pendingIndex = pendingToolCallNames.findIndex((name) => name === event.name);
+        if (pendingIndex >= 0) pendingToolCallNames.splice(pendingIndex, 1);
+
         let result: unknown = event.data?.output;
         // ToolMessage objects need to have their content extracted
         const resultContent = (result as any)?.content ?? (result as any)?.lc_kwargs?.content;
@@ -515,7 +679,26 @@ export async function* streamReadingAgent(
     if (error instanceof Error) {
       console.error("[ReadingAgent] Stack:", error.stack);
     }
-    yield { type: "error", error: error instanceof Error ? error.message : String(error) };
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isRecursionError = /Recursion limit/i.test(errorMessage);
+    if (isChapterTask && (chapterReferenceState.limitReached || isRecursionError)) {
+      const limitResult = buildChapterReferenceLimitResult(
+        chapterReferenceState.lastResult,
+        chapterReferenceState.attemptedQueries,
+      );
+      const uniquePendingNames = Array.from(new Set(pendingToolCallNames)).filter((name) =>
+        CHAPTER_LOOKUP_STOP_TOOL_NAMES.has(name),
+      );
+      for (const name of uniquePendingNames) {
+        yield { type: "tool_result", name, result: limitResult };
+      }
+      yield {
+        type: "token",
+        content: "未能可靠定位章节，请补充更准确的章节名",
+      };
+      return;
+    }
+    yield { type: "error", error: errorMessage };
   }
 }
 

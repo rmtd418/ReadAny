@@ -105,7 +105,11 @@ function extractChapterNumber(value: string): number | undefined {
 }
 
 function extractQueryChapterNumber(query: string): number | undefined {
-  const match = query.match(QUERY_CHAPTER_RE);
+  const sanitizedQuery = query.replace(
+    /(?:这|那|哪)\s*一\s*(?:章|卷|节|回|讲|篇|话)/gu,
+    " ",
+  );
+  const match = sanitizedQuery.match(QUERY_CHAPTER_RE);
   if (!match?.[1]) return undefined;
   return parseChineseNumber(match[1]) ?? undefined;
 }

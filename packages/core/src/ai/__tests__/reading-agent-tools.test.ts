@@ -194,4 +194,87 @@ describe("streamReadingAgent tool registration", () => {
       }),
     );
   });
+
+  it("limits chapter reference resolution to three real attempts per turn", async () => {
+    const resolveCalls: string[] = [];
+    const resolveTool: ToolDefinition = {
+      name: "resolveChapterReference",
+      description: "Resolve chapter references",
+      parameters: {
+        query: { type: "string", description: "query", required: true },
+      },
+      execute: vi.fn(async (args) => {
+        resolveCalls.push(String(args.query || ""));
+        return {
+          matched: false,
+          confidence: 0.4,
+          matchType: "weak",
+          candidates: [
+            {
+              chapterIndex: 3,
+              chapterTitle: "第3章",
+              confidence: 0.4,
+              matchType: "weak",
+              reason: "weak textual similarity",
+            },
+          ],
+          reason: "No reliable chapter reference found",
+        };
+      }),
+    };
+
+    let capturedTools: any[] = [];
+    createReactAgentMock.mockReturnValue({
+      streamEvents: vi.fn(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          // no-op stream, we only need the wrapped tool functions
+        },
+      })),
+    });
+
+    createReactAgentMock.mockImplementation((config) => {
+      capturedTools = config.tools;
+      return {
+        streamEvents: vi.fn(() => ({
+          [Symbol.asyncIterator]: async function* () {
+            // no-op stream
+          },
+        })),
+      };
+    });
+
+    for await (const event of streamReadingAgent(
+      {
+        aiConfig: makeAIConfig(),
+        book: null,
+        bookId: "book-1",
+        semanticContext: null,
+        enabledSkills: [],
+        isVectorized: true,
+        getAvailableTools: () => [resolveTool],
+      },
+      "张三疯那一章讲了什么",
+    )) {
+      void event;
+    }
+
+    const wrappedResolveTool = capturedTools.find((tool) => tool.name === "resolveChapterReference");
+    expect(wrappedResolveTool).toBeDefined();
+
+    const first = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
+    const second = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
+    const third = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
+
+    expect(resolveCalls).toHaveLength(3);
+    expect(resolveCalls[0]).toBe("张三疯那一章讲了什么");
+    expect(resolveCalls[1]).toBe("张三疯");
+    expect(resolveCalls[2]).toBe("张三疯");
+    expect(first.matched).toBe(false);
+    expect(second.matched).toBe(false);
+    expect(third.matched).toBe(false);
+    const fourth = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
+    expect(fourth.attemptLimitReached).toBe(true);
+    expect(fourth.notice).toBe("未能可靠定位章节，请补充更准确的章节名");
+    expect(fourth.attemptedQueries).toEqual(["张三疯那一章讲了什么", "张三疯", "张三疯"]);
+  });
 });
