@@ -2514,7 +2514,8 @@ export class Paginator extends HTMLElement {
     async goTo(target) {
         if (this.#locked) return
         const resolved = await target
-        if (this.#canGoToIndex(resolved.index)) return this.#goTo(resolved)
+        if (!resolved || !this.#canGoToIndex(resolved.index)) return
+        return this.#goTo(resolved)
     }
     #scrollPrev(distance) {
         if (this.#views.size === 0) return true
@@ -2563,24 +2564,36 @@ export class Paginator extends HTMLElement {
     async #turnPage(dir, distance) {
         if (this.#locked) return
         this.#locked = true
-        const prev = dir === -1
-        const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
-        if (shouldGo) {
-            // Wait for any in-progress background pre-loading to complete —
-            // it may already be loading the section we need, so awaiting
-            // it lets #goTo reuse the view instead of loading from scratch
-            if (this.#fillPromise) await this.#fillPromise
-            const sorted = this.#sortedViews
-            const edgeIndex = prev
-                ? sorted[0]?.[0] ?? this.#primaryIndex
-                : sorted[sorted.length - 1]?.[0] ?? this.#primaryIndex
-            await this.#goTo({
-                index: this.#adjacentIndex(dir, edgeIndex),
-                anchor: prev ? () => 1 : () => 0,
-            })
+        try {
+            const prev = dir === -1
+            const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
+            if (shouldGo) {
+                // Wait for any in-progress background pre-loading to complete —
+                // it may already be loading the section we need, so awaiting
+                // it lets #goTo reuse the view instead of loading from scratch
+                if (this.#fillPromise) {
+                    try {
+                        await this.#fillPromise
+                    } catch (e) {
+                        console.warn(e)
+                    }
+                }
+                const sorted = this.#sortedViews
+                const edgeIndex = prev
+                    ? sorted[0]?.[0] ?? this.#primaryIndex
+                    : sorted[sorted.length - 1]?.[0] ?? this.#primaryIndex
+                const targetIndex = this.#adjacentIndex(dir, edgeIndex)
+                if (targetIndex != null) {
+                    await this.#goTo({
+                        index: targetIndex,
+                        anchor: prev ? () => 1 : () => 0,
+                    })
+                }
+            }
+            if (shouldGo || !this.hasAttribute('animated')) await wait(100)
+        } finally {
+            this.#locked = false
         }
-        if (shouldGo || !this.hasAttribute('animated')) await wait(100)
-        this.#locked = false
     }
     async prev(distance) {
         return await this.#turnPage(-1, distance)
@@ -2591,8 +2604,11 @@ export class Paginator extends HTMLElement {
     async pan(dx, dy) {
         if (this.#locked) return
         this.#locked = true
-        this.scrollBy(dx, dy)
-        this.#locked = false
+        try {
+            this.scrollBy(dx, dy)
+        } finally {
+            this.#locked = false
+        }
     }
     prevSection() {
         return this.goTo({ index: this.#adjacentIndex(-1) })
