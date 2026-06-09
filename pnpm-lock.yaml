@@ -114,6 +114,9 @@ importers:
       '@tauri-apps/plugin-websocket':
         specifier: ^2.4.2
         version: 2.4.2
+      '@tauri-apps/plugin-window-state':
+        specifier: ^2.4.1
+        version: 2.4.1
       '@tiptap/extension-placeholder':
         specifier: ^3.20.0
         version: 3.20.1(@tiptap/extensions@3.20.1(@tiptap/core@3.20.1(@tiptap/pm@3.20.1))(@tiptap/pm@3.20.1))
@@ -3689,6 +3692,9 @@ packages:
 
   '@tauri-apps/plugin-websocket@2.4.2':
     resolution: {integrity: sha512-B1/csKPwJH9kLduNoqWFUdCsTgCvLM84T5ZZYK35jeBc9m2cm2m2G/hbSr28ZpVOZrl0x24fCWFe/9rpp7WETw==}
+
+  '@tauri-apps/plugin-window-state@2.4.1':
+    resolution: {integrity: sha512-OuvdrzyY8Q5Dbzpj+GcrnV1iCeoZbcFdzMjanZMMcAEUNy/6PH5pxZPXpaZLOR7whlzXiuzx0L9EKZbH7zpdRw==}
 
   '@tiptap/core@3.20.1':
     resolution: {integrity: sha512-SwkPEWIfaDEZjC8SEIi4kZjqIYUbRgLUHUuQezo5GbphUNC8kM1pi3C3EtoOPtxXrEbY6e4pWEzW54Pcrd+rVA==}
@@ -13132,6 +13138,10 @@ snapshots:
       '@tauri-apps/api': 2.10.1
 
   '@tauri-apps/plugin-websocket@2.4.2':
+    dependencies:
+      '@tauri-apps/api': 2.10.1
+
+  '@tauri-apps/plugin-window-state@2.4.1':
     dependencies:
       '@tauri-apps/api': 2.10.1
 
