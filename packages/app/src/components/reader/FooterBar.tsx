@@ -38,6 +38,7 @@ interface FooterBarProps {
   totalPages: number;
   currentPage: number;
   progressPercent: number;
+  progressMode?: "book" | "chapter";
   isVisible: boolean;
   onPrev: () => void;
   onNext: () => void;
@@ -53,6 +54,7 @@ export function FooterBar({
   totalPages,
   currentPage,
   progressPercent,
+  progressMode = "book",
   isVisible,
   onPrev,
   onNext,
@@ -99,16 +101,22 @@ export function FooterBar({
   }, [showTTS]);
 
   const pct = Math.max(0, Math.min(100, Math.round(progressPercent)));
+  const isChapterMode = progressMode === "chapter";
 
   // Local slider value for smooth dragging (avoids snap-back)
   const [localSliderValue, setLocalSliderValue] = useState<number | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayPct = localSliderValue != null ? localSliderValue : pct;
+  const displayPct = isChapterMode ? pct : localSliderValue != null ? localSliderValue : pct;
 
   // Debounced progress seek (100ms like readest/anx-reader)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleProgressSeek = useCallback(
     (value: number) => {
+      if (isChapterMode) {
+        onSeek?.(value / 100);
+        return;
+      }
+
       setLocalSliderValue(value);
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
@@ -120,7 +128,7 @@ export function FooterBar({
         setLocalSliderValue(null);
       }, 600);
     },
-    [onSeek],
+    [isChapterMode, onSeek],
   );
 
   const adjustRate = (delta: number) => {

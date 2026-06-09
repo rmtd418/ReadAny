@@ -3026,6 +3026,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             totalPages={totalPages}
             currentPage={currentPage}
             progressPercent={footerProgressPercent}
+            progressMode={effectiveProgressSliderMode}
             isVisible={controlsVisible}
             onPrev={handleNavPrev}
             onNext={handleNavNext}
