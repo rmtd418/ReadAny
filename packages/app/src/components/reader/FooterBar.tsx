@@ -119,6 +119,12 @@ export function FooterBar({
     hasDiscreteChapterSteps && chapterStepCount > 1
       ? Math.round((chapterStepIndex / (chapterStepCount - 1)) * 100)
       : pct;
+  const discreteChapterMarkerPositions =
+    hasDiscreteChapterSteps && chapterStepCount > 1
+      ? Array.from({ length: chapterStepCount }, (_, index) =>
+          (index / (chapterStepCount - 1)) * 100,
+        )
+      : [];
 
   // Local slider value for smooth dragging (avoids snap-back)
   const [localSliderValue, setLocalSliderValue] = useState<number | null>(null);
@@ -330,10 +336,25 @@ export function FooterBar({
               <div className="relative flex-1 h-7 flex items-center group">
                 <div className="absolute inset-x-0 h-[3px] rounded-full bg-muted/60 overflow-hidden">
                   <div
-                    className="h-full bg-primary/70 rounded-full transition-[width] duration-75"
+                    className={`h-full bg-primary/70 rounded-full ${
+                      hasDiscreteChapterSteps ? "" : "transition-[width] duration-75"
+                    }`}
                     style={{ width: `${displayPct}%` }}
                   />
                 </div>
+                {hasDiscreteChapterSteps && (
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {discreteChapterMarkerPositions.map((position, index) => (
+                      <div
+                        key={position}
+                        className={`absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full ${
+                          index <= chapterStepIndex ? "bg-primary/80" : "bg-muted-foreground/30"
+                        }`}
+                        style={{ left: `${position}%` }}
+                      />
+                    ))}
+                  </div>
+                )}
                 <input
                   type="range"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -345,7 +366,9 @@ export function FooterBar({
                   aria-label="Jump to position"
                 />
                 <div
-                  className="absolute w-3 h-3 rounded-full bg-primary shadow-sm border-2 border-background transition-transform group-hover:scale-125 pointer-events-none"
+                  className={`absolute w-3 h-3 rounded-full bg-primary shadow-sm border-2 border-background pointer-events-none ${
+                    hasDiscreteChapterSteps ? "" : "transition-transform group-hover:scale-125"
+                  }`}
                   style={{ left: `calc(${displayPct}% - 6px)` }}
                 />
               </div>

@@ -1321,7 +1321,11 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       ? Math.max(0, Math.min(currentPage - 1, chapterSliderDiscreteStepCount - 1))
       : null;
   const footerProgressPercent =
-    effectiveProgressSliderMode === "chapter"
+    chapterSliderDiscreteStepCount != null && chapterSliderDiscreteStepIndex != null
+      ? chapterSliderDiscreteStepCount > 1
+        ? Math.round((chapterSliderDiscreteStepIndex / (chapterSliderDiscreteStepCount - 1)) * 100)
+        : 0
+      : effectiveProgressSliderMode === "chapter"
       ? Math.round((chapterSliderPendingFraction ?? chapterSliderState?.fraction ?? 0) * 100)
       : Math.round((readerTab?.progress ?? 0) * 100);
 
