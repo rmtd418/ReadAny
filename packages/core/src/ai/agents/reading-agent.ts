@@ -7,17 +7,330 @@ import { z } from "zod";
  * Reading Agent — AI-powered reading assistant using LangGraph ReAct agent
  *
  * Architecture:
- * 1. Uses LangGraph's createReactAgent for automatic tool-calling loop (no hard iteration limit)
- * 2. Uses getAvailableTools() to register ALL tools (RAG, analysis, context)
+ * 1. Uses LangGraph's createReactAgent for automatic tool-calling loop
+ * 2. Uses getAvailableTools() and a lightweight router to keep tool sets focused
  * 3. Builds proper Zod schemas from ToolDefinition.parameters
  * 4. Real streaming via streamEvents API
  * 5. System prompt from system-prompt.ts
  */
 import type { AIConfig, Book, SemanticContext, Skill } from "../../types";
 import { createChatModel } from "../llm-provider";
+import { getReadingContextSnapshot } from "../reading-context-service";
 import { buildSystemPrompt } from "../system-prompt";
 import { ThinkTagStreamParser } from "../think-tag-parser";
 import type { ToolDefinition, ToolParameter } from "../tools/tool-types";
+
+const CHAPTER_REFERENCE_RE =
+  /(?:第\s*)?[零〇一二两三四五六七八九十百千万\d]{1,8}\s*(?:章|卷|节|回|讲|篇|话)|这一章|这一节|chapter\s*\d+/iu;
+const CHAPTER_REFERENCE_EXECUTION_LIMIT = 3;
+const CHAPTER_TOOL_EXECUTION_LIMIT = 8;
+const DEFAULT_RECURSION_LIMIT = 24;
+const CHAPTER_TASK_RECURSION_LIMIT = 24;
+
+const CHAPTER_LOOKUP_STOP_TOOL_NAMES = new Set([
+  "resolveChapterReference",
+  "ragSearch",
+  "ragToc",
+  "ragContext",
+  "summarize",
+  "extractEntities",
+  "analyzeArguments",
+  "findQuotes",
+  "compareSections",
+  "fallbackSearch",
+  "fallbackToc",
+  "fallbackChapterContext",
+  "getCurrentChapter",
+  "getSurroundingContext",
+]);
+
+const GENERAL_CHAT_ONLY_RE =
+  /^(?:你好|您好|hi|hello|hey|thanks|thank you|谢谢|感謝|早上好|中午好|晚上好|在吗|在嗎)[！!？?\s]*$/iu;
+const LIBRARY_REQUEST_RE =
+  /(?:书库|書庫|library|分组|分組|标签|標籤|tag|阅读统计|閱讀統計|reading\s*stats|技能|skill|思维导图|思維導圖|mindmap)/iu;
+const CURRENT_SELECTION_RE =
+  /(?:这段|這段|这句|這句|这部分|這部分|选中|選中|所选|所選|划线|劃線|框选|框選|這一段|这一段|這一句|这一句)/u;
+const CURRENT_PAGE_CONTEXT_RE =
+  /(?:这里|這裡|当前页|當前頁|这一页|這一頁|这页|這頁|当前位置|當前位置|目前看到|我看到这里|我看到這裡)/u;
+const CURRENT_CHAPTER_CONTEXT_RE =
+  /(?:这一章|這一章|这章|這章|当前章节|當前章節|当前章|當前章|現在這章|现在这章|本章)/u;
+const IMMEDIATE_CONTEXT_RE =
+  /(?:什么意思|什麼意思|看不懂|沒看懂|没看懂|解释一下|解釋一下|怎么理解|怎麼理解)/u;
+const BOOK_CONTENT_RE =
+  /(?:这本书|這本書|本书|本書|人物|角色|主角|配角|剧情|劇情|情节|情節|主题|主題|关系|關係|第一次|首次|结局|結局|梗概|总结|總結|摘要|分析|搜索|搜尋|查一下|搜一下|讲了什么|講了什麼|讲什么|講什麼)/u;
+
+const GENERAL_TOOL_NAMES = new Set([
+  "listBooks",
+  "searchAllHighlights",
+  "searchAllNotes",
+  "getReadingStats",
+  "getSkills",
+  "mindmap",
+  "classifyBooks",
+  "tagBooks",
+  "manageBookTags",
+  "updateBookMetadata",
+  "manageBookGroups",
+]);
+
+type ReadingQuestionCategory =
+  | "general_chat"
+  | "library_request"
+  | "current_selection"
+  | "current_page_context"
+  | "current_chapter_context"
+  | "specific_chapter_request"
+  | "book_wide_search";
+
+function normalizeSearchFingerprint(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(
+      /请问|幫我|帮我|看看|查一下|搜一下|告诉我|告訴我|想知道|麻烦|麻煩|請|请|一下/gu,
+      " ",
+    )
+    .replace(/[，。、“”"'`!！?？,:：;；()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stableSerialize(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item)).join(",")}]`;
+
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item)}`).join(",")}}`;
+}
+
+function buildToolCacheKey(toolName: string, args: Record<string, unknown>): string {
+  return `${toolName}:${stableSerialize(args)}`;
+}
+
+function buildSearchToolCacheKey(
+  toolName: string,
+  args: Record<string, unknown>,
+): string | undefined {
+  const rawQuery = typeof args.query === "string" ? args.query : "";
+  const normalized = normalizeSearchFingerprint(rawQuery);
+  if (!normalized) return undefined;
+  return `${toolName}:${normalized}`;
+}
+
+function detectQuestionCategory(options: {
+  userInput: string;
+  hasBookContext: boolean;
+  selectionActive: boolean;
+}): ReadingQuestionCategory {
+  const text = options.userInput.normalize("NFKC").trim();
+  if (!text) return options.hasBookContext ? "book_wide_search" : "general_chat";
+  if (GENERAL_CHAT_ONLY_RE.test(text)) return "general_chat";
+  if (LIBRARY_REQUEST_RE.test(text) || !options.hasBookContext) return "library_request";
+  const hasExplicitCurrentSelectionCue = CURRENT_SELECTION_RE.test(text);
+  const hasExplicitCurrentPageCue = CURRENT_PAGE_CONTEXT_RE.test(text);
+  const hasExplicitCurrentChapterCue = CURRENT_CHAPTER_CONTEXT_RE.test(text);
+  const asksForImmediateExplanation = IMMEDIATE_CONTEXT_RE.test(text);
+
+  if (options.selectionActive && hasExplicitCurrentSelectionCue) {
+    return "current_selection";
+  }
+  if (hasExplicitCurrentPageCue || (asksForImmediateExplanation && hasExplicitCurrentPageCue)) {
+    return "current_page_context";
+  }
+  if (CHAPTER_REFERENCE_RE.test(text)) return "specific_chapter_request";
+  if (hasExplicitCurrentChapterCue) return "current_chapter_context";
+  if (BOOK_CONTENT_RE.test(text)) return "book_wide_search";
+  return "book_wide_search";
+}
+
+function getFocusedToolNames(
+  category: ReadingQuestionCategory,
+  isVectorized: boolean,
+): Set<string> | null {
+  switch (category) {
+    case "general_chat":
+      return new Set();
+    case "library_request":
+      return GENERAL_TOOL_NAMES;
+    case "current_selection":
+      return new Set([
+        "getSelection",
+        "getSurroundingContext",
+        "getCurrentChapter",
+        "addCitation",
+      ]);
+    case "current_page_context":
+      return new Set([
+        "getCurrentChapter",
+        "getSurroundingContext",
+        "getReadingProgress",
+        "addCitation",
+      ]);
+    case "current_chapter_context":
+      return new Set(
+        isVectorized
+          ? [
+              "getCurrentChapter",
+              "getSurroundingContext",
+              "ragContext",
+              "summarize",
+              "addCitation",
+            ]
+          : [
+              "getCurrentChapter",
+              "getSurroundingContext",
+              "fallbackChapterContext",
+              "addCitation",
+            ],
+      );
+    case "specific_chapter_request":
+      return new Set(
+        isVectorized
+          ? [
+              "resolveChapterReference",
+              "ragContext",
+              "summarize",
+              "findQuotes",
+              "extractEntities",
+              "analyzeArguments",
+              "addCitation",
+            ]
+          : [
+              "resolveChapterReference",
+              "fallbackChapterContext",
+              "fallbackToc",
+              "addCitation",
+            ],
+      );
+    case "book_wide_search":
+      return null;
+  }
+}
+
+function filterToolsForQuestion(options: {
+  tools: ToolDefinition[];
+  category: ReadingQuestionCategory;
+  isVectorized: boolean;
+}): ToolDefinition[] {
+  const focusedNames = getFocusedToolNames(options.category, options.isVectorized);
+  if (focusedNames === null) {
+    return options.tools.filter((tool) => !GENERAL_TOOL_NAMES.has(tool.name));
+  }
+
+  const filtered = options.tools.filter((tool) => focusedNames.has(tool.name));
+  return filtered;
+}
+
+function buildRouteHint(
+  category: ReadingQuestionCategory,
+  selectionActive: boolean,
+): string | undefined {
+  switch (category) {
+    case "current_selection":
+      return selectionActive
+        ? "The user already has an active selection. Prefer the selected text and surrounding context before any chapter-wide or book-wide retrieval."
+        : undefined;
+    case "current_page_context":
+      return "This question is about the user's current page or current reading location. Prefer current-context tools before any wider retrieval.";
+    case "current_chapter_context":
+      return "This question is about the chapter the user is currently reading. Get the current chapter first, then use chapter context tools.";
+    case "specific_chapter_request":
+      return "This question targets a specific chapter reference. Resolve the chapter reference first, then read that chapter. Do not start with full-book search.";
+    case "book_wide_search":
+      return "This question may require broader retrieval. Use book-wide search only when current-context tools are insufficient.";
+    case "library_request":
+      return "This is a library-management or cross-book request. Stay within library tools.";
+    default:
+      return undefined;
+  }
+}
+
+function getRecursionLimitForCategory(category: ReadingQuestionCategory): number {
+  switch (category) {
+    case "current_selection":
+    case "current_page_context":
+      return 18;
+    case "current_chapter_context":
+      return 20;
+    case "specific_chapter_request":
+      return CHAPTER_TASK_RECURSION_LIMIT;
+    case "library_request":
+      return 20;
+    case "book_wide_search":
+      return DEFAULT_RECURSION_LIMIT;
+    default:
+      return DEFAULT_RECURSION_LIMIT;
+  }
+}
+
+function simplifyChapterLookupQuery(query: string, fallback: string): string {
+  const source = (query || fallback).normalize("NFKC");
+  const sanitizedSource = source.replace(
+    /(?:这|那|哪)\s*一\s*(?:章|卷|节|回|讲|篇|话)/gu,
+    " ",
+  );
+  const chapterNumber = sanitizedSource.match(
+    /(?:第\s*)?([零〇一二两三四五六七八九十百千万\d]{1,8})\s*(?:章|卷|节|回|讲|篇|话)/u,
+  );
+  if (chapterNumber?.[1]) {
+    return `第${chapterNumber[1].replace(/\s+/g, "")}章`;
+  }
+
+  const simplified = source
+    .replace(
+      /请问|帮我|看看|查一下|搜一下|告诉我|想知道|讲讲|说说|内容|讲了什么|讲什么|说了什么|这一章|那一章|这一节|那一节|是哪一章/gu,
+      " ",
+    )
+    .replace(/[，。、“”"'`!！?？,:：;；()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!simplified) return source.trim();
+
+  const segments = simplified
+    .split(/\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  return segments[0] || simplified;
+}
+
+function buildSecondAttemptChapterLookupQuery(query: string, fallback: string): string {
+  const source = (query || fallback).normalize("NFKC");
+  return source
+    .replace(
+      /请问|帮我|看看|查一下|搜一下|告诉我|想知道|讲讲|说说|内容|讲了什么|讲什么|说了什么|这一章|那一章|这一节|那一节|是哪一章/gu,
+      " ",
+    )
+    .replace(/[，。、“”"'`!！?？,:：;；()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildChapterReferenceLimitResult(
+  lastResult: unknown,
+  attemptedQueries: string[],
+): Record<string, unknown> {
+  const base =
+    lastResult && typeof lastResult === "object" ? (lastResult as Record<string, unknown>) : {};
+  return {
+    ...base,
+    matched: false,
+    chapterIndex: undefined,
+    chapterTitle: undefined,
+    detectedChapterNumber: undefined,
+    attemptLimitReached: true,
+    attemptedQueries,
+    notice:
+      "未能可靠定位章节，请补充更准确的章节名",
+    reason:
+      "Chapter lookup attempt limit reached. Stop chapter search in this turn and ask the user for a more accurate chapter title.",
+  };
+}
 
 // --- Stream Event Types ---
 
@@ -131,6 +444,26 @@ export async function* streamReadingAgent(
 
   // Helper to check if aborted
   const isAborted = () => signal?.aborted ?? false;
+  const readingContextSnapshot = getReadingContextSnapshot();
+  const selectionActive = !!readingContextSnapshot?.selection?.text?.trim();
+  const effectiveBookId = book?.id || bookId || null;
+  const questionCategory = detectQuestionCategory({
+    userInput,
+    hasBookContext: !!effectiveBookId,
+    selectionActive,
+  });
+  const chapterReferenceState = {
+    executions: 0,
+    totalChapterToolExecutions: 0,
+    attemptedQueries: [] as string[],
+    lastResult: null as unknown,
+    limitReached: false,
+  };
+  const toolResultCache = new Map<string, unknown>();
+  const searchResultCache = new Map<string, unknown>();
+  const pendingToolCallNames: string[] = [];
+  const isChapterTask =
+    questionCategory === "specific_chapter_request" || CHAPTER_REFERENCE_RE.test(userInput);
 
   try {
     // Early abort check
@@ -147,12 +480,15 @@ export async function* streamReadingAgent(
     // Check abort after async operation
     if (isAborted()) return;
 
-    // Register ALL tools via injected getAvailableTools
-    const effectiveBookId = book?.id || bookId || null;
-    const tools = getAvailableTools({
-      bookId: effectiveBookId,
+    // Register tools via injected getAvailableTools, then narrow obvious chapter tasks.
+    const tools = filterToolsForQuestion({
+      tools: getAvailableTools({
+        bookId: effectiveBookId,
+        isVectorized,
+        enabledSkills,
+      }),
+      category: questionCategory,
       isVectorized,
-      enabledSkills,
     });
 
     // Build system prompt
@@ -165,6 +501,10 @@ export async function* streamReadingAgent(
       userLanguage: i18n.language || "en",
       spoilerFree,
       memorySummary,
+      questionCategory,
+      selectionActive,
+      routeHint: buildRouteHint(questionCategory, selectionActive),
+      allowedToolNames: tools.map((tool) => tool.name),
     });
 
     // Build input messages (history + user input, without system — handled by agent prompt)
@@ -255,7 +595,88 @@ export async function* streamReadingAgent(
         description: tool.description,
         schema,
         func: async (input) => {
-          return JSON.stringify(await executeTool(tool, input as Record<string, unknown>));
+          const toolInput = { ...(input as Record<string, unknown>) };
+          const isChapterLookupTool = CHAPTER_LOOKUP_STOP_TOOL_NAMES.has(tool.name);
+
+          if (chapterReferenceState.limitReached && isChapterLookupTool) {
+            return JSON.stringify(
+              buildChapterReferenceLimitResult(
+                chapterReferenceState.lastResult,
+                chapterReferenceState.attemptedQueries,
+              ),
+            );
+          }
+
+          if (isChapterTask && isChapterLookupTool) {
+            if (chapterReferenceState.totalChapterToolExecutions >= CHAPTER_TOOL_EXECUTION_LIMIT) {
+              chapterReferenceState.limitReached = true;
+              return JSON.stringify(
+                buildChapterReferenceLimitResult(
+                  chapterReferenceState.lastResult,
+                  chapterReferenceState.attemptedQueries,
+                ),
+              );
+            }
+            chapterReferenceState.totalChapterToolExecutions += 1;
+          }
+
+          if (tool.name === "resolveChapterReference") {
+            if (chapterReferenceState.executions >= CHAPTER_REFERENCE_EXECUTION_LIMIT) {
+              chapterReferenceState.limitReached = true;
+              return JSON.stringify(
+                buildChapterReferenceLimitResult(
+                  chapterReferenceState.lastResult,
+                  chapterReferenceState.attemptedQueries,
+                ),
+              );
+            }
+
+            const originalQuery = String(toolInput.query || userInput || "").trim();
+            const effectiveQuery =
+              chapterReferenceState.executions === 0
+                ? originalQuery
+                : chapterReferenceState.executions === 1
+                  ? buildSecondAttemptChapterLookupQuery(originalQuery, userInput) || originalQuery
+                  : simplifyChapterLookupQuery(originalQuery, userInput) || originalQuery;
+
+            toolInput.query = effectiveQuery;
+            chapterReferenceState.executions += 1;
+            chapterReferenceState.attemptedQueries.push(effectiveQuery);
+          }
+
+          const skipExactCache = tool.name === "addCitation" || tool.name === "resolveChapterReference";
+          const exactCacheKey = skipExactCache ? undefined : buildToolCacheKey(tool.name, toolInput);
+          if (exactCacheKey && toolResultCache.has(exactCacheKey)) {
+            return JSON.stringify(toolResultCache.get(exactCacheKey));
+          }
+
+          const searchCacheKey =
+            tool.name === "ragSearch" || tool.name === "fallbackSearch"
+              ? buildSearchToolCacheKey(tool.name, toolInput)
+              : undefined;
+          if (searchCacheKey && searchResultCache.has(searchCacheKey)) {
+            return JSON.stringify(searchResultCache.get(searchCacheKey));
+          }
+
+          const result = await executeTool(tool, toolInput);
+          if (exactCacheKey) {
+            toolResultCache.set(exactCacheKey, result);
+          }
+          if (searchCacheKey) {
+            searchResultCache.set(searchCacheKey, result);
+          }
+          if (tool.name === "resolveChapterReference") {
+            chapterReferenceState.lastResult = result;
+            if (
+              chapterReferenceState.executions >= CHAPTER_REFERENCE_EXECUTION_LIMIT &&
+              (!result ||
+                typeof result !== "object" ||
+                (result as Record<string, unknown>).matched !== true)
+            ) {
+              chapterReferenceState.limitReached = true;
+            }
+          }
+          return JSON.stringify(result);
         },
       });
     });
@@ -267,12 +688,16 @@ export async function* streamReadingAgent(
       prompt: systemPrompt,
     });
 
-    // Stream events from the agent graph
-    // recursionLimit=50 allows up to ~25 tool-calling rounds (2 graph steps per round)
-    // This supports analyzing all chapters of a book in one conversation turn
+    // Stream events from the agent graph.
+    // Keep normal turns bounded; batch chapter tasks should use dedicated flows later.
     const eventStream = agent.streamEvents(
       { messages: inputMessages },
-      { version: "v2", recursionLimit: 200 },
+      {
+        version: "v2",
+        recursionLimit: isChapterTask
+          ? CHAPTER_TASK_RECURSION_LIMIT
+          : getRecursionLimitForCategory(questionCategory),
+      },
     );
 
     // Track tool calls already emitted (from streaming chunks or on_chat_model_end)
@@ -436,6 +861,7 @@ export async function* streamReadingAgent(
 
       // Tool call started — skip if already emitted earlier
       if (event.event === "on_tool_start") {
+        pendingToolCallNames.push(event.name);
         if (pendingEarlyToolCalls > 0) {
           pendingEarlyToolCalls--;
         } else {
@@ -450,6 +876,9 @@ export async function* streamReadingAgent(
 
       // Tool call completed
       if (event.event === "on_tool_end") {
+        const pendingIndex = pendingToolCallNames.findIndex((name) => name === event.name);
+        if (pendingIndex >= 0) pendingToolCallNames.splice(pendingIndex, 1);
+
         let result: unknown = event.data?.output;
         // ToolMessage objects need to have their content extracted
         const resultContent = (result as any)?.content ?? (result as any)?.lc_kwargs?.content;
@@ -492,7 +921,41 @@ export async function* streamReadingAgent(
     if (error instanceof Error) {
       console.error("[ReadingAgent] Stack:", error.stack);
     }
-    yield { type: "error", error: error instanceof Error ? error.message : String(error) };
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isRecursionError = /Recursion limit/i.test(errorMessage);
+    if (isChapterTask && (chapterReferenceState.limitReached || isRecursionError)) {
+      const limitResult = buildChapterReferenceLimitResult(
+        chapterReferenceState.lastResult,
+        chapterReferenceState.attemptedQueries,
+      );
+      const uniquePendingNames = Array.from(new Set(pendingToolCallNames)).filter((name) =>
+        CHAPTER_LOOKUP_STOP_TOOL_NAMES.has(name),
+      );
+      for (const name of uniquePendingNames) {
+        yield { type: "tool_result", name, result: limitResult };
+      }
+      yield {
+        type: "token",
+        content: "未能可靠定位章节，请补充更准确的章节名",
+      };
+      return;
+    }
+    if (isRecursionError) {
+      const noticeResult = {
+        notice: "本轮检索步骤过多，没有稳定完成。请换个更具体的问法，或直接重试一次。",
+        reason: errorMessage,
+      };
+      const uniquePendingNames = Array.from(new Set(pendingToolCallNames));
+      for (const name of uniquePendingNames) {
+        yield { type: "tool_result", name, result: noticeResult };
+      }
+      yield {
+        type: "token",
+        content: "本轮检索步骤过多，没有稳定完成。请换个更具体的问法，或直接重试一次。",
+      };
+      return;
+    }
+    yield { type: "error", error: errorMessage };
   }
 }
 

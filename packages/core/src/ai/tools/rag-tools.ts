@@ -5,7 +5,19 @@ import { getChunks } from "../../db/database";
 import { estimateTokens } from "../../rag/chunker";
 import { search } from "../../rag/search";
 import type { SearchQuery } from "../../types";
+import { resolveChapterReference } from "../chapter-reference-resolver";
 import type { ToolDefinition } from "./tool-types";
+
+const DEFAULT_TOC_LIMIT = 20;
+const MAX_TOC_LIMIT = 60;
+
+function clampLimit(value: unknown, fallback = DEFAULT_TOC_LIMIT): number {
+  return Math.max(1, Math.min(MAX_TOC_LIMIT, Number(value) || fallback));
+}
+
+function normalizeQuery(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+}
 
 /** Create RAG search tool for a specific book */
 export function createRagSearchTool(bookId: string): ToolDefinition {
@@ -97,9 +109,26 @@ export function createRagTocTool(bookId: string): ToolDefinition {
   return {
     name: "ragToc",
     description:
-      "Get the table of contents of the current book. Use this when the user wants to see the book structure or navigate to a specific chapter.",
-    parameters: {},
-    execute: async () => {
+      "Get a compact, limited chapter list. Use query/aroundChapter/offset/limit instead of loading the full table of contents.",
+    parameters: {
+      query: {
+        type: "string",
+        description: "Optional chapter title or chapter number text to search for",
+      },
+      aroundChapter: {
+        type: "number",
+        description: "Optional chapter index to return nearby chapters around",
+      },
+      offset: {
+        type: "number",
+        description: "Pagination offset when browsing the chapter list",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum chapters to return (default 20, max 60)",
+      },
+    },
+    execute: async (args) => {
       // Get unique chapter titles from chunks
       const chunks = await getChunks(bookId);
       const chapters = new Map<number, string>();
@@ -108,14 +137,91 @@ export function createRagTocTool(bookId: string): ToolDefinition {
           chapters.set(chunk.chapterIndex, chunk.chapterTitle);
         }
       }
+      let chapterList = Array.from(chapters.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([index, title]) => ({ index, title }));
+
+      const query = String(args.query || "").trim();
+      const aroundChapter =
+        typeof args.aroundChapter === "number" ? Number(args.aroundChapter) : undefined;
+      const limit = clampLimit(args.limit);
+      let offset = Math.max(0, Number(args.offset) || 0);
+
+      if (query) {
+        const normalized = normalizeQuery(query);
+        chapterList = chapterList.filter((chapter) =>
+          normalizeQuery(`${chapter.index + 1}${chapter.title}`).includes(normalized),
+        );
+        offset = 0;
+      } else if (aroundChapter !== undefined && Number.isFinite(aroundChapter)) {
+        const half = Math.floor(limit / 2);
+        const aroundIndex = chapterList.findIndex((c) => c.index >= aroundChapter);
+        offset =
+          aroundIndex >= 0
+            ? Math.max(0, aroundIndex - half)
+            : Math.max(0, chapterList.length - limit);
+      }
+
+      const pagedChapters = chapterList.slice(offset, offset + limit);
 
       return {
-        chapters: Array.from(chapters.entries()).map(([index, title]) => ({
-          index,
-          title,
-        })),
+        chapters: pagedChapters,
         totalChapters: chapters.size,
+        matchedChapters: chapterList.length,
+        returned: pagedChapters.length,
+        offset,
+        limit,
+        hasMore: offset + pagedChapters.length < chapterList.length,
+        nextOffset:
+          offset + pagedChapters.length < chapterList.length
+            ? offset + pagedChapters.length
+            : undefined,
+        instruction:
+          "This is a compact chapter list. Use resolveChapterReference for user-provided chapter numbers or fuzzy chapter titles.",
       };
+    },
+  };
+}
+
+export function createResolveChapterReferenceTool(bookId: string): ToolDefinition {
+  return {
+    name: "resolveChapterReference",
+    description:
+      "Resolve a user-mentioned chapter number or fuzzy chapter title to the internal chapterIndex. Use before ragContext/summarize when the user asks about a specific chapter.",
+    parameters: {
+      query: {
+        type: "string",
+        description: "The user's chapter reference, such as '245章' or a chapter title",
+        required: true,
+      },
+      maxCandidates: {
+        type: "number",
+        description: "Maximum candidates to return when ambiguous (default 3)",
+      },
+    },
+    execute: async (args) => {
+      const chunks = await getChunks(bookId);
+      const chapters = new Map<number, { title: string; preview: string }>();
+      for (const chunk of chunks) {
+        if (!chapters.has(chunk.chapterIndex)) {
+          chapters.set(chunk.chapterIndex, {
+            title: chunk.chapterTitle,
+            preview: chunk.content.slice(0, 500),
+          });
+        }
+      }
+
+      const entries = Array.from(chapters.entries()).map(([chapterIndex, chapter]) => ({
+        chapterIndex,
+        chapterTitle: chapter.title,
+        preview: chapter.preview,
+      }));
+
+      return resolveChapterReference(
+        String(args.query || ""),
+        entries,
+        Number(args.maxCandidates) || 3,
+      );
     },
   };
 }
@@ -143,7 +249,8 @@ export function createRagContextTool(bookId: string): ToolDefinition {
       const chapterChunks = chunks.filter((c) => c.chapterIndex === chapterIndex);
 
       // Get surrounding chunks with token budget
-      const contextChunks: Array<{ content: string; cfi: string }> = [];
+      const sourceRefs: Array<{ id: string; excerpt: string; cfi: string }> = [];
+      const contextParts: string[] = [];
       let totalTokens = 0;
 
       for (const c of chapterChunks.slice(0, range * 2 + 1)) {
@@ -153,15 +260,20 @@ export function createRagContextTool(bookId: string): ToolDefinition {
           const remaining = MAX_TOTAL_TOKENS - totalTokens;
           if (remaining > 100) {
             const charLimit = remaining * 4;
-            contextChunks.push({
-              content: c.content.slice(0, charLimit),
+            const content = c.content.slice(0, charLimit);
+            contextParts.push(content);
+            sourceRefs.push({
+              id: c.id,
+              excerpt: content.slice(0, 180),
               cfi: c.startCfi || "",
             });
           }
           break;
         }
-        contextChunks.push({
-          content: c.content,
+        contextParts.push(c.content);
+        sourceRefs.push({
+          id: c.id,
+          excerpt: c.content.slice(0, 180),
           cfi: c.startCfi || "",
         });
         totalTokens += chunkTokens;
@@ -170,9 +282,9 @@ export function createRagContextTool(bookId: string): ToolDefinition {
       return {
         chapterTitle: chapterChunks[0]?.chapterTitle || "Unknown",
         chapterIndex: chapterIndex,
-        context: contextChunks.map((c) => c.content).join("\n\n"),
-        chunks: contextChunks,
-        chunksIncluded: contextChunks.length,
+        context: contextParts.join("\n\n"),
+        sourceRefs,
+        chunksIncluded: contextParts.length,
         totalTokens,
         tokenBudget: MAX_TOTAL_TOKENS,
       };

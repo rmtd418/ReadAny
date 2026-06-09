@@ -24,6 +24,7 @@ import { createAddCitationTool, createGetAnnotationsTool } from "./annotation-to
 import { getContextTools } from "./context-tools";
 import {
   createFallbackChapterContextTool,
+  createFallbackResolveChapterReferenceTool,
   createFallbackSearchTool,
   createFallbackTocTool,
 } from "./fallback-content-tools";
@@ -39,7 +40,12 @@ import {
   createUpdateBookMetadataTool,
 } from "./library-tools";
 import { createMindmapTool } from "./mindmap-tools";
-import { createRagContextTool, createRagSearchTool, createRagTocTool } from "./rag-tools";
+import {
+  createRagContextTool,
+  createRagSearchTool,
+  createRagTocTool,
+  createResolveChapterReferenceTool,
+} from "./rag-tools";
 import { createGetSkillsTool, skillToTool } from "./skill-tools";
 import type { ToolDefinition } from "./tool-types";
 
@@ -82,6 +88,7 @@ export function getAvailableTools(options: {
     // RAG tools (require vectorization)
     if (options.isVectorized) {
       tools.push(
+        createResolveChapterReferenceTool(options.bookId),
         createRagSearchTool(options.bookId),
         createRagTocTool(options.bookId),
         createRagContextTool(options.bookId),
@@ -97,6 +104,7 @@ export function getAvailableTools(options: {
       );
     } else {
       tools.push(
+        createFallbackResolveChapterReferenceTool(options.bookId),
         createFallbackTocTool(options.bookId),
         createFallbackSearchTool(options.bookId),
         createFallbackChapterContextTool(options.bookId),

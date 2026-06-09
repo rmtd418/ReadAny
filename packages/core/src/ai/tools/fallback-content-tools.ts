@@ -5,13 +5,24 @@ import {
   findFallbackSegmentByTerms,
   getFallbackChaptersForBook,
 } from "../fallback-source-resolver";
+import { resolveChapterReference } from "../chapter-reference-resolver";
 import type { ToolDefinition } from "./tool-types";
 
 const SEARCH_TOKEN_BUDGET = 3600;
 const CHAPTER_TOKEN_BUDGET = 3200;
+const DEFAULT_TOC_LIMIT = 20;
+const MAX_TOC_LIMIT = 60;
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeQuery(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+}
+
+function clampLimit(value: unknown, fallback = DEFAULT_TOC_LIMIT): number {
+  return Math.max(1, Math.min(MAX_TOC_LIMIT, Number(value) || fallback));
 }
 
 function scoreChapter(chapter: FallbackChapter, terms: string[]): number {
@@ -43,22 +54,114 @@ export function createFallbackTocTool(bookId: string): ToolDefinition {
   return {
     name: "fallbackToc",
     description:
-      "Get the table of contents by reading the original book file without vectorization. Use this for non-indexed books before exploring specific chapters.",
-    parameters: {},
-    execute: async () => {
+      "Get a compact chapter list from the original file without vectorization. Use query/aroundChapter/offset/limit instead of loading the full table of contents.",
+    parameters: {
+      query: {
+        type: "string",
+        description: "Optional chapter title or chapter number text to search for",
+      },
+      aroundChapter: {
+        type: "number",
+        description: "Optional chapter index to return nearby chapters around",
+      },
+      offset: {
+        type: "number",
+        description: "Pagination offset when browsing the chapter list",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum chapters to return (default 20, max 60)",
+      },
+      includePreview: {
+        type: "boolean",
+        description: "Whether to include short previews for returned chapters (default false)",
+      },
+    },
+    execute: async (args) => {
       const data = await getFallbackChaptersForBook(bookId);
       if ("error" in data) return data;
+
+      let chapters = data.chapters.map((chapter) => ({
+        index: chapter.index,
+        title: chapter.title,
+        content: chapter.content,
+      }));
+      const query = String(args.query || "").trim();
+      const aroundChapter =
+        typeof args.aroundChapter === "number" ? Number(args.aroundChapter) : undefined;
+      const limit = clampLimit(args.limit);
+      const includePreview = Boolean(args.includePreview);
+      let offset = Math.max(0, Number(args.offset) || 0);
+
+      if (query) {
+        const normalized = normalizeQuery(query);
+        chapters = chapters.filter((chapter) =>
+          normalizeQuery(`${chapter.index + 1}${chapter.title}`).includes(normalized),
+        );
+        offset = 0;
+      } else if (aroundChapter !== undefined && Number.isFinite(aroundChapter)) {
+        const half = Math.floor(limit / 2);
+        const aroundIndex = chapters.findIndex((chapter) => chapter.index >= aroundChapter);
+        offset =
+          aroundIndex >= 0 ? Math.max(0, aroundIndex - half) : Math.max(0, chapters.length - limit);
+      }
+
+      const pagedChapters = chapters.slice(offset, offset + limit);
       return {
         bookTitle: data.bookTitle,
-        chapters: data.chapters.map((chapter) => ({
+        chapters: pagedChapters.map((chapter) => ({
           index: chapter.index,
           title: chapter.title,
-          preview: chapter.content.replace(/\s+/g, " ").trim().slice(0, 180),
+          ...(includePreview
+            ? { preview: chapter.content.replace(/\s+/g, " ").trim().slice(0, 180) }
+            : {}),
         })),
         totalChapters: data.chapters.length,
+        matchedChapters: chapters.length,
+        returned: pagedChapters.length,
+        offset,
+        limit,
+        hasMore: offset + pagedChapters.length < chapters.length,
+        nextOffset:
+          offset + pagedChapters.length < chapters.length
+            ? offset + pagedChapters.length
+            : undefined,
         instruction:
-          "Use fallbackChapterContext for a specific chapter, or fallbackSearch for keyword exploration.",
+          "This is a compact chapter list. Use resolveChapterReference for user-provided chapter numbers or fuzzy chapter titles.",
       };
+    },
+  };
+}
+
+export function createFallbackResolveChapterReferenceTool(bookId: string): ToolDefinition {
+  return {
+    name: "resolveChapterReference",
+    description:
+      "Resolve a user-mentioned chapter number or fuzzy chapter title to the internal chapterIndex. Use before fallbackChapterContext when the user asks about a specific chapter.",
+    parameters: {
+      query: {
+        type: "string",
+        description: "The user's chapter reference, such as '245章' or a chapter title",
+        required: true,
+      },
+      maxCandidates: {
+        type: "number",
+        description: "Maximum candidates to return when ambiguous (default 3)",
+      },
+    },
+    execute: async (args) => {
+      const data = await getFallbackChaptersForBook(bookId);
+      if ("error" in data) return data;
+
+      return resolveChapterReference(
+        String(args.query || ""),
+        data.chapters.map((chapter) => ({
+          chapterIndex: chapter.index,
+          chapterTitle: chapter.title,
+          preview: chapter.content.slice(0, 500),
+        })),
+        Number(args.maxCandidates) || 3,
+      );
     },
   };
 }
@@ -153,6 +256,15 @@ export function createFallbackChapterContextTool(bookId: string): ToolDefinition
       const chapter = data.chapters.find((item) => item.index === chapterIndex);
       if (!chapter) return { error: `Chapter ${chapterIndex} not found` };
 
+      const sourceRefs: Array<{
+        id: string;
+        excerpt: string;
+        chapterTitle: string;
+        chapterIndex: number;
+        cfi?: string;
+        cfiPrecision?: "segment";
+      }> = [];
+      const contentParts: string[] = [];
       const chunks: Array<{
         content: string;
         chapterTitle: string;
@@ -181,11 +293,20 @@ export function createFallbackChapterContextTool(bookId: string): ToolDefinition
           chapterTitle: chapter.title,
           chapterIndex: chapter.index,
         };
+        contentParts.push(content);
         if (segment.cfi) {
           chunk.cfi = segment.cfi;
           chunk.cfiPrecision = "segment";
         }
         chunks.push(chunk);
+        sourceRefs.push({
+          id: `${chapter.index}-${sourceRefs.length}`,
+          excerpt: content.slice(0, 180),
+          chapterTitle: chapter.title,
+          chapterIndex: chapter.index,
+          cfi: segment.cfi,
+          ...(segment.cfi ? { cfiPrecision: "segment" as const } : {}),
+        });
         if (shouldTruncateFirstSegment) break;
       }
 
@@ -196,20 +317,22 @@ export function createFallbackChapterContextTool(bookId: string): ToolDefinition
             ? chapter.content.slice(0, CHAPTER_TOKEN_BUDGET * 4)
             : chapter.content;
         totalTokens = Math.min(tokens, CHAPTER_TOKEN_BUDGET);
-        chunks.push({
-          content,
+        contentParts.push(content);
+        sourceRefs.push({
+          id: `${chapter.index}-0`,
+          excerpt: content.slice(0, 180),
           chapterTitle: chapter.title,
           chapterIndex: chapter.index,
         });
       }
 
-      const content = chunks.map((chunk) => chunk.content).join("\n\n");
+      const content = contentParts.join("\n\n");
 
       return {
         chapterTitle: chapter.title,
         chapterIndex: chapter.index,
         content,
-        chunks,
+        sourceRefs,
         totalTokens,
         tokenBudget: CHAPTER_TOKEN_BUDGET,
         truncated: estimateTokens(chapter.content) > totalTokens,

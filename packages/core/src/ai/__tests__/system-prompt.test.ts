@@ -57,4 +57,39 @@ describe("buildSystemPrompt citations", () => {
     expect(prompt).toContain("Wait for addCitation to return a citation result successfully");
     expect(prompt).toContain("Users can click [N]");
   });
+
+  it("includes turn-focus routing hints when provided", () => {
+    const prompt = buildSystemPrompt({
+      book: makeBook(),
+      semanticContext: null,
+      enabledSkills: [],
+      isVectorized: true,
+      userLanguage: "en",
+      questionCategory: "current_selection",
+      selectionActive: true,
+      routeHint:
+        "The user already has an active selection. Prefer the selected text and surrounding context before any chapter-wide or book-wide retrieval.",
+    });
+
+    expect(prompt).toContain("## Turn Focus");
+    expect(prompt).toContain("Detected Question Type: current_selection");
+    expect(prompt).toContain("Active Text Selection: yes");
+    expect(prompt).toContain("Prefer the selected text and surrounding context");
+  });
+
+  it("lists the actually allowed tools for the current turn when provided", () => {
+    const prompt = buildSystemPrompt({
+      book: makeBook(),
+      semanticContext: null,
+      enabledSkills: [],
+      isVectorized: true,
+      userLanguage: "en",
+      allowedToolNames: ["getCurrentChapter", "getSurroundingContext", "addCitation"],
+    });
+
+    expect(prompt).toContain("## Turn-Available Tools");
+    expect(prompt).toContain("- getCurrentChapter");
+    expect(prompt).toContain("- getSurroundingContext");
+    expect(prompt).toContain("- addCitation");
+  });
 });

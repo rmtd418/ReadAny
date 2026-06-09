@@ -14,6 +14,7 @@ import type {
 } from "@readany/core/types/message";
 import { cn } from "@readany/core/utils";
 import {
+  AlertTriangle,
   Brain,
   CheckCircle,
   ChevronDown,
@@ -195,6 +196,7 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   ragSearch: "toolLabels.ragSearch",
   ragToc: "toolLabels.ragToc",
   ragContext: "toolLabels.ragContext",
+  resolveChapterReference: "toolLabels.resolveChapterReference",
   summarize: "toolLabels.summarize",
   extractEntities: "toolLabels.extractEntities",
   analyzeArguments: "toolLabels.analyzeArguments",
@@ -220,11 +222,16 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
 
 function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const { t } = useTranslation();
+  const noticeMessage = part.notice || "";
+  const hasNotice = Boolean(noticeMessage);
   const hasError = part.status === "error" || Boolean(part.error);
 
-  const [isOpen, setIsOpen] = useState(hasError);
+  const [isOpen, setIsOpen] = useState(hasError || hasNotice);
 
   const getStatusIcon = () => {
+    if (hasNotice) {
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+    }
     switch (part.status) {
       case "pending":
         return <Circle className="h-4 w-4 text-muted-foreground/50" />;
@@ -249,15 +256,19 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
       : "");
 
   useEffect(() => {
-    if (hasError) setIsOpen(true);
-  }, [hasError]);
+    if (hasError || hasNotice) setIsOpen(true);
+  }, [hasError, hasNotice]);
 
   return (
     <div className="my-1">
       <div
         className={cn(
           "overflow-hidden rounded-lg border",
-          hasError ? "border-destructive/30 bg-destructive/5" : "border-border",
+          hasNotice
+            ? "border-amber-500/30 bg-amber-500/5"
+            : hasError
+              ? "border-destructive/30 bg-destructive/5"
+              : "border-border",
         )}
       >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -265,13 +276,22 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
             <div
               className={cn(
                 "flex h-auto w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 hover:bg-muted/50",
-                hasError && "hover:bg-destructive/10",
+                hasNotice
+                  ? "hover:bg-amber-500/10"
+                  : hasError
+                    ? "hover:bg-destructive/10"
+                    : "",
               )}
             >
               <div className="flex flex-1 items-center gap-2 overflow-hidden">
                 {getStatusIcon()}
                 <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">{label}</span>
+                {hasNotice && (
+                  <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                    {t("streaming.toolNotice")}
+                  </span>
+                )}
                 {hasError && (
                   <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
                     {t("streaming.toolFailed")}
@@ -343,6 +363,13 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
                 <div className="rounded border border-destructive/30 bg-destructive/10 p-2 text-xs leading-relaxed text-destructive">
                   <div className="mb-1 font-medium">{t("streaming.toolFailedDetail")}</div>
                   <div className="break-words">{errorMessage || t("streaming.toolFailed")}</div>
+                </div>
+              )}
+
+              {hasNotice && (
+                <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                  <div className="mb-1 font-medium">{t("streaming.toolNoticeDetail")}</div>
+                  <div className="break-words">{noticeMessage}</div>
                 </div>
               )}
             </div>

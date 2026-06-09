@@ -9,6 +9,7 @@ export function toolCallPartToMessageToolCall(part: ToolCallPart) {
     result: part.result,
     status: part.status,
     error: part.error,
+    notice: part.notice,
   };
 }
 
@@ -30,13 +31,29 @@ export function applyToolResultToParts(
   if (!part) return null;
 
   part.result = result;
+  const notice =
+    result && typeof result === "object"
+      ? ((result as Record<string, unknown>).attemptLimitReached
+          ? (result as Record<string, unknown>).notice
+          : undefined)
+      : undefined;
+  if (typeof notice === "string" && notice.trim()) {
+    part.status = "completed";
+    part.error = undefined;
+    part.notice = notice;
+    part.updatedAt = now;
+    return part;
+  }
+
   const toolError = getToolResultError(result);
   if (toolError) {
     part.status = "error";
     part.error = toolError;
+    part.notice = undefined;
   } else {
     part.status = "completed";
     part.error = undefined;
+    part.notice = undefined;
   }
   part.updatedAt = now;
 

@@ -145,6 +145,7 @@ describe("getAvailableTools", () => {
     expect(names).toContain("fallbackToc");
     expect(names).toContain("fallbackSearch");
     expect(names).toContain("fallbackChapterContext");
+    expect(names).toContain("resolveChapterReference");
     expect(names).not.toContain("ragSearch");
   });
 
@@ -163,6 +164,7 @@ describe("getAvailableTools", () => {
     expect(names).toContain("ragSearch");
     expect(names).toContain("ragToc");
     expect(names).toContain("ragContext");
+    expect(names).toContain("resolveChapterReference");
     expect(names).toContain("summarize");
     expect(names).toContain("extractEntities");
     expect(names).toContain("analyzeArguments");
@@ -271,7 +273,7 @@ describe("listBooks tool", () => {
 describe("ragToc tool", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("should extract unique chapters from chunks", async () => {
+  it("should extract unique chapters from chunks with compact paging metadata", async () => {
     vi.mocked(getChunks).mockResolvedValue([
       makeChunk({ chapterIndex: 0, chapterTitle: "Intro" }),
       makeChunk({ chapterIndex: 0, chapterTitle: "Intro" }),
@@ -284,11 +286,60 @@ describe("ragToc tool", () => {
     const result = (await tool.execute({})) as any;
 
     expect(result.totalChapters).toBe(3);
+    expect(result.returned).toBe(3);
+    expect(result.hasMore).toBe(false);
     expect(result.chapters).toEqual([
       { index: 0, title: "Intro" },
       { index: 1, title: "Chapter 1" },
       { index: 2, title: "Chapter 2" },
     ]);
+  });
+
+  it("should limit chapter list by default", async () => {
+    vi.mocked(getChunks).mockResolvedValue(
+      Array.from({ length: 30 }, (_, i) =>
+        makeChunk({ chapterIndex: i, chapterTitle: `Chapter ${i + 1}` }),
+      ) as any,
+    );
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
+    const tool = findTool(tools, "ragToc");
+    const result = (await tool.execute({})) as any;
+
+    expect(result.totalChapters).toBe(30);
+    expect(result.returned).toBe(20);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextOffset).toBe(20);
+  });
+});
+
+// ============================================
+// resolveChapterReference tool
+// ============================================
+describe("resolveChapterReference tool", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should resolve human chapter numbers from chapter text previews", async () => {
+    vi.mocked(getChunks).mockResolvedValue([
+      makeChunk({
+        chapterIndex: 241,
+        chapterTitle: "Section 242",
+        content: "第242章 你说，我去做\n\n正文",
+      }),
+      makeChunk({
+        chapterIndex: 244,
+        chapterTitle: "Section 245",
+        content: "第245章 交锋\n\n正文",
+      }),
+    ] as any);
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
+    const tool = findTool(tools, "resolveChapterReference");
+    const result = (await tool.execute({ query: "245章讲了什么" })) as any;
+
+    expect(result.matched).toBe(true);
+    expect(result.chapterIndex).toBe(244);
+    expect(result.detectedChapterNumber).toBe(245);
   });
 });
 
@@ -361,6 +412,8 @@ describe("ragContext tool", () => {
     expect(result.context).toContain("Chunk A");
     expect(result.context).toContain("Chunk B");
     expect(result.context).not.toContain("Other chapter");
+    expect(result.sourceRefs).toHaveLength(2);
+    expect(result.chunks).toBeUndefined();
   });
 
   it("should truncate to token budget", async () => {
@@ -582,11 +635,11 @@ describe("compareSections tool", () => {
 describe("fallback content tools", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  function registerFallbackChapters() {
+  function registerFallbackChapters(chapters?: any[]) {
     vi.mocked(getBook).mockResolvedValue(makeBook({ isVectorized: false }) as any);
     setFallbackContentProvider({
       async getChapters() {
-        return [
+        return chapters ?? [
           {
             index: 0,
             title: "Chapter 1",
@@ -604,6 +657,40 @@ describe("fallback content tools", () => {
       },
     });
   }
+
+  it("returns compact fallback toc without previews by default", async () => {
+    registerFallbackChapters(
+      Array.from({ length: 30 }, (_, i) => ({
+        index: i,
+        title: `Chapter ${i + 1}`,
+        content: `Preview text for chapter ${i + 1}.`,
+        segments: [],
+      })),
+    );
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tool = findTool(tools, "fallbackToc");
+    const result = (await tool.execute({})) as any;
+
+    expect(result.totalChapters).toBe(30);
+    expect(result.returned).toBe(20);
+    expect(result.hasMore).toBe(true);
+    expect(result.chapters[0].preview).toBeUndefined();
+  });
+
+  it("resolves fallback chapter references from original chapter content", async () => {
+    registerFallbackChapters([
+      { index: 241, title: "Section 242", content: "第242章 你说，我去做\n\n正文", segments: [] },
+      { index: 244, title: "Section 245", content: "第245章 交锋\n\n正文", segments: [] },
+    ]);
+
+    const tools = getAvailableTools({ bookId: "book-1", isVectorized: false, enabledSkills: [] });
+    const tool = findTool(tools, "resolveChapterReference");
+    const result = (await tool.execute({ query: "第245章" })) as any;
+
+    expect(result.matched).toBe(true);
+    expect(result.chapterIndex).toBe(244);
+  });
 
   it("returns a segment CFI for fallback search matches", async () => {
     registerFallbackChapters();

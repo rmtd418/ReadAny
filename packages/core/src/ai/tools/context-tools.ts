@@ -33,6 +33,8 @@ export function createGetCurrentChapterTool(bookId: string): ToolDefinition {
         bookTitle: book?.meta?.title || context.bookTitle,
         chapter: context.currentChapter,
         position: context.currentPosition,
+        operationType: context.operationType,
+        selectionActive: Boolean(context.selection?.text?.trim()),
         progress: {
           percentage: context.currentPosition.percentage,
           page: context.currentPosition.page,
@@ -104,6 +106,7 @@ export function createGetReadingProgressTool(bookId: string): ToolDefinition {
         },
         lastActivity: context.timestamp,
         operationType: context.operationType,
+        selectionActive: Boolean(context.selection?.text?.trim()),
       };
     },
   };
@@ -171,10 +174,13 @@ export function createGetSurroundingContextTool(_bookId: string): ToolDefinition
 
       return {
         currentChapter: context.currentChapter.title,
+        currentChapterIndex: context.currentChapter.index,
         currentPosition: context.currentPosition.percentage,
+        currentPage: context.currentPosition.page,
         surroundingText: context.surroundingText,
         selection: includeSelection ? context.selection : undefined,
         operationType: context.operationType,
+        selectionActive: Boolean(context.selection?.text?.trim()),
       };
     },
   };

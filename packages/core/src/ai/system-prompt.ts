@@ -10,6 +10,15 @@
 import type { Book, SemanticContext, Skill } from "../types";
 import { getBookProgressPercent } from "../utils/book-progress";
 
+type ReadingQuestionCategory =
+  | "general_chat"
+  | "library_request"
+  | "current_selection"
+  | "current_page_context"
+  | "current_chapter_context"
+  | "specific_chapter_request"
+  | "book_wide_search";
+
 interface PromptContext {
   book: Book | null;
   bookId?: string | null;
@@ -19,6 +28,10 @@ interface PromptContext {
   userLanguage: string;
   spoilerFree?: boolean;
   memorySummary?: string;
+  questionCategory?: ReadingQuestionCategory;
+  selectionActive?: boolean;
+  routeHint?: string;
+  allowedToolNames?: string[];
 }
 
 /** Build the full system prompt from context */
@@ -28,6 +41,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildBookContextSection(ctx.book),
     buildMemorySection(ctx.memorySummary),
     buildSemanticSection(ctx.semanticContext),
+    buildRouteSection(ctx.questionCategory, ctx.selectionActive, ctx.routeHint),
+    buildTurnAvailableToolsSection(ctx.allowedToolNames),
     buildToolsSection(ctx.enabledSkills, ctx.isVectorized, !!(ctx.book?.id || ctx.bookId)),
     buildWorkflowSection(ctx.isVectorized, !!(ctx.book?.id || ctx.bookId)),
     buildConstraintsSection(
@@ -66,19 +81,58 @@ function buildBookContextSection(book: Book | null): string {
     .join("\n");
 }
 
+function compactText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
 function buildSemanticSection(ctx: SemanticContext | null): string {
   if (!ctx) return "";
   return [
     "## Reading Context",
     `- Current Chapter: ${ctx.currentChapter}`,
     `- Reader Activity: ${ctx.operationType}`,
-    ctx.surroundingText ? `- Surrounding Text:\n> ${ctx.surroundingText}` : "",
+    ctx.surroundingText ? `- Surrounding Text:\n> ${compactText(ctx.surroundingText, 280)}` : "",
     ctx.recentHighlights.length > 0
-      ? `- Recent Highlights:\n${ctx.recentHighlights.map((h) => `  > ${h}`).join("\n")}`
+      ? `- Recent Highlights:\n${ctx.recentHighlights
+          .slice(0, 3)
+          .map((h) => `  > ${compactText(h, 120)}`)
+          .join("\n")}`
       : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildRouteSection(
+  category?: ReadingQuestionCategory,
+  selectionActive?: boolean,
+  routeHint?: string,
+): string {
+  if (!category && !selectionActive && !routeHint) return "";
+
+  return [
+    "## Turn Focus",
+    category ? `- Detected Question Type: ${category}` : "",
+    selectionActive ? "- Active Text Selection: yes" : "",
+    routeHint ? `- Routing Hint: ${routeHint}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildTurnAvailableToolsSection(allowedToolNames?: string[]): string {
+  if (!allowedToolNames) return "";
+  if (allowedToolNames.length === 0) {
+    return "## Turn-Available Tools\n- No tools are available for this turn. Respond directly without tool calls.";
+  }
+
+  return [
+    "## Turn-Available Tools",
+    "- Only the tools listed here are actually callable in this turn. Do not plan with any other tools.",
+    ...allowedToolNames.map((name) => `- ${name}`),
+  ].join("\n");
 }
 
 function buildToolsSection(
@@ -130,9 +184,14 @@ function buildToolsSection(
     tools.push("");
     tools.push("### Content Retrieval Tools (RAG)");
     tools.push(
+      "- **resolveChapterReference**: Resolve user-mentioned chapter numbers or fuzzy chapter titles to internal chapterIndex (params: query, maxCandidates)",
+    );
+    tools.push(
       "- **ragSearch**: Semantic/keyword search across book content (params: query, mode, topK)",
     );
-    tools.push("- **ragToc**: Get the full table of contents with chapter indices");
+    tools.push(
+      "- **ragToc**: Get a compact, paginated chapter list (params: query, aroundChapter, offset, limit)",
+    );
     tools.push(
       "- **ragContext**: Get content around a specific chapter position (params: chapterIndex, range)",
     );
@@ -157,7 +216,12 @@ function buildToolsSection(
   } else if (hasBookContext) {
     tools.push("");
     tools.push("### Fallback Content Tools (no vector index)");
-    tools.push("- **fallbackToc**: Read the original file and list chapters without vectorization");
+    tools.push(
+      "- **resolveChapterReference**: Resolve user-mentioned chapter numbers or fuzzy chapter titles to internal chapterIndex (params: query, maxCandidates)",
+    );
+    tools.push(
+      "- **fallbackToc**: Read a compact, paginated chapter list from the original file (params: query, aroundChapter, offset, limit, includePreview)",
+    );
     tools.push(
       "- **fallbackSearch**: Keyword-scan the original file when the book is not vectorized (params: query, topK)",
     );
@@ -207,14 +271,20 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
   }
 
   if (isVectorized) {
+    steps.push(
+      "   - **resolveChapterReference**: first step for user-mentioned chapter numbers/titles; do not convert human chapter numbers to chapterIndex yourself",
+    );
     steps.push("   - **ragSearch**: for finding specific content by topic/keyword");
-    steps.push("   - **ragToc**: for understanding book structure");
+    steps.push("   - **ragToc**: for compact/paginated structure browsing");
     steps.push(
       "   - **summarize/extractEntities/analyzeArguments/findQuotes**: for indexed content analysis",
     );
   } else {
+    steps.push(
+      "   - **resolveChapterReference**: first step for user-mentioned chapter numbers/titles; do not convert human chapter numbers to chapterIndex yourself",
+    );
     steps.push("   - **fallbackSearch**: for keyword exploration when the book is not vectorized");
-    steps.push("   - **fallbackToc**: for understanding book structure without an index");
+    steps.push("   - **fallbackToc**: for compact/paginated structure browsing without an index");
     steps.push("   - **fallbackChapterContext**: for reading a specific chapter without an index");
   }
 
@@ -321,6 +391,15 @@ function buildWorkflowSection(isVectorized: boolean, hasBookContext: boolean): s
   );
   steps.push(
     "- If a tool returns no results or an error, tell the user honestly. Do NOT retry with rephrased queries.",
+  );
+  steps.push(
+    "- Prefer current selection, current page, and current chapter context before wider retrieval whenever the user is asking about what they are reading right now.",
+  );
+  steps.push(
+    "- For a specific chapter request, call resolveChapterReference first. If matched=false, present the candidates or ask for clarification instead of guessing chapterIndex.",
+  );
+  steps.push(
+    "- For chapter lookup failures, chapter search gets at most three chances in one turn. The first uses the user's original wording, the second may use one simplified query, and the third is the last chance. After that, STOP and tell the user: 未能可靠定位章节，请补充更准确的章节名",
   );
   steps.push(
     '- For multi-step tasks (e.g. "summarize each chapter"), you MAY call tools many times — but each call must target a DIFFERENT chapter/scope. Never repeat the same query.',

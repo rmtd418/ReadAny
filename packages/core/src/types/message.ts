@@ -33,6 +33,7 @@ export interface ToolCallPart extends BasePart {
   result?: unknown;
   error?: string;
   reasoning?: string;
+  notice?: string;
 }
 
 export interface CitationPart extends BasePart {
