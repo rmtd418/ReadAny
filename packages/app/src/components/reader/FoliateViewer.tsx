@@ -559,6 +559,7 @@ function getAnchorPreviewPosition(
 export interface RelocateDetail {
   fraction?: number;
   fractionInSection?: number;
+  pageFractionInSection?: number;
   sectionBounds?: { start: number; end: number };
   section?: { current: number; total: number };
   location?: { current: number; next: number; total: number };
@@ -1894,6 +1895,25 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
     const relocateHandlerImpl = useCallback(
       (event: Event) => {
         const rawDetail = (event as CustomEvent).detail as RelocateDetail;
+        const chapterPageFraction =
+          typeof rawDetail.pageFractionInSection === "number" && rawDetail.pageFractionInSection > 0
+            ? rawDetail.pageFractionInSection
+            : null;
+        const chapterFraction =
+          typeof rawDetail.fractionInSection === "number" ? rawDetail.fractionInSection : null;
+        const sectionPageDetail =
+          chapterPageFraction != null && chapterFraction != null
+            ? {
+                current: Math.max(
+                  1,
+                  Math.min(
+                    Math.ceil(1 / chapterPageFraction - 1e-6),
+                    Math.floor(chapterFraction / chapterPageFraction + 1e-6) + 1,
+                  ),
+                ),
+                total: Math.max(1, Math.ceil(1 / chapterPageFraction - 1e-6)),
+              }
+            : null;
         const rendererPage =
           viewRef.current?.renderer && typeof viewRef.current.renderer.page === "number"
             ? viewRef.current.renderer.page
@@ -1903,7 +1923,12 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             ? viewRef.current.renderer.pages
             : null;
         const detail: RelocateDetail =
-          rendererPage != null && rendererPages != null && rendererPages > 2
+          sectionPageDetail
+            ? {
+                ...rawDetail,
+                page: sectionPageDetail,
+              }
+            : rendererPage != null && rendererPages != null && rendererPages > 2
             ? {
                 ...rawDetail,
                 page: {

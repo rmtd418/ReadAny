@@ -80,6 +80,7 @@ export class SectionProgress {
     return {
       fraction: nextSize / sizeTotal,
       fractionInSection,
+      pageFractionInSection: pageFraction,
       sectionBounds: {
         start: sectionStart,
         end: sectionEnd,
