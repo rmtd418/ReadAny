@@ -6,7 +6,7 @@ module.exports = {
   expo: {
     name: variant.name,
     slug: "readany",
-    version: "1.3.3",
+    version: "1.3.4",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",

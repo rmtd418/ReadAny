@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.3.3"
+version = "1.3.4"
 description = "ReadAny - AI-powered EPUB Reader"
 authors = ["you"]
 edition = "2021"

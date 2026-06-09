@@ -1729,42 +1729,65 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       setSelection(sel);
 
       // Position the popover
-      if (offsetRects.length > 0) {
-        const firstRect = offsetRects[0];
-        const offsetX = containerRect?.left ?? 0;
-        const offsetY = containerRect?.top ?? 0;
-        const containerW = containerRect?.width ?? 800;
-        const containerH = containerRect?.height ?? 600;
+      if (containerRect && offsetRects.length > 0) {
+        const visibleRects = offsetRects.filter(
+          (r) =>
+            r.width > 0 &&
+            r.height > 0 &&
+            r.right >= containerRect.left &&
+            r.left <= containerRect.right &&
+            r.bottom >= containerRect.top &&
+            r.top <= containerRect.bottom,
+        );
+        const rectsForPosition = visibleRects.length > 0 ? visibleRects : offsetRects;
+        const containerRelativeRects = rectsForPosition.map((r) => ({
+          top: r.top - containerRect.top,
+          bottom: r.bottom - containerRect.top,
+          left: r.left - containerRect.left,
+          right: r.right - containerRect.left,
+        }));
 
-        const popoverW = 190;
+        const topmostRect = containerRelativeRects.reduce((min, r) =>
+          r.top < min.top ? r : min,
+        );
+        const bottommostRect = containerRelativeRects.reduce((max, r) =>
+          r.bottom > max.bottom ? r : max,
+        );
+        const centerX = (topmostRect.left + topmostRect.right) / 2;
+
+        const containerW = containerRect.width;
+        const containerH = containerRect.height;
+        const popoverW = 200;
         const popoverH = 44;
+        const gap = 8;
+        const padding = 8;
+        const toolbarHeight = toolbarVisible ? 44 : 0;
 
-        let x = firstRect.left + firstRect.width / 2 - offsetX - popoverW / 2;
-        x = Math.max(4, Math.min(x, containerW - popoverW - 4));
+        let x = centerX - popoverW / 2;
+        x = Math.max(padding, Math.min(x, containerW - popoverW - padding));
 
-        let y = firstRect.top - popoverH - 4 - offsetY;
-        if (y < 4) {
-          y = firstRect.bottom + 8 - offsetY;
+        const yAbove = topmostRect.top - popoverH - gap;
+        const yBelow = bottommostRect.bottom + gap;
+        const aboveValid = yAbove >= toolbarHeight + padding;
+        const belowValid = yBelow + popoverH + padding <= containerH;
+
+        let y: number;
+        if (aboveValid && belowValid) {
+          const spaceAbove = topmostRect.top - toolbarHeight;
+          const spaceBelow = containerH - bottommostRect.bottom;
+          y = spaceAbove > spaceBelow ? yAbove : yBelow;
+        } else if (aboveValid) {
+          y = yAbove;
+        } else if (belowValid) {
+          y = yBelow;
+        } else {
+          y = Math.max(toolbarHeight + padding, Math.min(yAbove, yBelow));
         }
-        y = Math.max(4, Math.min(y, containerH - popoverH - 4));
 
         setSelectionPos({ x, y });
       }
     },
-    [highlights, bookId],
-  );
-
-  // Handle show-note-panel event (user clicked on wavy underline with note)
-  const handleShowNotePanel = useCallback(
-    (cfi: string) => {
-      // Find the highlight with this CFI
-      const highlight = highlights.find((h) => h.bookId === bookId && h.cfi === cfi);
-      if (!highlight) return;
-
-      // Start editing this highlight's note (this also opens the notebook panel)
-      useNotebookStore.getState().startEditNote(highlight);
-    },
-    [highlights, bookId],
+    [highlights, bookId, toolbarVisible],
   );
 
   const handleTranslate = useCallback(() => {
@@ -2902,7 +2925,6 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
                 onError={handleError}
                 onSelection={handleSelection}
                 onShowAnnotation={handleShowAnnotation}
-                onShowNotePanel={handleShowNotePanel}
                 onToggleSearch={handleToggleSearch}
                 onToggleToc={handleToggleToc}
                 onToggleChat={handleToggleChat}

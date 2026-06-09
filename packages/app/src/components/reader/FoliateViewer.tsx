@@ -666,7 +666,6 @@ interface FoliateViewerProps {
   onError?: (error: Error) => void;
   onSelection?: (selection: BookSelection | null) => void;
   onShowAnnotation?: (cfi: string, range: Range, index: number) => void;
-  onShowNotePanel?: (cfi: string) => void;
   onToggleSearch?: () => void;
   onToggleToc?: () => void;
   onToggleChat?: () => void;
@@ -703,7 +702,6 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       onError,
       onSelection,
       onShowAnnotation,
-      onShowNotePanel,
       onToggleSearch,
       onToggleToc,
       onToggleChat,
@@ -2155,11 +2153,6 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
     const onShowAnnotationRef = useRef(onShowAnnotation);
     onShowAnnotationRef.current = onShowAnnotation;
 
-    // --- Show note panel handler ---
-    // This is called when user clicks on a wavy underline (note annotation)
-    const onShowNotePanelRef = useRef(onShowNotePanel);
-    onShowNotePanelRef.current = onShowNotePanel;
-
     const showAnnotationHandler = useCallback((event: Event) => {
       const detail = (event as CustomEvent).detail;
       const { value, index, range } = detail;
@@ -2170,13 +2163,8 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
       // show-annotation fires synchronously before the setTimeout(10ms) in pointerup
       annotationClickedRef.current = true;
 
-      // Check if this annotation has a note - if so, open note panel instead of popover
-      if (cfisWithNotes.has(value) && onShowNotePanelRef.current) {
-        onShowNotePanelRef.current(value);
-        return;
-      }
-
-      // Call the callback with annotation info
+      // Always show the same annotation popover for existing highlights, including
+      // highlights with notes, so actions like copy remain available.
       onShowAnnotationRef.current?.(value, range, index);
     }, []);
 
