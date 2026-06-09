@@ -558,6 +558,9 @@ function getAnchorPreviewPosition(
 /** Relocate event detail from foliate-view */
 export interface RelocateDetail {
   fraction?: number;
+  fractionInSection?: number;
+  pageFractionInSection?: number;
+  sectionBounds?: { start: number; end: number };
   section?: { current: number; total: number };
   location?: { current: number; next: number; total: number };
   page?: { current: number; total: number };
@@ -606,6 +609,7 @@ export interface FoliateViewerHandle {
   goPrev: () => void;
   goToHref: (href: string) => void;
   goToFraction: (fraction: number) => void;
+  goToSectionFraction: (index: number, fractionInSection: number) => void;
   goToCFI: (cfi: string) => Promise<void>;
   goToIndex: (index: number) => void;
   highlightCFITemporarily: (cfi: string, duration?: number) => void;
@@ -1385,6 +1389,9 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         goToFraction: (fraction: number) => {
           viewRef.current?.goToFraction(fraction);
         },
+        goToSectionFraction: (index: number, fractionInSection: number) => {
+          viewRef.current?.goToSectionFraction(index, fractionInSection);
+        },
         goToCFI: async (cfi: string) => {
           await viewRef.current?.goTo(cfi);
         },
@@ -1888,6 +1895,25 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
     const relocateHandlerImpl = useCallback(
       (event: Event) => {
         const rawDetail = (event as CustomEvent).detail as RelocateDetail;
+        const chapterPageFraction =
+          typeof rawDetail.pageFractionInSection === "number" && rawDetail.pageFractionInSection > 0
+            ? rawDetail.pageFractionInSection
+            : null;
+        const chapterFraction =
+          typeof rawDetail.fractionInSection === "number" ? rawDetail.fractionInSection : null;
+        const sectionPageDetail =
+          chapterPageFraction != null && chapterFraction != null
+            ? {
+                current: Math.max(
+                  1,
+                  Math.min(
+                    Math.ceil(1 / chapterPageFraction - 1e-6),
+                    Math.floor(chapterFraction / chapterPageFraction + 1e-6) + 1,
+                  ),
+                ),
+                total: Math.max(1, Math.ceil(1 / chapterPageFraction - 1e-6)),
+              }
+            : null;
         const rendererPage =
           viewRef.current?.renderer && typeof viewRef.current.renderer.page === "number"
             ? viewRef.current.renderer.page
@@ -1897,7 +1923,12 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
             ? viewRef.current.renderer.pages
             : null;
         const detail: RelocateDetail =
-          rendererPage != null && rendererPages != null && rendererPages > 2
+          sectionPageDetail
+            ? {
+                ...rawDetail,
+                page: sectionPageDetail,
+              }
+            : rendererPage != null && rendererPages != null && rendererPages > 2
             ? {
                 ...rawDetail,
                 page: {

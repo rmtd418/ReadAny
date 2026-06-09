@@ -528,6 +528,11 @@ export class View extends HTMLElement {
     await this.renderer.goTo({ index, anchor });
     this.history.pushState({ fraction: frac });
   }
+  async goToSectionFraction(index, fractionInSection) {
+    const anchor = Math.max(0, Math.min(1, fractionInSection));
+    await this.renderer.goTo({ index, anchor });
+    this.history.pushState(this.lastLocation?.cfi ?? this.getCFI(index));
+  }
   async select(target) {
     try {
       const obj = await this.resolveNavigation(target);

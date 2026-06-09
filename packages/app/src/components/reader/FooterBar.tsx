@@ -17,7 +17,6 @@ import {
   resolveSystemVoiceValue,
 } from "@/lib/tts/system-voices";
 import type { TTSEngine } from "@/lib/tts/tts-service";
-import { useReaderStore } from "@/stores/reader-store";
 import { useTTSStore } from "@/stores/tts-store";
 import { getLocaleDisplayLabel, groupEdgeTTSVoices } from "@readany/core/tts";
 import {
@@ -32,13 +31,17 @@ import {
   Plus,
   Square,
 } from "lucide-react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface FooterBarProps {
-  tabId: string;
   totalPages: number;
   currentPage: number;
+  progressPercent: number;
+  progressMode?: "book" | "chapter";
+  progressStepCount?: number;
+  progressStepIndex?: number;
   isVisible: boolean;
   onPrev: () => void;
   onNext: () => void;
@@ -51,9 +54,12 @@ interface FooterBarProps {
 }
 
 export function FooterBar({
-  tabId,
   totalPages,
   currentPage,
+  progressPercent,
+  progressMode = "book",
+  progressStepCount,
+  progressStepIndex,
   isVisible,
   onPrev,
   onNext,
@@ -64,7 +70,6 @@ export function FooterBar({
   onTTSClose,
 }: FooterBarProps) {
   const { t, i18n } = useTranslation();
-  const tab = useReaderStore((s) => s.tabs[tabId]);
 
   const playState = useTTSStore((s) => s.playState);
   const config = useTTSStore((s) => s.config);
@@ -100,18 +105,55 @@ export function FooterBar({
     if (!showTTS) setTtsExpanded(false);
   }, [showTTS]);
 
-  const progress = tab?.progress ?? 0;
-  const pct = Math.round(progress * 100);
+  const pct = Math.max(0, Math.min(100, Math.round(progressPercent)));
+  const isChapterMode = progressMode === "chapter";
+  const hasDiscreteChapterSteps =
+    isChapterMode &&
+    typeof progressStepCount === "number" &&
+    progressStepCount > 1 &&
+    typeof progressStepIndex === "number";
+  const chapterStepCount = hasDiscreteChapterSteps ? progressStepCount : 0;
+  const chapterStepIndex = hasDiscreteChapterSteps
+    ? Math.max(0, Math.min(progressStepIndex, chapterStepCount - 1))
+    : 0;
+  const discreteChapterPct =
+    hasDiscreteChapterSteps && chapterStepCount > 1
+      ? Math.round((chapterStepIndex / (chapterStepCount - 1)) * 100)
+      : pct;
+  const discreteChapterMarkerPositions =
+    hasDiscreteChapterSteps && chapterStepCount > 1
+      ? Array.from({ length: chapterStepCount }, (_, index) =>
+          (index / (chapterStepCount - 1)) * 100,
+        )
+      : [];
 
   // Local slider value for smooth dragging (avoids snap-back)
   const [localSliderValue, setLocalSliderValue] = useState<number | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayPct = localSliderValue != null ? localSliderValue : pct;
+  const chapterSliderTrackRef = useRef<HTMLDivElement | null>(null);
+  const chapterSliderDraggingRef = useRef(false);
+  const displayPct = isChapterMode
+    ? discreteChapterPct
+    : localSliderValue != null
+      ? localSliderValue
+      : pct;
 
   // Debounced progress seek (100ms like readest/anx-reader)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleProgressSeek = useCallback(
     (value: number) => {
+      if (hasDiscreteChapterSteps) {
+        const stepIndex = Math.max(0, Math.min(value, chapterStepCount - 1));
+        const fraction = chapterStepCount > 1 ? stepIndex / (chapterStepCount - 1) : 0;
+        onSeek?.(fraction);
+        return;
+      }
+
+      if (isChapterMode) {
+        onSeek?.(value / 100);
+        return;
+      }
+
       setLocalSliderValue(value);
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
@@ -123,7 +165,55 @@ export function FooterBar({
         setLocalSliderValue(null);
       }, 600);
     },
-    [onSeek],
+    [chapterStepCount, hasDiscreteChapterSteps, isChapterMode, onSeek],
+  );
+
+  const resolveDiscreteChapterStep = useCallback(
+    (clientX: number) => {
+      if (!hasDiscreteChapterSteps || !chapterSliderTrackRef.current) return null;
+      const rect = chapterSliderTrackRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return null;
+      const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+      const ratio = rect.width > 0 ? x / rect.width : 0;
+      return Math.max(0, Math.min(Math.round(ratio * (chapterStepCount - 1)), chapterStepCount - 1));
+    },
+    [chapterStepCount, hasDiscreteChapterSteps],
+  );
+
+  const handleDiscreteChapterPointerMove = useCallback(
+    (clientX: number) => {
+      const stepIndex = resolveDiscreteChapterStep(clientX);
+      if (stepIndex == null) return;
+      handleProgressSeek(stepIndex);
+    },
+    [handleProgressSeek, resolveDiscreteChapterStep],
+  );
+
+  const handleDiscreteChapterPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!hasDiscreteChapterSteps) return;
+      chapterSliderDraggingRef.current = true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      handleDiscreteChapterPointerMove(event.clientX);
+    },
+    [handleDiscreteChapterPointerMove, hasDiscreteChapterSteps],
+  );
+
+  const handleDiscreteChapterPointerMoveEvent = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!hasDiscreteChapterSteps || !chapterSliderDraggingRef.current) return;
+      handleDiscreteChapterPointerMove(event.clientX);
+    },
+    [handleDiscreteChapterPointerMove, hasDiscreteChapterSteps],
+  );
+
+  const handleDiscreteChapterPointerEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!hasDiscreteChapterSteps) return;
+      chapterSliderDraggingRef.current = false;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    },
+    [hasDiscreteChapterSteps],
   );
 
   const adjustRate = (delta: number) => {
@@ -294,24 +384,51 @@ export function FooterBar({
               <span className="text-[11px] tabular-nums text-muted-foreground shrink-0 w-8 text-right">
                 {displayPct}%
               </span>
-              <div className="relative flex-1 h-7 flex items-center group">
+              <div
+                ref={chapterSliderTrackRef}
+                className="relative flex-1 h-7 flex items-center group"
+                onPointerDown={hasDiscreteChapterSteps ? handleDiscreteChapterPointerDown : undefined}
+                onPointerMove={hasDiscreteChapterSteps ? handleDiscreteChapterPointerMoveEvent : undefined}
+                onPointerUp={hasDiscreteChapterSteps ? handleDiscreteChapterPointerEnd : undefined}
+                onPointerCancel={hasDiscreteChapterSteps ? handleDiscreteChapterPointerEnd : undefined}
+              >
                 <div className="absolute inset-x-0 h-[3px] rounded-full bg-muted/60 overflow-hidden">
                   <div
-                    className="h-full bg-primary/70 rounded-full transition-[width] duration-75"
+                    className={`h-full bg-primary/70 rounded-full ${
+                      hasDiscreteChapterSteps ? "" : "transition-[width] duration-75"
+                    }`}
                     style={{ width: `${displayPct}%` }}
                   />
                 </div>
+                {hasDiscreteChapterSteps && (
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {discreteChapterMarkerPositions.map((position, index) => (
+                      <div
+                        key={position}
+                        className={`absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full ${
+                          index <= chapterStepIndex ? "bg-primary/80" : "bg-muted-foreground/30"
+                        }`}
+                        style={{ left: `${position}%` }}
+                      />
+                    ))}
+                  </div>
+                )}
                 <input
                   type="range"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  className={`absolute inset-0 w-full h-full opacity-0 z-10 ${
+                    hasDiscreteChapterSteps ? "pointer-events-none" : "cursor-pointer"
+                  }`}
                   min={0}
-                  max={100}
-                  value={displayPct}
+                  max={hasDiscreteChapterSteps ? chapterStepCount - 1 : 100}
+                  step={hasDiscreteChapterSteps ? 1 : 1}
+                  value={hasDiscreteChapterSteps ? chapterStepIndex : displayPct}
                   onChange={(e) => handleProgressSeek(parseInt(e.target.value, 10))}
                   aria-label="Jump to position"
                 />
                 <div
-                  className="absolute w-3 h-3 rounded-full bg-primary shadow-sm border-2 border-background transition-transform group-hover:scale-125 pointer-events-none"
+                  className={`absolute w-3 h-3 rounded-full bg-primary shadow-sm border-2 border-background pointer-events-none ${
+                    hasDiscreteChapterSteps ? "" : "transition-transform group-hover:scale-125"
+                  }`}
                   style={{ left: `calc(${displayPct}% - 6px)` }}
                 />
               </div>
