@@ -3,20 +3,11 @@ import type { Window as TauriWindow } from "@tauri-apps/api/window";
 const WINDOW_STATE_SETTLE_MS = 40;
 const FULLSCREEN_TRANSITION_MASK_HOLD_MS = 140;
 const FULLSCREEN_RESTORE_MAXIMIZED_KEY = "readany:restore-maximized-after-fullscreen";
-const FULLSCREEN_EXIT_RESTORE_ATTEMPTS = 6;
 
 const waitForWindowState = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
-
-const waitForFullscreenState = async (appWindow: TauriWindow, target: boolean) => {
-  for (let attempt = 0; attempt < FULLSCREEN_EXIT_RESTORE_ATTEMPTS; attempt += 1) {
-    if ((await appWindow.isFullscreen()) === target) return true;
-    await waitForWindowState(WINDOW_STATE_SETTLE_MS);
-  }
-  return (await appWindow.isFullscreen()) === target;
-};
 
 const createFullscreenTransitionMask = () => {
   if (typeof document === "undefined") return null;
@@ -60,12 +51,8 @@ export async function toggleWindowFullscreen(appWindow: TauriWindow): Promise<vo
   if (fullscreen) {
     await appWindow.setFullscreen(false);
     if (consumeRestoreMaximizedFlag()) {
-      await waitForFullscreenState(appWindow, false);
-      for (let attempt = 0; attempt < FULLSCREEN_EXIT_RESTORE_ATTEMPTS; attempt += 1) {
-        await appWindow.maximize();
-        await waitForWindowState(WINDOW_STATE_SETTLE_MS);
-        if (await appWindow.isMaximized()) break;
-      }
+      await waitForWindowState(WINDOW_STATE_SETTLE_MS);
+      await appWindow.maximize();
     }
     return;
   }
