@@ -39,6 +39,8 @@ interface FooterBarProps {
   currentPage: number;
   progressPercent: number;
   progressMode?: "book" | "chapter";
+  progressStepCount?: number;
+  progressStepIndex?: number;
   isVisible: boolean;
   onPrev: () => void;
   onNext: () => void;
@@ -55,6 +57,8 @@ export function FooterBar({
   currentPage,
   progressPercent,
   progressMode = "book",
+  progressStepCount,
+  progressStepIndex,
   isVisible,
   onPrev,
   onNext,
@@ -102,16 +106,40 @@ export function FooterBar({
 
   const pct = Math.max(0, Math.min(100, Math.round(progressPercent)));
   const isChapterMode = progressMode === "chapter";
+  const hasDiscreteChapterSteps =
+    isChapterMode &&
+    typeof progressStepCount === "number" &&
+    progressStepCount > 1 &&
+    typeof progressStepIndex === "number";
+  const chapterStepCount = hasDiscreteChapterSteps ? progressStepCount : 0;
+  const chapterStepIndex = hasDiscreteChapterSteps
+    ? Math.max(0, Math.min(progressStepIndex, chapterStepCount - 1))
+    : 0;
+  const discreteChapterPct =
+    hasDiscreteChapterSteps && chapterStepCount > 1
+      ? Math.round((chapterStepIndex / (chapterStepCount - 1)) * 100)
+      : pct;
 
   // Local slider value for smooth dragging (avoids snap-back)
   const [localSliderValue, setLocalSliderValue] = useState<number | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayPct = isChapterMode ? pct : localSliderValue != null ? localSliderValue : pct;
+  const displayPct = isChapterMode
+    ? discreteChapterPct
+    : localSliderValue != null
+      ? localSliderValue
+      : pct;
 
   // Debounced progress seek (100ms like readest/anx-reader)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleProgressSeek = useCallback(
     (value: number) => {
+      if (hasDiscreteChapterSteps) {
+        const stepIndex = Math.max(0, Math.min(value, chapterStepCount - 1));
+        const fraction = chapterStepCount > 1 ? stepIndex / (chapterStepCount - 1) : 0;
+        onSeek?.(fraction);
+        return;
+      }
+
       if (isChapterMode) {
         onSeek?.(value / 100);
         return;
@@ -128,7 +156,7 @@ export function FooterBar({
         setLocalSliderValue(null);
       }, 600);
     },
-    [isChapterMode, onSeek],
+    [chapterStepCount, hasDiscreteChapterSteps, isChapterMode, onSeek],
   );
 
   const adjustRate = (delta: number) => {
@@ -310,8 +338,9 @@ export function FooterBar({
                   type="range"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   min={0}
-                  max={100}
-                  value={displayPct}
+                  max={hasDiscreteChapterSteps ? chapterStepCount - 1 : 100}
+                  step={hasDiscreteChapterSteps ? 1 : 1}
+                  value={hasDiscreteChapterSteps ? chapterStepIndex : displayPct}
                   onChange={(e) => handleProgressSeek(parseInt(e.target.value, 10))}
                   aria-label="Jump to position"
                 />

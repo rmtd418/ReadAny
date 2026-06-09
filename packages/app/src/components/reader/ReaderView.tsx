@@ -1309,6 +1309,17 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const isChapterSliderSupported = !isFixedLayout;
   const effectiveProgressSliderMode =
     progressSliderMode === "chapter" && isChapterSliderSupported ? "chapter" : "book";
+  const chapterSliderDiscreteStepCount =
+    effectiveProgressSliderMode === "chapter" &&
+    bookFormat === "TXT" &&
+    totalPages > 1 &&
+    currentPage > 0
+      ? totalPages
+      : null;
+  const chapterSliderDiscreteStepIndex =
+    chapterSliderDiscreteStepCount != null
+      ? Math.max(0, Math.min(currentPage - 1, chapterSliderDiscreteStepCount - 1))
+      : null;
   const footerProgressPercent =
     effectiveProgressSliderMode === "chapter"
       ? Math.round((chapterSliderPendingFraction ?? chapterSliderState?.fraction ?? 0) * 100)
@@ -3027,6 +3038,8 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             currentPage={currentPage}
             progressPercent={footerProgressPercent}
             progressMode={effectiveProgressSliderMode}
+            progressStepCount={chapterSliderDiscreteStepCount ?? undefined}
+            progressStepIndex={chapterSliderDiscreteStepIndex ?? undefined}
             isVisible={controlsVisible}
             onPrev={handleNavPrev}
             onNext={handleNavNext}
