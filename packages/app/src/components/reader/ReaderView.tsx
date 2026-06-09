@@ -61,6 +61,8 @@ const MAX_TRACKED_PAGE_DELTA = 20;
 const MAX_TRACKED_FRACTION_DELTA = 0.08;
 const INITIAL_PROGRESS_RESTORE_GUARD_MS = 1800;
 const PROGRAMMATIC_NAV_GUARD_MS = 1200;
+const CHAPTER_SLIDER_PENDING_TIMEOUT_MS = 2000;
+const CHAPTER_SLIDER_PENDING_MATCH_DELTA = 0.08;
 const BOOK_IMPORT_FILTERS = [
   {
     name: "Books",
@@ -522,10 +524,19 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   // Current section index for chapter translation
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [chapterSliderState, setChapterSliderState] = useState<{
+    sectionIndex: number;
     fraction: number;
     start: number;
     end: number;
   } | null>(null);
+  const [chapterSliderPendingFraction, setChapterSliderPendingFraction] = useState<number | null>(
+    null,
+  );
+  const chapterSliderPendingSeekRef = useRef<{
+    sectionIndex: number;
+    fraction: number;
+  } | null>(null);
+  const chapterSliderPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track when foliate is ready to receive annotations
   const [foliateReady, setFoliateReady] = useState(false);
@@ -896,6 +907,40 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     );
   }, []);
 
+  const clearPendingChapterSliderSeek = useCallback(() => {
+    chapterSliderPendingSeekRef.current = null;
+    setChapterSliderPendingFraction(null);
+    if (chapterSliderPendingTimerRef.current) {
+      clearTimeout(chapterSliderPendingTimerRef.current);
+      chapterSliderPendingTimerRef.current = null;
+    }
+  }, []);
+
+  const beginPendingChapterSliderSeek = useCallback(
+    (sectionIndex: number, fraction: number) => {
+      clearPendingChapterSliderSeek();
+      const clampedFraction = Math.max(0, Math.min(1, fraction));
+      chapterSliderPendingSeekRef.current = {
+        sectionIndex,
+        fraction: clampedFraction,
+      };
+      setChapterSliderPendingFraction(clampedFraction);
+      chapterSliderPendingTimerRef.current = setTimeout(() => {
+        clearPendingChapterSliderSeek();
+      }, CHAPTER_SLIDER_PENDING_TIMEOUT_MS);
+    },
+    [clearPendingChapterSliderSeek],
+  );
+
+  useEffect(
+    () => () => {
+      if (chapterSliderPendingTimerRef.current) {
+        clearTimeout(chapterSliderPendingTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const goToCFISafely = useCallback(
     (targetCfi: string) => {
       if (!targetCfi) return;
@@ -1107,6 +1152,11 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     (detail: RelocateDetail) => {
       const progress = detail.fraction ?? 0;
       const cfi = detail.cfi || `section-${detail.section?.current ?? 0}`;
+      const sectionIndex = detail.section?.current ?? currentSectionIndex;
+      const fractionInSection =
+        typeof detail.fractionInSection === "number"
+          ? Math.max(0, Math.min(1, detail.fractionInSection))
+          : null;
 
       // Update reader store (immediate)
       setProgress(tabId, progress, cfi);
@@ -1130,17 +1180,29 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       }
 
       if (
-        typeof detail.fractionInSection === "number" &&
+        fractionInSection != null &&
         detail.sectionBounds &&
         detail.sectionBounds.end >= detail.sectionBounds.start
       ) {
         setChapterSliderState({
-          fraction: Math.max(0, Math.min(1, detail.fractionInSection)),
+          sectionIndex,
+          fraction: fractionInSection,
           start: detail.sectionBounds.start,
           end: detail.sectionBounds.end,
         });
       } else {
         setChapterSliderState(null);
+      }
+
+      const pendingChapterSeek = chapterSliderPendingSeekRef.current;
+      if (
+        pendingChapterSeek &&
+        fractionInSection != null &&
+        pendingChapterSeek.sectionIndex === sectionIndex &&
+        Math.abs(pendingChapterSeek.fraction - fractionInSection) <=
+          CHAPTER_SLIDER_PENDING_MATCH_DELTA
+      ) {
+        clearPendingChapterSliderSeek();
       }
 
       const trackingSuppressed = Date.now() < progressTrackingGuardUntilRef.current;
@@ -1233,6 +1295,8 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     [
       tabId,
       bookId,
+      currentSectionIndex,
+      clearPendingChapterSliderSeek,
       isFixedLayout,
       setProgress,
       setChapter,
@@ -1247,12 +1311,23 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     progressSliderMode === "chapter" && isChapterSliderSupported ? "chapter" : "book";
   const footerProgressPercent =
     effectiveProgressSliderMode === "chapter"
-      ? Math.round((chapterSliderState?.fraction ?? 0) * 100)
+      ? Math.round((chapterSliderPendingFraction ?? chapterSliderState?.fraction ?? 0) * 100)
       : Math.round((readerTab?.progress ?? 0) * 100);
 
   const handleFooterSeek = useCallback(
     (fraction: number) => {
       suppressProgressTracking(3000);
+      const clampedFraction = Math.max(0, Math.min(1, fraction));
+      const sectionIndex = chapterSliderState?.sectionIndex ?? currentSectionIndex;
+
+      if (effectiveProgressSliderMode === "chapter") {
+        beginPendingChapterSliderSeek(sectionIndex, clampedFraction);
+
+        if (bookFormat === "TXT") {
+          foliateRef.current?.goToSectionFraction(sectionIndex, clampedFraction);
+          return;
+        }
+      }
 
       if (
         effectiveProgressSliderMode === "chapter" &&
@@ -1261,15 +1336,21 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       ) {
         const globalFraction =
           chapterSliderState.start +
-          Math.max(0, Math.min(1, fraction)) *
-            (chapterSliderState.end - chapterSliderState.start);
+          clampedFraction * (chapterSliderState.end - chapterSliderState.start);
         foliateRef.current?.goToFraction(globalFraction);
         return;
       }
 
-      foliateRef.current?.goToFraction(fraction);
+      foliateRef.current?.goToFraction(clampedFraction);
     },
-    [chapterSliderState, effectiveProgressSliderMode],
+    [
+      beginPendingChapterSliderSeek,
+      bookFormat,
+      chapterSliderState,
+      currentSectionIndex,
+      effectiveProgressSliderMode,
+      suppressProgressTracking,
+    ],
   );
 
   const handleTocReady = useCallback((toc: TOCItem[]) => {

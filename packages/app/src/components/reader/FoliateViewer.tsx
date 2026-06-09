@@ -608,6 +608,7 @@ export interface FoliateViewerHandle {
   goPrev: () => void;
   goToHref: (href: string) => void;
   goToFraction: (fraction: number) => void;
+  goToSectionFraction: (index: number, fractionInSection: number) => void;
   goToCFI: (cfi: string) => Promise<void>;
   goToIndex: (index: number) => void;
   highlightCFITemporarily: (cfi: string, duration?: number) => void;
@@ -1386,6 +1387,9 @@ export const FoliateViewer = forwardRef<FoliateViewerHandle, FoliateViewerProps>
         },
         goToFraction: (fraction: number) => {
           viewRef.current?.goToFraction(fraction);
+        },
+        goToSectionFraction: (index: number, fractionInSection: number) => {
+          viewRef.current?.goToSectionFraction(index, fractionInSection);
         },
         goToCFI: async (cfi: string) => {
           await viewRef.current?.goTo(cfi);
