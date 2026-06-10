@@ -1,3 +1,4 @@
+import { useSettingsStore } from "@/stores/settings-store";
 import type { HighlightColor } from "@readany/core/types";
 import { HIGHLIGHT_COLORS, HIGHLIGHT_COLOR_HEX } from "@readany/core/types";
 import { cn } from "@readany/core/utils";
@@ -55,6 +56,9 @@ export function SelectionPopover({
   onClose,
 }: SelectionPopoverProps) {
   const { t } = useTranslation();
+  const doubleClickAskAIEnabled = useSettingsStore(
+    (s) => s.readSettings.selectionDoubleClickAskAI ?? true,
+  );
   const [showColors, setShowColors] = useState(!isPdf);
   const [selectedColor, setSelectedColor] = useState<HighlightColor>(currentColor || defaultColor);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -162,6 +166,7 @@ export function SelectionPopover({
       onClose();
       return;
     }
+    if (!doubleClickAskAIEnabled) return;
     onAskAI();
   };
 
