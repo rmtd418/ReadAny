@@ -15,7 +15,7 @@ interface MessageListProps {
   isStreaming?: boolean;
   currentStep?: "thinking" | "tool_calling" | "responding" | "idle";
   onStop?: () => void;
-  onUndoLastTurn?: () => void;
+  onUndoTurn?: (userMessageId: string) => void;
 }
 
 /** Threshold (px) to consider the user "at the bottom" */
@@ -40,7 +40,7 @@ export function MessageList({
   onCitationClick,
   isStreaming,
   currentStep,
-  onUndoLastTurn,
+  onUndoTurn,
 }: MessageListProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -125,12 +125,11 @@ export function MessageList({
           <MessageBubble
             key={msg.id}
             message={msg}
-            messageIndex={idx}
-            lastUserMessageIndex={messages.map((item) => item.role).lastIndexOf("user")}
             onCitationClick={onCitationClick}
             isStreaming={idx === messages.length - 1 && isLastMsgStreaming}
+            disableUndo={!!isStreaming}
             currentStep={currentStep}
-            onUndoLastTurn={onUndoLastTurn}
+            onUndoTurn={onUndoTurn}
           />
         ))}
         {showStreamingIndicator && <StreamingIndicator step={currentStep!} />}
@@ -155,12 +154,11 @@ export function MessageList({
 
 interface MessageBubbleProps {
   message: MessageV2;
-  messageIndex: number;
-  lastUserMessageIndex: number;
   onCitationClick?: (citation: CitationPart) => void;
   isStreaming?: boolean;
+  disableUndo?: boolean;
   currentStep?: "thinking" | "tool_calling" | "responding" | "idle";
-  onUndoLastTurn?: () => void;
+  onUndoTurn?: (userMessageId: string) => void;
 }
 
 /** Inline quote block component for user messages */
@@ -210,19 +208,18 @@ function CopyMessageButton({ message }: { message: MessageV2 }) {
 
 function MessageBubble({
   message,
-  messageIndex,
-  lastUserMessageIndex,
   onCitationClick,
   isStreaming,
+  disableUndo,
   currentStep,
-  onUndoLastTurn,
+  onUndoTurn,
 }: MessageBubbleProps) {
   const { t } = useTranslation();
   if (message.role === "user") {
     const quoteParts = message.parts.filter((p) => p.type === "quote") as QuotePart[];
     const textParts = message.parts.filter((p) => p.type === "text");
     const hasQuotes = quoteParts.length > 0;
-    const showUndoButton = !!onUndoLastTurn && messageIndex === lastUserMessageIndex;
+    const showUndoButton = !!onUndoTurn && !disableUndo;
 
     return (
       <div className="group mt-6 flex max-w-full select-text flex-col first:mt-0">
@@ -249,7 +246,7 @@ function MessageBubble({
           {showUndoButton && (
             <button
               type="button"
-              onClick={onUndoLastTurn}
+              onClick={() => onUndoTurn(message.id)}
               className="absolute -left-7 bottom-1 inline-flex items-center rounded-full p-1 text-foreground transition-colors hover:bg-muted"
               title={t("chat.undoLastTurn")}
             >

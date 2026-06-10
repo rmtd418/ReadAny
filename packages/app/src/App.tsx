@@ -18,7 +18,7 @@ export default function App() {
   return (
     <>
       <AppLayout />
-      <Toaster position="top-center" richColors duration={2000} />
+      <Toaster position="top-center" duration={2000} />
       <UpdateNotification />
     </>
   );
