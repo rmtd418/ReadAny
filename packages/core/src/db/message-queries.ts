@@ -1,5 +1,5 @@
 import type { Message } from "../types";
-import { getDB, getDeviceId, nextSyncVersion, parseJSON } from "./db-core";
+import { getDB, getDeviceId, insertTombstone, nextSyncVersion, parseJSON } from "./db-core";
 
 export async function getMessages(threadId: string): Promise<Message[]> {
   const database = await getDB();
@@ -47,4 +47,16 @@ export async function insertMessage(message: Message): Promise<void> {
       deviceId,
     ],
   );
+}
+
+export async function deleteMessages(messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+
+  const database = await getDB();
+  for (const id of messageIds) {
+    await insertTombstone(database, id, "messages");
+  }
+
+  const placeholders = messageIds.map(() => "?").join(", ");
+  await database.execute(`DELETE FROM messages WHERE id IN (${placeholders})`, messageIds);
 }

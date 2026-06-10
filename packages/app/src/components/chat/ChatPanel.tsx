@@ -49,6 +49,7 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
     loadThreads,
     createThread,
     removeThread,
+    removeLastTurn,
     setBookActiveThread,
     getActiveThreadId,
     getThreadsForContext,
@@ -191,6 +192,16 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
     },
     [removeThread],
   );
+
+  const handleUndoLastTurn = useCallback(async () => {
+    if (!activeThread || isStreaming) return;
+    const removed = await removeLastTurn(activeThread.id);
+    if (removed) {
+      toast.success(t("chat.undoLastTurnSuccess"));
+    } else {
+      toast.error(t("chat.undoLastTurnFailed"));
+    }
+  }, [activeThread, isStreaming, removeLastTurn, t]);
 
   const displayMessages = activeThread?.messages || [];
 
@@ -418,6 +429,7 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
             isStreaming={isStreaming}
             currentStep={currentStep}
             onStop={stopStream}
+            onUndoLastTurn={handleUndoLastTurn}
             onCitationClick={onNavigateToCitation}
           />
         ) : (

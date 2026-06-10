@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  deleteMessages as dbDeleteMessages,
   deleteThread as dbDeleteThread,
   getThreads as dbGetThreads,
   insertMessage as dbInsertMessage,
@@ -38,6 +39,7 @@ export interface ChatState {
   getActiveThreadId: (bookId?: string) => string | null;
   getThreadsForContext: (bookId?: string) => Thread[];
   addMessage: (threadId: string, message: Message) => Promise<void>;
+  removeLastTurn: (threadId: string) => Promise<boolean>;
   updateMessage: (threadId: string, messageId: string, content: string) => void;
   updateThreadTitle: (threadId: string, title: string) => Promise<void>;
   setStreaming: (streaming: boolean) => void;
@@ -197,6 +199,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
         t.id === threadId ? { ...t, messages: [...t.messages, message], updatedAt: Date.now() } : t,
       ),
     }));
+  },
+
+  removeLastTurn: async (threadId) => {
+    const thread = get().threads.find((item) => item.id === threadId);
+    if (!thread || thread.messages.length === 0) return false;
+
+    const lastUserIndex = [...thread.messages]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }) => message.role === "user")?.index;
+
+    if (lastUserIndex === undefined) return false;
+
+    const removedMessages = thread.messages.slice(lastUserIndex);
+    if (removedMessages.length === 0) return false;
+
+    try {
+      await dbDeleteMessages(removedMessages.map((message) => message.id));
+    } catch (err) {
+      console.error("[chat-store] Failed to delete last turn messages:", err);
+      return false;
+    }
+
+    set((state) => ({
+      threads: state.threads.map((item) => {
+        if (item.id !== threadId) return item;
+        const remainingMessages = item.messages.slice(0, lastUserIndex);
+        return {
+          ...item,
+          messages: remainingMessages,
+          updatedAt: Date.now(),
+        };
+      }),
+    }));
+
+    return true;
   },
 
   updateMessage: (threadId, messageId, content) =>

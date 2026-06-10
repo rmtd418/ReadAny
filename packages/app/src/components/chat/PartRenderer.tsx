@@ -221,6 +221,8 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
 function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const { t } = useTranslation();
   const hasError = part.status === "error" || Boolean(part.error);
+  const hasResult = part.result !== undefined;
+  const showFallbackDetail = !hasResult && !hasError && !hasNotice && part.status === "completed";
 
   const [isOpen, setIsOpen] = useState(hasError);
 
@@ -324,18 +326,26 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
                 </div>
               )}
 
-              {part.result !== undefined && (
+              {hasResult && (
                 <div>
                   <h4 className="mb-1.5 text-xs font-medium text-muted-foreground">
                     {t("common.result")}
                   </h4>
                   <div className="max-h-48 overflow-auto rounded border border-border bg-background p-2 font-mono text-xs">
                     <pre className="whitespace-pre-wrap text-foreground">
-                      {typeof part.result === "string" && part.result.length > 500
-                        ? part.result.slice(0, 500) + "..."
+                      {typeof part.result === "string"
+                        ? part.result.length > 500
+                          ? part.result.slice(0, 500) + "..."
+                          : part.result
                         : JSON.stringify(part.result, null, 2)}
                     </pre>
                   </div>
+                </div>
+              )}
+
+              {showFallbackDetail && (
+                <div className="rounded border border-border bg-background p-2 text-xs leading-relaxed text-muted-foreground">
+                  {t("streaming.toolNoDetailedResult")}
                 </div>
               )}
 

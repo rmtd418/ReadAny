@@ -68,6 +68,21 @@ function buildPartsOrder(parts: Part[]) {
   });
 }
 
+function finalizeToolCallParts(parts: Part[], fallbackNotice: string, now = Date.now()) {
+  for (const part of parts) {
+    if (part.type !== "tool_call") continue;
+
+    if ((part.result === undefined && !part.error && !part.notice) || part.status === "pending") {
+      part.notice = part.notice || fallbackNotice;
+    }
+
+    if (part.status !== "error") {
+      part.status = "completed";
+    }
+    part.updatedAt = now;
+  }
+}
+
 /** Type guard for mindmap tool result */
 function isMindmapResult(
   result: unknown,
@@ -294,6 +309,11 @@ export function useStreamingChat(options?: StreamingChatOptions) {
               currentReasoningPart.status = "completed";
               currentReasoningPart.updatedAt = Date.now();
             }
+            finalizeToolCallParts(
+              currentParts,
+              i18n.t("streaming.toolNoDetailedResult"),
+              Date.now(),
+            );
 
             const textContent = currentParts
               .filter((p) => p.type === "text")
