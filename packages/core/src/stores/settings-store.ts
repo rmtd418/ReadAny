@@ -54,6 +54,7 @@ const defaultReadSettings: ReadSettings = {
   showTopTitleProgress: true,
   showBottomTimeBattery: true,
   volumeButtonsPageTurn: false,
+  selectionDoubleClickAskAI: true,
   defaultHighlightColor: "yellow",
   followSystemFontScale: false,
 };

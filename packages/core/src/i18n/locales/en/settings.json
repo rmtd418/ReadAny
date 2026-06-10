@@ -80,6 +80,8 @@
     "paginatedLayout": "Page Layout",
     "singlePage": "Single Page",
     "doublePage": "Double Page",
+    "selectionDoubleClickAskAI": "Double-click selection to add to AI chat",
+    "selectionDoubleClickAskAIDesc": "When enabled, double-clicking inside the selected range adds the selected text to the AI chat input. When disabled, use the AI button in the selection menu instead.",
     "ai_title": "AI Configuration",
     "ai_desc": "Configure AI endpoints and model settings",
     "ai_endpoints": "Endpoints",

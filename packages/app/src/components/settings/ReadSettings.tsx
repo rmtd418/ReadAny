@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { useAppStore } from "@/stores/app-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useFontStore } from "@readany/core/stores";
@@ -76,6 +77,22 @@ export function ReadSettingsPanel() {
             </Select>
           </div>
 
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <span className="text-sm text-foreground">
+                {t("settings.selectionDoubleClickAskAI")}
+              </span>
+              <p className="mt-1 text-xs text-muted-foreground/80">
+                {t("settings.selectionDoubleClickAskAIDesc")}
+              </p>
+            </div>
+            <Switch
+              checked={readSettings.selectionDoubleClickAskAI ?? true}
+              onCheckedChange={(checked) =>
+                updateReadSettings({ selectionDoubleClickAskAI: checked })
+              }
+            />
+          </div>
           {/* Font */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-foreground">{t("settings.fontTheme")}</span>
