@@ -62,7 +62,6 @@ export async function enterManagedFullscreen(appWindow: TauriWindow) {
 
   if (maximized) {
     await appWindow.unmaximize();
-    await waitForWindowFrame();
   }
 
   await appWindow.setFullscreen(true);
