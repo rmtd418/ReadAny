@@ -5,7 +5,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AttachedQuote } from "@readany/core/types";
 import { Brain, EyeOff, Quote, Send, Square, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 export type { AttachedQuote };
 
@@ -23,6 +23,8 @@ interface ChatInputProps {
   showDeepThinking?: boolean;
   quotes?: AttachedQuote[];
   onRemoveQuote?: (id: string) => void;
+  draftValue?: string;
+  draftRevision?: number;
 }
 
 export function ChatInput({
@@ -34,6 +36,8 @@ export function ChatInput({
   showDeepThinking = true,
   quotes = [],
   onRemoveQuote,
+  draftValue,
+  draftRevision,
 }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
@@ -42,6 +46,18 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const resolvedPlaceholder = placeholder || t("chat.askPlaceholder");
+
+  useEffect(() => {
+    if (draftRevision === undefined) return;
+    setValue(draftValue ?? "");
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+      el.focus();
+    });
+  }, [draftRevision, draftValue]);
 
   const handleSend = useCallback(
     (useDeepThinking: boolean = deepThinking) => {

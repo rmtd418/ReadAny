@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  deleteMessages as dbDeleteMessages,
   deleteThread as dbDeleteThread,
   getThreads as dbGetThreads,
   insertMessage as dbInsertMessage,
@@ -15,7 +16,12 @@ import {
  * - Each book has its own active thread; general chat has its own.
  * - All threads are persisted to SQLite via core db module
  */
-import type { Message, ReasoningStep, SemanticContext, Thread, ToolCall } from "../types";
+import type { AttachedQuote, Message, ReasoningStep, SemanticContext, Thread, ToolCall } from "../types";
+
+export interface RemovedChatTurn {
+  text: string;
+  quotes: AttachedQuote[];
+}
 
 export interface ChatState {
   threads: Thread[];
@@ -38,6 +44,8 @@ export interface ChatState {
   getActiveThreadId: (bookId?: string) => string | null;
   getThreadsForContext: (bookId?: string) => Thread[];
   addMessage: (threadId: string, message: Message) => Promise<void>;
+  removeTurn: (threadId: string, userMessageId: string) => Promise<RemovedChatTurn | null>;
+  removeLastTurn: (threadId: string) => Promise<boolean>;
   updateMessage: (threadId: string, messageId: string, content: string) => void;
   updateThreadTitle: (threadId: string, title: string) => Promise<void>;
   setStreaming: (streaming: boolean) => void;
@@ -197,6 +205,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
         t.id === threadId ? { ...t, messages: [...t.messages, message], updatedAt: Date.now() } : t,
       ),
     }));
+  },
+
+  removeTurn: async (threadId, userMessageId) => {
+    const thread = get().threads.find((item) => item.id === threadId);
+    if (!thread || thread.messages.length === 0) return null;
+
+    const userIndex = thread.messages.findIndex(
+      (message) => message.id === userMessageId && message.role === "user",
+    );
+
+    if (userIndex < 0) return null;
+
+    const nextUserIndex = thread.messages.findIndex(
+      (message, index) => index > userIndex && message.role === "user",
+    );
+    const removeEndIndex = nextUserIndex === -1 ? thread.messages.length : nextUserIndex;
+    const removedMessages = thread.messages.slice(userIndex, removeEndIndex);
+    if (removedMessages.length === 0) return null;
+
+    const userMessage = thread.messages[userIndex];
+    const orderedParts = userMessage.partsOrder ?? [];
+    const textParts = orderedParts
+      .filter((part) => part.type === "text" && part.text?.trim())
+      .map((part) => part.text!.trim());
+    const quotes = orderedParts
+      .filter((part) => part.type === "quote" && part.text?.trim())
+      .map((part) => ({
+        id: part.id,
+        text: part.text!,
+        source: part.source,
+      }));
+    const restoredTurn: RemovedChatTurn = {
+      text:
+        textParts.length > 0
+          ? textParts.join("\n\n")
+          : orderedParts.length === 0
+            ? userMessage.content
+            : "",
+      quotes,
+    };
+
+    try {
+      await dbDeleteMessages(removedMessages.map((message) => message.id));
+    } catch (err) {
+      console.error("[chat-store] Failed to delete chat turn messages:", err);
+      return null;
+    }
+
+    set((state) => ({
+      threads: state.threads.map((item) => {
+        if (item.id !== threadId) return item;
+        const remainingMessages = [
+          ...item.messages.slice(0, userIndex),
+          ...item.messages.slice(removeEndIndex),
+        ];
+        return {
+          ...item,
+          messages: remainingMessages,
+          updatedAt: Date.now(),
+        };
+      }),
+    }));
+
+    return restoredTurn;
+  },
+
+  removeLastTurn: async (threadId) => {
+    const thread = get().threads.find((item) => item.id === threadId);
+    if (!thread || thread.messages.length === 0) return false;
+
+    const lastUserMessage = [...thread.messages].reverse().find((message) => message.role === "user");
+    if (!lastUserMessage) return false;
+
+    return Boolean(await get().removeTurn(threadId, lastUserMessage.id));
   },
 
   updateMessage: (threadId, messageId, content) =>

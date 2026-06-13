@@ -32,6 +32,7 @@ export interface ToolCallPart extends BasePart {
   args: Record<string, unknown>;
   result?: unknown;
   error?: string;
+  notice?: string;
   reasoning?: string;
   notice?: string;
 }

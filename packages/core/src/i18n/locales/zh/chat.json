@@ -49,6 +49,9 @@
     "configRequired": "需要配置 AI",
     "configRequiredMessage": "请先在设置中配置 AI 端点和模型",
     "configureAI": "配置 AI",
+    "undoLastTurn": "撤回上一轮",
+    "undoLastTurnSuccess": "已撤回上一轮对话",
+    "undoLastTurnFailed": "没有可撤回的上一轮对话",
     "deleteThread": "删除对话",
     "deleteThreadConfirm": "确定要删除这个对话吗？",
     "inputPlaceholder": "输入消息...",
@@ -72,6 +75,7 @@
     "loadingMindmap": "加载思维导图...",
     "toolNotice": "已停止搜索",
     "toolNoticeDetail": "章节搜索已停止",
+    "toolNoDetailedResult": "这个步骤已完成，但没有返回可展示的详细内容。",
     "toolFailed": "调用失败",
     "toolFailedDetail": "工具调用失败",
     "aborted": "用户取消了生成"

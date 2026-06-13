@@ -85,6 +85,8 @@
     "progressSliderChapter": "Current Chapter",
     "progressSliderModeDesc": "Current chapter mode only supports EPUB, TXT, UMD, MOBI, AZW, AZW3, FB2, and FBZ. PDF and CBZ are not supported.",
     "progressSliderModeCurrentFallback": "This book does not support chapter progress. The reader will fall back to whole-book progress automatically.",
+    "selectionDoubleClickAskAI": "Double-click selection to add to AI chat",
+    "selectionDoubleClickAskAIDesc": "When enabled, double-clicking inside the selected range adds the selected text to the AI chat input. When disabled, use the AI button in the selection menu instead.",
     "ai_title": "AI Configuration",
     "ai_desc": "Configure AI endpoints and model settings",
     "ai_endpoints": "Endpoints",

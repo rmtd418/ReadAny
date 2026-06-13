@@ -99,6 +99,7 @@ export interface ReadSettings extends ViewSettings {
    * `book` keeps the original whole-book slider behavior.
    */
   progressSliderMode?: ProgressSliderMode;
+  selectionDoubleClickAskAI?: boolean;
   defaultHighlightColor?: HighlightColor;
   /**
    * Mobile-only opt-in: when true, the reader scales fontSize by the OS

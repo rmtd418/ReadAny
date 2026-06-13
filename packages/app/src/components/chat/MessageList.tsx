@@ -3,7 +3,7 @@
  * Uses Part-based rendering for real-time updates
  */
 import type { CitationPart, MessageV2, QuotePart } from "@readany/core/types/message";
-import { ArrowDown, Check, Copy, Quote } from "lucide-react";
+import { ArrowDown, Check, Copy, CornerLeftUp, Quote } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PartRenderer } from "./PartRenderer";
@@ -15,6 +15,7 @@ interface MessageListProps {
   isStreaming?: boolean;
   currentStep?: "thinking" | "tool_calling" | "responding" | "idle";
   onStop?: () => void;
+  onUndoTurn?: (userMessageId: string) => void;
 }
 
 /** Threshold (px) to consider the user "at the bottom" */
@@ -39,6 +40,7 @@ export function MessageList({
   onCitationClick,
   isStreaming,
   currentStep,
+  onUndoTurn,
 }: MessageListProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -125,7 +127,9 @@ export function MessageList({
             message={msg}
             onCitationClick={onCitationClick}
             isStreaming={idx === messages.length - 1 && isLastMsgStreaming}
+            disableUndo={!!isStreaming}
             currentStep={currentStep}
+            onUndoTurn={onUndoTurn}
           />
         ))}
         {showStreamingIndicator && <StreamingIndicator step={currentStep!} />}
@@ -152,7 +156,9 @@ interface MessageBubbleProps {
   message: MessageV2;
   onCitationClick?: (citation: CitationPart) => void;
   isStreaming?: boolean;
+  disableUndo?: boolean;
   currentStep?: "thinking" | "tool_calling" | "responding" | "idle";
+  onUndoTurn?: (userMessageId: string) => void;
 }
 
 /** Inline quote block component for user messages */
@@ -200,31 +206,52 @@ function CopyMessageButton({ message }: { message: MessageV2 }) {
   );
 }
 
-function MessageBubble({ message, onCitationClick, isStreaming, currentStep }: MessageBubbleProps) {
+function MessageBubble({
+  message,
+  onCitationClick,
+  isStreaming,
+  disableUndo,
+  currentStep,
+  onUndoTurn,
+}: MessageBubbleProps) {
+  const { t } = useTranslation();
   if (message.role === "user") {
     const quoteParts = message.parts.filter((p) => p.type === "quote") as QuotePart[];
     const textParts = message.parts.filter((p) => p.type === "text");
     const hasQuotes = quoteParts.length > 0;
+    const showUndoButton = !!onUndoTurn && !disableUndo;
 
     return (
       <div className="group mt-6 flex max-w-full select-text flex-col first:mt-0">
-        <div className="max-w-[85%] self-end rounded-2xl bg-muted px-3 py-2 text-sm leading-relaxed">
-          {hasQuotes && (
-            <div className="mb-2 flex flex-col gap-1.5">
-              {quoteParts.map((q) => (
-                <UserQuoteBlock key={q.id} part={q} />
-              ))}
-            </div>
-          )}
-          {textParts.length > 0 && (
-            <div className="whitespace-pre-wrap">
-              {textParts.map((part) => {
-                if (part.type === "text") {
-                  return <span key={part.id}>{part.text}</span>;
-                }
-                return null;
-              })}
-            </div>
+        <div className="relative max-w-[85%] self-end">
+          <div className="rounded-2xl bg-muted px-3 py-2 text-sm leading-relaxed">
+            {hasQuotes && (
+              <div className="mb-2 flex flex-col gap-1.5">
+                {quoteParts.map((q) => (
+                  <UserQuoteBlock key={q.id} part={q} />
+                ))}
+              </div>
+            )}
+            {textParts.length > 0 && (
+              <div className="whitespace-pre-wrap">
+                {textParts.map((part) => {
+                  if (part.type === "text") {
+                    return <span key={part.id}>{part.text}</span>;
+                  }
+                  return null;
+                })}
+              </div>
+            )}
+          </div>
+          {showUndoButton && (
+            <button
+              type="button"
+              onClick={() => onUndoTurn(message.id)}
+              className="absolute -left-7 bottom-1 inline-flex items-center rounded-full p-1 text-foreground transition-colors hover:bg-muted"
+              title={t("chat.undoLastTurn")}
+            >
+              <CornerLeftUp className="size-3.5" />
+            </button>
           )}
         </div>
       </div>

@@ -85,6 +85,8 @@
     "progressSliderChapter": "当前章节",
     "progressSliderModeDesc": "当前章节模式仅支持 EPUB、TXT、UMD、MOBI、AZW、AZW3、FB2、FBZ；PDF、CBZ 不支持。",
     "progressSliderModeCurrentFallback": "当前这本书不支持章节内进度，阅读器会自动按整本书进度处理。",
+    "selectionDoubleClickAskAI": "双击选中文本添加到 AI 对话",
+    "selectionDoubleClickAskAIDesc": "开启后，选中文本后在选区范围内双击，可把所选内容添加到右侧 AI 对话输入框；关闭后只能通过选区菜单里的 AI 按钮添加。",
     "ai_title": "AI 配置",
     "ai_desc": "配置 AI 端点和模型设置",
     "ai_endpoints": "端点列表",

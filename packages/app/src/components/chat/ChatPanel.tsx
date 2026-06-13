@@ -49,6 +49,7 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
     loadThreads,
     createThread,
     removeThread,
+    removeTurn,
     setBookActiveThread,
     getActiveThreadId,
     getThreadsForContext,
@@ -74,6 +75,8 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
   const [showThreadList, setShowThreadList] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [attachedQuotes, setAttachedQuotes] = useState<AttachedQuote[]>([]);
+  const [draftValue, setDraftValue] = useState("");
+  const [draftRevision, setDraftRevision] = useState(0);
   const [configGuide, setConfigGuide] = useState<ConfigGuideType>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -191,6 +194,19 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
     },
     [removeThread],
   );
+
+  const handleUndoTurn = useCallback(async (userMessageId: string) => {
+    if (!activeThread || isStreaming) return;
+    const removedTurn = await removeTurn(activeThread.id, userMessageId);
+    if (removedTurn) {
+      setAttachedQuotes(removedTurn.quotes);
+      setDraftValue(removedTurn.text);
+      setDraftRevision((value) => value + 1);
+      toast(t("chat.undoLastTurnSuccess"));
+    } else {
+      toast(t("chat.undoLastTurnFailed"));
+    }
+  }, [activeThread, isStreaming, removeTurn, t]);
 
   const displayMessages = activeThread?.messages || [];
 
@@ -418,6 +434,7 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
             isStreaming={isStreaming}
             currentStep={currentStep}
             onStop={stopStream}
+            onUndoTurn={handleUndoTurn}
             onCitationClick={onNavigateToCitation}
           />
         ) : (
@@ -456,6 +473,8 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
           placeholder={t("chat.askBookPlaceholder")}
           quotes={attachedQuotes}
           onRemoveQuote={handleRemoveQuote}
+          draftValue={draftValue}
+          draftRevision={draftRevision}
         />
       </div>
 
