@@ -25,6 +25,7 @@ import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { MissingBookPromptDialog } from "@/components/shared/MissingBookPromptDialog";
 import { ReadingStatsPanel } from "@/components/stats/ReadingStatsPanel";
 import { FloatingTTSBubble } from "@/components/tts/FloatingTTSBubble";
+import { toggleManagedFullscreen } from "@/lib/window/fullscreen-state";
 import SkillsPage from "@/pages/Skills";
 import { useAppStore } from "@/stores/app-store";
 import { useLibraryStore } from "@/stores/library-store";
@@ -142,7 +143,7 @@ export function AppLayout() {
         e.preventDefault();
         import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
           const win = getCurrentWindow();
-          win.isFullscreen().then((fs) => win.setFullscreen(!fs));
+          void toggleManagedFullscreen(win);
         }).catch((err) => console.warn("[Layout] Failed to toggle fullscreen:", err));
       }
     };

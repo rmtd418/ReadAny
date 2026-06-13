@@ -1,6 +1,7 @@
 import { SyncButton } from "@/components/ui/SyncButton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toggleManagedFullscreen } from "@/lib/window/fullscreen-state";
 import { useAnnotationStore } from "@/stores/annotation-store";
 import { useAppStore } from "@/stores/app-store";
 import { useNotebookStore } from "@/stores/notebook-store";
@@ -255,8 +256,7 @@ export function ReaderToolbar({
             try {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
-              const fs = await win.isFullscreen();
-              await win.setFullscreen(!fs);
+              await toggleManagedFullscreen(win);
             } catch (err) {
               console.warn("[Reader] Failed to toggle fullscreen:", err);
             }

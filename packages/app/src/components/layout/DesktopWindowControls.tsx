@@ -1,3 +1,9 @@
+import {
+  exitManagedFullscreen,
+  rememberWindowedBounds,
+  startDraggingFromManagedFullscreen,
+  toggleManagedFullscreen,
+} from "@/lib/window/fullscreen-state";
 import { cn } from "@readany/core/utils";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -69,6 +75,9 @@ export function DesktopWindowControls({
       ]);
       setIsMaximized(maximized);
       setIsFullscreen(fullscreen);
+      if (!fullscreen && !maximized) {
+        await rememberWindowedBounds(appWindow);
+      }
       logInfo("synced window state", { source, maximized, fullscreen });
     } catch (error) {
       logError("failed to sync window state", { source, error });
@@ -89,7 +98,8 @@ export function DesktopWindowControls({
     if (!isVisible) return;
 
     let isMounted = true;
-    let unlisten: (() => void) | undefined;
+    let unlistenResized: (() => void) | undefined;
+    let unlistenMoved: (() => void) | undefined;
 
     const setup = async () => {
       try {
@@ -104,7 +114,10 @@ export function DesktopWindowControls({
         };
 
         await syncCurrentWindowState();
-        unlisten = await currentWindow.onResized(() => {
+        unlistenResized = await currentWindow.onResized(() => {
+          void syncCurrentWindowState();
+        });
+        unlistenMoved = await currentWindow.onMoved(() => {
           void syncCurrentWindowState();
         });
       } catch (error) {
@@ -116,7 +129,8 @@ export function DesktopWindowControls({
 
     return () => {
       isMounted = false;
-      unlisten?.();
+      unlistenResized?.();
+      unlistenMoved?.();
     };
   }, [isVisible]);
 
@@ -145,16 +159,26 @@ export function DesktopWindowControls({
         try {
           const isFullscreen = await appWindow.isFullscreen();
           if (isFullscreen) {
-            await appWindow.setFullscreen(false);
-            await appWindow.unmaximize();
+            await exitManagedFullscreen(appWindow);
           } else {
             await appWindow.toggleMaximize();
           }
-          const maximized = await appWindow.isMaximized();
-          setIsMaximized(maximized);
-          logInfo("header double click toggle maximize", { isFullscreen, maximized });
+          await syncWindowState(appWindow, "header-double-click");
+          logInfo("header double click toggle maximize", { isFullscreen });
         } catch (error) {
           logError("header double click toggle maximize failed", error);
+        }
+        return;
+      }
+
+      const headerRect = headerElement.getBoundingClientRect();
+      const isFullscreen = await appWindow.isFullscreen();
+      if (isFullscreen) {
+        try {
+          await startDraggingFromManagedFullscreen(appWindow, e.clientX, e.clientY, headerRect);
+          await syncWindowState(appWindow, "header-drag-from-fullscreen");
+        } catch (error) {
+          logError("restore window for mouse drag failed", error);
         }
         return;
       }
@@ -180,14 +204,12 @@ export function DesktopWindowControls({
         try {
           const isFullscreen = await appWindow.isFullscreen();
           if (isFullscreen) {
-            await appWindow.setFullscreen(false);
-            await appWindow.unmaximize();
+            await exitManagedFullscreen(appWindow);
           } else {
             await appWindow.toggleMaximize();
           }
-          const maximized = await appWindow.isMaximized();
-          setIsMaximized(maximized);
-          logInfo("header touch double tap toggle maximize", { isFullscreen, maximized });
+          await syncWindowState(appWindow, "header-touch-double-tap");
+          logInfo("header touch double tap toggle maximize", { isFullscreen });
         } catch (error) {
           logError("header touch double tap toggle maximize failed", error);
         }
@@ -211,6 +233,18 @@ export function DesktopWindowControls({
       if (deltaX > 5 || deltaY > 5) {
         touchState.current.isDragging = true;
         try {
+          const isFullscreen = await appWindow.isFullscreen();
+          if (isFullscreen) {
+            await startDraggingFromManagedFullscreen(
+              appWindow,
+              e.clientX,
+              e.clientY,
+              headerElement.getBoundingClientRect(),
+            );
+            await syncWindowState(appWindow, "touch-drag-from-fullscreen");
+            return;
+          }
+
           await appWindow.startDragging();
         } catch (error) {
           logError("touch dragging failed", error);
@@ -263,15 +297,13 @@ export function DesktopWindowControls({
 
     try {
       if (isMacPlatform) {
-        const fullscreen = await appWindow.isFullscreen();
-        await appWindow.setFullscreen(!fullscreen);
+        await toggleManagedFullscreen(appWindow);
         await syncWindowState(appWindow, "button-toggle-fullscreen");
-        logInfo("toggle fullscreen succeeded", { fullscreenBefore: fullscreen });
+        logInfo("toggle fullscreen succeeded");
       } else {
         const fullscreen = await appWindow.isFullscreen();
         if (fullscreen) {
-          await appWindow.setFullscreen(false);
-          await appWindow.unmaximize();
+          await exitManagedFullscreen(appWindow);
         } else {
           await appWindow.toggleMaximize();
         }
